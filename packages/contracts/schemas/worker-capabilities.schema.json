@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "worker-capabilities.schema.json",
+  "title": "WorkerCapabilities",
+  "description": "What a worker safely advertises when it registers. Deliberately minimal and non-revealing: no filesystem paths, no home directory, no environment variables, no project locations, no secrets. additionalProperties:false is what enforces that — a field like blend_root or api_key cannot be added by accident.",
+  "type": "object",
+  "properties": {
+    "worker_version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Version of the worker software, not of the host machine."
+    },
+    "blender_available": { "type": "boolean" },
+    "blender_version": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Reported only when Blender is available."
+    },
+    "gpu_available": { "type": "boolean" },
+    "gpu_name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Coarse device description for scheduling, e.g. 'NVIDIA RTX 4070 Ti'."
+    },
+    "supported_job_types": {
+      "type": "array",
+      "items": { "$ref": "job-type.schema.json" },
+      "minItems": 1,
+      "description": "The operations this worker will accept. A job outside this list is rejected."
+    },
+    "max_concurrent_jobs": { "type": "integer", "minimum": 1 }
+  },
+  "required": [
+    "worker_version",
+    "blender_available",
+    "supported_job_types",
+    "max_concurrent_jobs"
+  ],
+  "additionalProperties": false
+}

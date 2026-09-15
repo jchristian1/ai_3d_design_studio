@@ -80,6 +80,8 @@ SCHEMA_FILES: dict[str, str] = {
     "RequestOrigin": "request-origin.schema.json",
     "MoveObjectPlan": "move-object-plan.schema.json",
     "MoveObjectResult": "move-object-result.schema.json",
+    "WorkerMessage": "worker-message.schema.json",
+    "WorkerCapabilities": "worker-capabilities.schema.json",
     "ObjectRef": "object-ref.schema.json",
     "MoveObjectPayload": "move-object-payload.schema.json",
     "ChatRequest": "chat-request.schema.json",

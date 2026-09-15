@@ -1,0 +1,121 @@
+"""Worker identity and link configuration.
+
+Spec 001, Task 8.
+
+Identity and credentials come from the environment, never from source. Nothing
+workstation-specific is hard-coded: a different machine sets different environment
+variables and needs no code change.
+
+    STUDIO_WORKER_ID       stable worker identity      (required)
+    STUDIO_WORKER_TOKEN    pre-shared token            (required, never committed)
+    STUDIO_CONTROL_PLANE_URL  e.g. ws://127.0.0.1:8765/ws/workers
+    STUDIO_WORKER_GPU_NAME    optional coarse GPU description
+
+The token is read here and handed to the transport at connect time. It is never
+written to the journal, never placed in a result, and never logged — the protocol
+codec redacts it and a schema conditional forbids it on any message except
+``worker_hello``.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from typing import Optional
+
+from blender_mcp.blender_runtime import blender_version, find_blender_executable
+
+#: Version of the worker software (not of the host).
+WORKER_SOFTWARE_VERSION = "0.1.0"
+
+ENV_WORKER_ID = "STUDIO_WORKER_ID"
+ENV_WORKER_TOKEN = "STUDIO_WORKER_TOKEN"
+ENV_CONTROL_PLANE_URL = "STUDIO_CONTROL_PLANE_URL"
+ENV_GPU_NAME = "STUDIO_WORKER_GPU_NAME"
+
+DEFAULT_CONTROL_PLANE_URL = "ws://127.0.0.1:8765/ws/workers"
+
+
+class WorkerIdentityError(RuntimeError):
+    """Required worker identity or credentials are missing."""
+
+
+@dataclass(frozen=True)
+class WorkerIdentity:
+    """Who this worker is, and how it reaches the control plane.
+
+    ``token`` is deliberately excluded from ``__repr__`` so it cannot reach a log
+    through casual string formatting or an exception traceback.
+    """
+
+    worker_id: str
+    control_plane_url: str
+    token: str = field(repr=False)
+    gpu_name: Optional[str] = None
+
+    def __str__(self) -> str:  # pragma: no cover - defensive
+        return f"WorkerIdentity(worker_id={self.worker_id!r})"
+
+
+def load_worker_identity(
+    env: Optional[dict[str, str]] = None,
+) -> WorkerIdentity:
+    """Read identity from the environment.
+
+    Raises WorkerIdentityError when a required value is missing, rather than
+    inventing an identity — an unidentified worker must not connect.
+    """
+    source = dict(os.environ if env is None else env)
+
+    worker_id = (source.get(ENV_WORKER_ID) or "").strip()
+    token = source.get(ENV_WORKER_TOKEN) or ""
+    url = (source.get(ENV_CONTROL_PLANE_URL) or DEFAULT_CONTROL_PLANE_URL).strip()
+
+    if not worker_id:
+        raise WorkerIdentityError(f"{ENV_WORKER_ID} is not set")
+    if not token.strip():
+        raise WorkerIdentityError(f"{ENV_WORKER_TOKEN} is not set")
+
+    gpu_name = (source.get(ENV_GPU_NAME) or "").strip() or None
+    return WorkerIdentity(
+        worker_id=worker_id,
+        control_plane_url=url,
+        token=token,
+        gpu_name=gpu_name,
+    )
+
+
+def describe_capabilities(
+    identity: Optional[WorkerIdentity] = None,
+    supported_job_types: tuple[str, ...] = ("move_object",),
+    max_concurrent_jobs: int = 1,
+    probe_blender: bool = True,
+) -> dict[str, object]:
+    """Build the capabilities advertised at registration.
+
+    Only coarse, non-revealing facts. Deliberately absent: filesystem paths, the
+    home directory, environment variables, project locations, and the token. The
+    canonical ``worker-capabilities.schema.json`` closes the object, so adding a
+    revealing field would fail validation.
+    """
+    available = False
+    version: Optional[str] = None
+    if probe_blender:
+        available = find_blender_executable() is not None
+        if available:
+            version = blender_version()
+
+    capabilities: dict[str, object] = {
+        "worker_version": WORKER_SOFTWARE_VERSION,
+        "blender_available": available,
+        "supported_job_types": list(supported_job_types),
+        "max_concurrent_jobs": max_concurrent_jobs,
+    }
+    if version:
+        capabilities["blender_version"] = version
+
+    gpu_name = identity.gpu_name if identity else None
+    capabilities["gpu_available"] = bool(gpu_name)
+    if gpu_name:
+        capabilities["gpu_name"] = gpu_name
+    return capabilities

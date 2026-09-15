@@ -47,15 +47,21 @@ with (SCHEMA_DIR / "conformance-cases.json").open("r", encoding="utf-8") as fh:
     CORPUS = json.load(fh)
 
 
-def _cases(kind: str):
-    """Flatten the shared corpus into (schema, case_name, data) tuples."""
-    for suite in CORPUS["suites"]:
-        for case in suite[kind]:
-            yield pytest.param(
-                suite["schema"],
-                case["data"],
-                id=f"{suite['schema']}::{case['name']}",
-            )
+def _cases(kind: str) -> list:
+    """Flatten the shared corpus into a list of parametrize cases.
+
+    A list, not a generator: pytest deprecates non-Collection iterables in
+    parametrize (removed in pytest 10).
+    """
+    return [
+        pytest.param(
+            suite["schema"],
+            case["data"],
+            id=f"{suite['schema']}::{case['name']}",
+        )
+        for suite in CORPUS["suites"]
+        for case in suite[kind]
+    ]
 
 
 # ---------------------------------------------------------------------------

@@ -80,6 +80,10 @@ class ExecutionRecord:
     error: Optional[dict[str, Any]] = None
     #: The public Job status this execution maps to.
     job_status: str = "running"
+    #: Whether the result reached the control plane. False after a dropped
+    #: result channel, which is what reconciliation resends. Purely a REPORTING
+    #: flag: it never affects whether the mutation happened.
+    result_delivered: bool = False
     attempts: int = 0
     created_at: str = field(default_factory=utc_now)
     updated_at: str = field(default_factory=utc_now)
@@ -126,6 +130,14 @@ class WorkerExecutionStore(Protocol):
     def job_id_for_idempotency(
         self, project_id: str, idempotency_key: str
     ) -> Optional[str]: ...
+
+    def undelivered_results(self) -> list[ExecutionRecord]:
+        """Terminal executions whose result has not reached the control plane.
+
+        Used by link reconciliation after a reconnect. Resending a stored result
+        cannot mutate Blender, so this is safe to call repeatedly.
+        """
+        ...
 
     def bind_idempotency(
         self, project_id: str, idempotency_key: str, job_id: str
@@ -228,6 +240,28 @@ class FileSystemExecutionStore:
         _atomic_write_json(
             self._execution_path(record.project_id, record.job_id), record.to_wire()
         )
+
+    def undelivered_results(self) -> list[ExecutionRecord]:
+        """Scan the journal for terminal executions still awaiting delivery.
+
+        A corrupt record is skipped here rather than raising: reconciliation is a
+        best-effort reporting sweep, and refusing to report every other job
+        because one record is damaged would be worse. Corruption still blocks
+        EXECUTION of that job, which is where it matters.
+        """
+        pending: list[ExecutionRecord] = []
+        root = self.root / "executions"
+        if not root.exists():
+            return pending
+        for path in sorted(root.glob("*/*.json")):
+            try:
+                wire = json.loads(path.read_text("utf-8"))
+                record = ExecutionRecord.from_wire(wire)
+            except (ValueError, OSError, JournalCorruptError):
+                continue
+            if record.phase in phases.TERMINAL_PHASES and not record.result_delivered:
+                pending.append(record)
+        return pending
 
     def job_id_for_idempotency(
         self, project_id: str, idempotency_key: str

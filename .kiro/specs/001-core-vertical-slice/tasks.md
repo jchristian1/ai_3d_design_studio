@@ -77,9 +77,14 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - Layering enforced by AST tests: no bpy, worker, MCP, subprocess or filesystem access anywhere in the agent package.
   - _Requirements: 3.1, 3.4, 3.5_
 
-- [ ] 8. Worker ↔ control-plane secure connection
-  - Model the worker connection as outbound authenticated (WSS or in-process interface honoring the same contract); no inbound Blender ports.
-  - Read secrets from environment variables only.
+- [x] 8. Worker ↔ control-plane secure connection
+  - Versioned worker protocol as a canonical schema (`worker-message`, `worker-capabilities`): closed message enum, `additionalProperties:false`, no path/shell/python field representable.
+  - `WorkerTransport` abstraction with `InMemoryTransport` (fast tests) and outbound `WebSocketWorkerTransport`; nothing binds or listens on the workstation.
+  - `WorkerLinkClient`: connection state machine (separate from execution phases), constant-time token auth, registration, heartbeats, bounded backoff reconnect, journal-driven reconciliation.
+  - `WorkerConnectionManager` (framework-independent) + loopback `LocalControlPlaneServer`; FastAPI route binding deferred to the API task.
+  - Control plane PUSHES offers to idle connected workers via a live connection registry. Regression test pins the invariant after a deadlock was found and fixed.
+  - Dropped result channel never re-executes: the mutation is durable, the journal records non-delivery, reconnect resends as `duplicate`.
+  - `websockets==15.0.1` declared in `pyproject.toml`, installed into a project-local `.venv`.
   - _Requirements: 7.1, 7.2, 7.3_
 
 - [ ] 9. API chat endpoint and job orchestration

@@ -159,3 +159,27 @@ replace it behind the same Protocol without touching `WorkerExecutor`.
 python3 -m pytest services/blender-worker     # fast, fakes only
 python3 -m pytest -m blender                  # real Blender, opt-in
 ```
+
+## Control-plane link (Task 8)
+
+The worker connects **outbound** to the control plane; the workstation never
+listens, so Blender, `bpy` and the local MCP boundary are never network-reachable.
+
+```
+blender_worker/link/
+├── transport.py            WorkerTransport Protocol + InMemoryTransport
+├── websocket_transport.py  outbound ws:// or wss:// implementation
+├── identity.py             identity + capabilities, from the environment
+└── client.py               connection state, protocol, reconnect, reconciliation
+```
+
+`WorkerExecutor` is transport-agnostic and imports none of this — asserted by a
+test that walks its imports.
+
+Protocol, authentication, heartbeats, server-push job offers, reconnect and
+reconciliation are documented in
+`services/api/studio_api/worker_link/PROTOCOL.md`.
+
+Configuration comes from the environment (`STUDIO_WORKER_ID`,
+`STUDIO_WORKER_TOKEN`, `STUDIO_CONTROL_PLANE_URL`, `STUDIO_WORKER_GPU_NAME`); see
+the root README.

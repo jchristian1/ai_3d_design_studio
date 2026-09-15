@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "worker-message.schema.json",
+  "title": "WorkerMessage",
+  "description": "One message on the worker <-> control-plane link. This is the COMPLETE vocabulary of that link: `type` is a closed enum and `additionalProperties:false` applies at every level, so there is no message that can carry a shell command, a Python expression, a filesystem path, or a bpy call. Every message carries protocol_version; job-related messages carry job_id and project_id so a receiver never has to infer scope. All network input is untrusted and is validated against this schema before anything else happens.",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Incremented on any breaking change to this vocabulary."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "worker_hello",
+        "worker_registered",
+        "worker_rejected",
+        "heartbeat",
+        "heartbeat_ack",
+        "job_offer",
+        "job_accepted",
+        "job_rejected",
+        "job_progress",
+        "job_result",
+        "ping",
+        "pong"
+      ]
+    },
+    "worker_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "job_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "project_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Pre-shared worker token, present ONLY on worker_hello. Never stored by the control plane, never logged, never echoed in any other message."
+    },
+    "capabilities": { "$ref": "worker-capabilities.schema.json" },
+    "job": {
+      "type": "object",
+      "description": "A canonical Job. Deliberately NOT $ref'd to job.schema.json here: the envelope layer validates envelopes, and the Job contract is enforced separately by validate_job at BOTH ends. That separation matters — if a malformed job failed envelope validation it would be dropped as unparseable, and the control plane would never receive the explicit job_rejected explaining why. The control plane validates before offering; the worker validates again before accepting, because network input is untrusted."
+    },
+    "connection_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "heartbeat_interval_seconds": { "type": "number", "exclusiveMinimum": 0 },
+    "worker_state": {
+      "type": "string",
+      "enum": ["ready", "busy"],
+      "description": "Liveness detail so the control plane can tell healthy-idle from healthy-busy."
+    },
+    "job_status": {
+      "type": "string",
+      "enum": ["succeeded", "failed", "duplicate"],
+      "description": "duplicate means the job was already completed locally; the result is being reported, not re-executed."
+    },
+    "execution_phase": {
+      "type": "string",
+      "description": "Internal worker phase, for observability only. Never used as a contract."
+    },
+    "result": {
+      "description": "Operation result payload, present on a succeeded or duplicate job_result."
+    },
+    "error": { "$ref": "error-response.schema.json" },
+    "sent_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["protocol_version", "type"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "worker_hello must identify and authenticate the worker and declare capabilities.",
+      "if": { "properties": { "type": { "const": "worker_hello" } }, "required": ["type"] },
+      "then": { "required": ["worker_id", "token", "capabilities"] }
+    },
+    {
+      "description": "worker_registered confirms the worker and states the heartbeat cadence.",
+      "if": { "properties": { "type": { "const": "worker_registered" } }, "required": ["type"] },
+      "then": { "required": ["worker_id", "connection_id", "heartbeat_interval_seconds"] }
+    },
+    {
+      "description": "worker_rejected must say why, structurally.",
+      "if": { "properties": { "type": { "const": "worker_rejected" } }, "required": ["type"] },
+      "then": { "required": ["error"] }
+    },
+    {
+      "description": "heartbeat reports which worker and whether it is busy.",
+      "if": { "properties": { "type": { "const": "heartbeat" } }, "required": ["type"] },
+      "then": { "required": ["worker_id", "worker_state"] }
+    },
+    {
+      "description": "A job offer carries a canonical Job and nothing else about it.",
+      "if": { "properties": { "type": { "const": "job_offer" } }, "required": ["type"] },
+      "then": { "required": ["job", "job_id", "project_id"] }
+    },
+    {
+      "description": "Acceptance is explicit; socket delivery is not acceptance.",
+      "if": { "properties": { "type": { "const": "job_accepted" } }, "required": ["type"] },
+      "then": { "required": ["worker_id", "job_id", "project_id"] }
+    },
+    {
+      "description": "A rejection must carry a structured reason.",
+      "if": { "properties": { "type": { "const": "job_rejected" } }, "required": ["type"] },
+      "then": { "required": ["worker_id", "job_id", "project_id", "error"] }
+    },
+    {
+      "description": "Progress is scoped to a job.",
+      "if": { "properties": { "type": { "const": "job_progress" } }, "required": ["type"] },
+      "then": { "required": ["worker_id", "job_id", "project_id", "execution_phase"] }
+    },
+    {
+      "description": "A result must state its status.",
+      "if": { "properties": { "type": { "const": "job_result" } }, "required": ["type"] },
+      "then": { "required": ["worker_id", "job_id", "project_id", "job_status"] }
+    },
+    {
+      "description": "A failed result must carry a structured error.",
+      "if": {
+        "properties": {
+          "type": { "const": "job_result" },
+          "job_status": { "const": "failed" }
+        },
+        "required": ["type", "job_status"]
+      },
+      "then": { "required": ["error"] }
+    },
+    {
+      "description": "Only worker_hello may carry a token.",
+      "if": {
+        "not": { "properties": { "type": { "const": "worker_hello" } }, "required": ["type"] }
+      },
+      "then": { "not": { "required": ["token"] } }
+    }
+  ]
+}

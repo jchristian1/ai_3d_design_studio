@@ -1,13 +1,75 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-3d-design-studio"
+version = "0.0.1"
+description = "Browser-based AI 3D design studio (monorepo, Python services)."
+requires-python = ">=3.11"
+
+# Runtime dependencies. `websockets` is required by the worker <-> control-plane
+# transport (services/blender-worker/.../link and services/api/.../worker_link),
+# so it is a genuine runtime dependency, not a development tool.
+dependencies = [
+    "websockets==15.0.1",
+]
+
+[project.optional-dependencies]
+# Development-only tooling. Deliberately separate so test tooling never becomes a
+# production dependency.
+dev = [
+    "pytest>=8",
+]
+
+# Multi-root package discovery.
+#
+# Each Python package lives beside the package or service that owns it, which
+# setuptools' automatic discovery cannot infer. Rather than restructuring the
+# monorepo to satisfy the build backend, every package is mapped explicitly to its
+# existing source directory. Nothing is copied or duplicated, and an editable
+# install resolves each package at its real location.
+#
+# Non-package assets (packages/contracts/schemas, blender_worker/blender_scripts)
+# are located at runtime relative to `__file__`, which points at the real source
+# tree under an editable install, so they need no packaging entry.
+[tool.setuptools]
+packages = [
+    "studio_types",
+    "studio_contracts",
+    "studio_validation",
+    "studio_spatial",
+    "studio_agent",
+    "studio_agent.providers",
+    "studio_api",
+    "studio_api.worker_link",
+    "blender_mcp",
+    "blender_mcp.adapters",
+    "blender_mcp.tools",
+    "blender_worker",
+    "blender_worker.link",
+]
+
+[tool.setuptools.package-dir]
+studio_types = "packages/types/python/studio_types"
+studio_contracts = "packages/contracts/python/studio_contracts"
+studio_validation = "packages/validation/python/studio_validation"
+studio_spatial = "packages/spatial/python/studio_spatial"
+studio_agent = "services/agent/studio_agent"
+"studio_agent.providers" = "services/agent/studio_agent/providers"
+studio_api = "services/api/studio_api"
+"studio_api.worker_link" = "services/api/studio_api/worker_link"
+blender_mcp = "services/blender-mcp/blender_mcp"
+"blender_mcp.adapters" = "services/blender-mcp/blender_mcp/adapters"
+"blender_mcp.tools" = "services/blender-mcp/blender_mcp/tools"
+blender_worker = "services/blender-worker/blender_worker"
+"blender_worker.link" = "services/blender-worker/blender_worker/link"
+
 [tool.pytest.ini_options]
-# Make the shared Python mirror packages importable without installation.
+# The runtime packages come from the editable install, not from here. Only the
+# test-only fixture tooling (studio_fixtures) needs a path entry, because it is
+# test tooling rather than a runtime package and is deliberately not installed.
 pythonpath = [
-    "packages/types/python",
-    "packages/contracts/python",
-    "packages/validation/python",
-    "packages/spatial/python",
-    "services/agent",
-    "services/blender-mcp",
-    "services/blender-worker",
     "tests/fixtures",
 ]
 testpaths = [
