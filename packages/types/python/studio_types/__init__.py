@@ -276,13 +276,16 @@ class MoveObjectPlan:
 #: ``viewport_stream`` (live viewport).
 #:
 #: Canonical schema: artifact-type.schema.json
-ArtifactType = Literal["preview_image"]
+ArtifactType = Literal["preview_image", "model_glb"]
 
-ARTIFACT_TYPES: tuple[ArtifactType, ...] = ("preview_image",)
+ARTIFACT_TYPES: tuple[ArtifactType, ...] = ("preview_image", "model_glb")
 
 #: The one artifact type Spec 001 generates, named so callers do not repeat the
 #: string literal.
 PREVIEW_IMAGE: ArtifactType = "preview_image"
+
+#: The interactive browser model, exported after a successful mutation.
+MODEL_GLB: ArtifactType = "model_glb"
 
 
 @dataclass(frozen=True)

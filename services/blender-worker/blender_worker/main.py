@@ -58,7 +58,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .blender_ops import SubprocessBlenderOperationExecutor
 from .executor import WorkerExecutor
@@ -126,10 +126,18 @@ def build_executor(
     projects_root: Path,
     runtime_root: Path,
     artifact_root: Path,
-) -> WorkerExecutor:
-    """Compose the executor from local configuration."""
+):
+    """Compose the executor from local configuration.
+
+    Returns a dispatching executor serving both the Spec 001 ``move_object`` path and
+    the ``apply_capabilities`` path that drives Blender through the official MCP.
+    """
     from studio_preview.artifacts import LocalArtifactStore
     from studio_preview.blender_preview import BlenderPreviewGenerator
+
+    from .backends.official.backend import OfficialBlenderLabBackend
+    from .capability_executor import CapabilityPlanExecutor
+    from .dispatch import DispatchingExecutor
 
     projects = discover_projects(projects_root)
     if not projects:
@@ -142,20 +150,44 @@ def build_executor(
 
     logger.info("serving projects: %s", ", ".join(sorted(projects)))
 
-    return WorkerExecutor(
-        store=FileSystemExecutionStore(runtime_root),
-        locks=FileLockProvider(runtime_root),
-        projects=MappingProjectRegistry(projects_root, projects),
+    store = FileSystemExecutionStore(runtime_root)
+    locks = FileLockProvider(runtime_root)
+    registry = MappingProjectRegistry(projects_root, projects)
+    artifacts = LocalArtifactStore(artifact_root)
+    previews = BlenderPreviewGenerator()
+    recovery_root = runtime_root / "recovery"
+
+    legacy = WorkerExecutor(
+        store=store,
+        locks=locks,
+        projects=registry,
         blender=SubprocessBlenderOperationExecutor(),
-        recovery_root=runtime_root / "recovery",
-        previews=BlenderPreviewGenerator(),
-        artifacts=LocalArtifactStore(artifact_root),
+        recovery_root=recovery_root,
+        previews=previews,
+        artifacts=artifacts,
     )
 
+    # The official MCP server is launched lazily on first use, so a worker still starts
+    # (and still serves the Spec 001 path) when the MCP has not been installed yet.
+    capabilities = CapabilityPlanExecutor(
+        store=store,
+        locks=locks,
+        projects=registry,
+        provider=OfficialBlenderLabBackend(),
+        recovery_root=recovery_root,
+        previews=previews,
+        artifacts=artifacts,
+    )
 
-def build_client(executor: WorkerExecutor) -> WorkerLinkClient:
+    return DispatchingExecutor(legacy=legacy, capabilities=capabilities)
+
+
+def build_client(executor: Any) -> WorkerLinkClient:
     """Build the link client from environment identity."""
     identity = load_worker_identity()
+    # Advertise what this worker can actually run, so the control plane never offers a
+    # job type it would have to reject.
+    supported = getattr(executor, "supported_job_types", ("move_object",))
     logger.info(
         "worker %s connecting to %s", identity.worker_id, identity.control_plane_url
     )
@@ -165,6 +197,7 @@ def build_client(executor: WorkerExecutor) -> WorkerLinkClient:
             identity.control_plane_url, receive_timeout=RECEIVE_TIMEOUT_SECONDS
         ),
         executor=executor,
+        supported_job_types=tuple(supported),
         # Probe Blender so the control plane's /health can honestly report whether
         # a Blender-capable worker is connected.
         probe_blender=True,

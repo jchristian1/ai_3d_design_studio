@@ -57,7 +57,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
-from studio_types import ARTIFACT_TYPES, PREVIEW_IMAGE, ArtifactType, PreviewArtifact
+from studio_types import ARTIFACT_TYPES, MODEL_GLB, PREVIEW_IMAGE, ArtifactType, PreviewArtifact
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -69,17 +69,20 @@ ARTIFACT_ID_VERSION = "v1"
 
 #: The id prefix per artifact type. Kept explicit rather than derived from the
 #: type name so a renamed type cannot silently change existing artifact ids.
-ID_PREFIX_BY_TYPE: dict[str, str] = {PREVIEW_IMAGE: "preview"}
+ID_PREFIX_BY_TYPE: dict[str, str] = {PREVIEW_IMAGE: "preview", MODEL_GLB: "model"}
 
 #: Mirrors the canonical ``preview-artifact.schema.json`` pattern. Both ends
 #: enforce it: the contract rejects a bad id on the wire, and the store refuses to
 #: touch the filesystem with one.
-ARTIFACT_ID_PATTERN = re.compile(r"^(preview)_[a-z0-9]{8,64}$")
+ARTIFACT_ID_PATTERN = re.compile(r"^(preview|model)_[a-z0-9]{8,64}$")
 
 #: Media type -> file extension. A fixed, closed map: the extension is never taken
 #: from a caller, so no arbitrary suffix (``.blend``, ``.json``, ``.py``) can be
 #: written or read through this store.
-EXTENSION_BY_MEDIA_TYPE: dict[str, str] = {"image/png": ".png"}
+EXTENSION_BY_MEDIA_TYPE: dict[str, str] = {
+    "image/png": ".png",
+    "model/gltf-binary": ".glb",
+}
 
 METADATA_SUFFIX = ".json"
 
@@ -276,8 +279,13 @@ class LocalArtifactStore:
             raise ArtifactError("refusing to store an empty artifact")
         if artifact_type not in ARTIFACT_TYPES:
             raise ArtifactError(f"unknown artifact_type {artifact_type!r}")
-        if width < 1 or height < 1:
-            raise ArtifactError("artifact dimensions must be positive")
+        # Pixel dimensions are meaningful for a rendered image and meaningless for a
+        # 3D model, so the check applies where it says something. A preview with zero
+        # width is a failed render; a GLB legitimately has no width at all.
+        if artifact_type == PREVIEW_IMAGE and (width < 1 or height < 1):
+            raise ArtifactError("preview dimensions must be positive")
+        if width < 0 or height < 0:
+            raise ArtifactError("artifact dimensions cannot be negative")
 
         data_path = self._data_path(project_id, artifact_id, media_type)
         data_path.parent.mkdir(parents=True, exist_ok=True)

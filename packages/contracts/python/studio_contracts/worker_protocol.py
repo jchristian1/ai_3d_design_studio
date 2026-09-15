@@ -37,14 +37,14 @@ from . import SCHEMA_FILES, validate_against_schema
 #: additive optional field is still a vocabulary change and still bumps the
 #: version. Silently relying on "optional means compatible" would produce
 #: mysterious validation failures against an older peer.
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 
 #: Versions this build can speak. A worker outside this set is rejected.
 #:
 #: v1 remains supported: a v1 worker simply never reports a preview, which is a
 #: degraded but entirely valid worker. The control plane is therefore free to be
 #: upgraded before the workstations are.
-SUPPORTED_PROTOCOL_VERSIONS: tuple[int, ...] = (1, 2)
+SUPPORTED_PROTOCOL_VERSIONS: tuple[int, ...] = (1, 2, 3)
 
 TOKEN_FIELD = "token"
 REDACTED = "***redacted***"
@@ -249,8 +249,19 @@ def job_rejected(
 
 
 def job_progress(
-    worker_id: str, job_id: str, project_id: str, execution_phase: str
+    worker_id: str,
+    job_id: str,
+    project_id: str,
+    execution_phase: str,
+    progress: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
+    """Report progress within a job.
+
+    ``progress`` was added in protocol version 3 to carry STEP progress through a
+    multi-step plan ("Creating walls 3 of 9"), so one browser reply can update in place
+    rather than the transcript filling with one entry per wall. It is optional, which is
+    why version 2 peers remain supported: they simply never send or expect it.
+    """
     message = _base(JOB_PROGRESS)
     message.update(
         {
@@ -260,6 +271,8 @@ def job_progress(
             "execution_phase": execution_phase,
         }
     )
+    if progress is not None:
+        message["progress"] = dict(progress)
     return message
 
 

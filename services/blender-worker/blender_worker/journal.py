@@ -96,6 +96,23 @@ class ExecutionRecord:
     preview_error: Optional[dict[str, Any]] = None
     #: Structured error when the phase is failed.
     error: Optional[dict[str, Any]] = None
+    #: PER-STEP state for an ``apply_capabilities`` plan, keyed by the step's
+    #: ``operation_index`` as a string (JSON object keys are always strings).
+    #:
+    #: This is what makes a multi-step reconstruction resumable rather than
+    #: repeatable. Each entry records the step's terminal state and its observed
+    #: result, so a retry after a crash skips what is already applied instead of
+    #: creating nine more walls. Written after EVERY step, not at the end.
+    steps: dict[str, Any] = field(default_factory=dict)
+    #: The authoritative SceneSnapshot wire document observed after the last
+    #: successful step, used to chain scene versions across steps and reported to
+    #: the control plane so the agent can be grounded without a second read.
+    scene: Optional[dict[str, Any]] = None
+    #: The model artifact (GLB) wire document, once one is durable. Separate from
+    #: ``preview`` for the same reason ``preview`` is separate from ``result``.
+    model: Optional[dict[str, Any]] = None
+    #: Why model export failed, when the mutation itself succeeded.
+    model_error: Optional[dict[str, Any]] = None
     #: The public Job status this execution maps to.
     job_status: str = "running"
     #: Whether the result reached the control plane. False after a dropped

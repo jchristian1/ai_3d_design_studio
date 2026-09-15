@@ -237,14 +237,18 @@ export const TERMINAL_JOB_STATUSES: readonly JobStatus[] = [
  *
  * Canonical schema: artifact-type.schema.json
  */
-export type ArtifactType = "preview_image";
+export type ArtifactType = "preview_image" | "model_glb";
 
 export const ARTIFACT_TYPES: readonly ArtifactType[] = [
   "preview_image",
+  "model_glb",
 ] as const;
 
-/** The one artifact type Spec 001 generates. */
+/** The deterministic PNG preview, kept as fallback, thumbnail and regression anchor. */
 export const PREVIEW_IMAGE: ArtifactType = "preview_image";
+
+/** The interactive browser model, exported after a successful mutation. */
+export const MODEL_GLB: ArtifactType = "model_glb";
 
 /**
  * A reference to one durably stored generated artifact.

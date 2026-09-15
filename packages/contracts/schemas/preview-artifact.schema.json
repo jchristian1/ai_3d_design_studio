@@ -8,7 +8,7 @@
     "artifact_id": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(preview)_[a-z0-9]{8,64}$",
+      "pattern": "^(preview|model)_[a-z0-9]{8,64}$",
       "description": "Stable, DERIVED identity of this artifact. Derived from (project_id, job_id, artifact_type) so the same completed job always maps to the same artifact and a retry reuses it instead of accumulating duplicates. The strict pattern is also a security boundary: it is a single safe path segment by construction, so it cannot address a .blend, a journal, a recovery copy, or anything outside the artifact store."
     },
     "project_id": {
@@ -23,7 +23,9 @@
       "pattern": "\\S",
       "description": "The job whose verified mutation this artifact depicts. Absent for an artifact not produced by a job, such as a baseline preview taken before any change."
     },
-    "artifact_type": { "$ref": "artifact-type.schema.json" },
+    "artifact_type": {
+      "$ref": "artifact-type.schema.json"
+    },
     "media_type": {
       "type": "string",
       "minLength": 1,
@@ -38,10 +40,14 @@
     },
     "width": {
       "type": "integer",
-      "minimum": 1,
-      "description": "Pixel width. Reported so a browser can reserve layout before the image loads."
+      "minimum": 0,
+      "description": "Pixel width, reported so a browser can reserve layout before the image loads. Zero for a model_glb artifact, which has no pixel dimensions; a preview_image is required to be positive by the artifact store."
     },
-    "height": { "type": "integer", "minimum": 1 },
+    "height": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Pixel height. Zero for a model_glb artifact."
+    },
     "size_bytes": {
       "type": "integer",
       "minimum": 1,
@@ -50,7 +56,7 @@
     "checksum": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$",
-      "description": "SHA-256 of the stored bytes, prefixed with its algorithm so a future migration is unambiguous. Used for corruption detection, test verification, and later caching/version identity. It is explicitly NOT an access credential — knowing a checksum grants nothing, and authorization is always project scope."
+      "description": "SHA-256 of the stored bytes, prefixed with its algorithm so a future migration is unambiguous. Used for corruption detection, test verification, and later caching/version identity. It is explicitly NOT an access credential \u2014 knowing a checksum grants nothing, and authorization is always project scope."
     },
     "engine": {
       "type": "string",

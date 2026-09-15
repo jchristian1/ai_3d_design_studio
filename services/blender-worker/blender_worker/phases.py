@@ -35,6 +35,14 @@ PROJECT_SAVED: Final = "project_saved"
 #: mutation was already durable at PROJECT_SAVED, and a failed preview must never
 #: be able to make a saved design change look failed (Task 10).
 PREVIEW_GENERATED: Final = "preview_generated"
+
+#: The scene was read back and normalised after the last mutation. Only an
+#: apply_capabilities plan reaches this: it is where per-step verification and the
+#: chained scene version come from.
+SCENE_INSPECTED: Final = "scene_inspected"
+
+#: A GLB model artifact was exported for the browser viewer.
+MODEL_EXPORTED: Final = "model_exported"
 #: Terminal success.
 COMPLETED: Final = "completed"
 #: Terminal failure.
@@ -48,6 +56,8 @@ EXECUTION_PHASES: Final[tuple[str, ...]] = (
     MUTATION_VERIFIED,
     PROJECT_SAVED,
     PREVIEW_GENERATED,
+    SCENE_INSPECTED,
+    MODEL_EXPORTED,
     COMPLETED,
     FAILED,
 )
@@ -60,6 +70,8 @@ TERMINAL_PHASES: Final[tuple[str, ...]] = (COMPLETED, FAILED)
 PHASES_AFTER_MUTATION_IS_DURABLE: Final[tuple[str, ...]] = (
     PROJECT_SAVED,
     PREVIEW_GENERATED,
+    SCENE_INSPECTED,
+    MODEL_EXPORTED,
     COMPLETED,
 )
 

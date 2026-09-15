@@ -101,6 +101,31 @@
     "sent_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step_index",
+        "step_count",
+        "label"
+      ],
+      "description": "Step progress within a multi-step plan, present only on job_progress. Carries what the browser shows while a reconstruction runs, so ONE reply can update in place instead of the transcript filling with one bubble per wall. The label is human-readable and free of internal identifiers by contract.",
+      "properties": {
+        "step_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "step_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
     }
   },
   "required": [
