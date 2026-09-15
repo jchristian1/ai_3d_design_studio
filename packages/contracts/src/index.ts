@@ -194,6 +194,8 @@ export const SCHEMA_FILES = {
   ErrorCode: "error-code.schema.json",
   LengthUnit: "length-unit.schema.json",
   Measurement: "measurement.schema.json",
+  AngleUnit: "angle-unit.schema.json",
+  AngleMeasurement: "angle-measurement.schema.json",
   Axis: "axis.schema.json",
   Direction: "direction.schema.json",
   AxisDirection: "axis-direction.schema.json",

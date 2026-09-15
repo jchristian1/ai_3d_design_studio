@@ -3,65 +3,313 @@
   "conversion": {
     "description": "Measurement -> canonical meters. `meters` is the expected exact result.",
     "valid": [
-      { "name": "spec: 50 cm -> 0.50 m", "value": 50, "unit": "cm", "meters": 0.5 },
-      { "name": "spec: 100 cm -> 1.00 m", "value": 100, "unit": "cm", "meters": 1.0 },
-      { "name": "spec: -25 cm -> -0.25 m", "value": -25, "unit": "cm", "meters": -0.25 },
-      { "name": "40 cm -> 0.40 m", "value": 40, "unit": "cm", "meters": 0.4 },
-      { "name": "240 cm -> 2.40 m", "value": 240, "unit": "cm", "meters": 2.4 },
-      { "name": "270 cm -> 2.70 m", "value": 270, "unit": "cm", "meters": 2.7 },
-      { "name": "1 cm -> 0.01 m", "value": 1, "unit": "cm", "meters": 0.01 },
-      { "name": "0 cm -> 0 m", "value": 0, "unit": "cm", "meters": 0 },
-      { "name": "fractional cm: 2.5 cm -> 0.025 m", "value": 2.5, "unit": "cm", "meters": 0.025 },
-      { "name": "non-terminating binary: 1.1 cm -> nearest double of 1.1/100", "value": 1.1, "unit": "cm", "meters": 0.011000000000000001 },
-      { "name": "correctly-rounded division, not multiplication by 0.01", "value": 6537.04249344076, "unit": "cm", "meters": 65.3704249344076 },
-      { "name": "large: 100000 cm -> 1000 m", "value": 100000, "unit": "cm", "meters": 1000 },
-      { "name": "meters identity: 0.5 m", "value": 0.5, "unit": "m", "meters": 0.5 },
-      { "name": "meters identity: 1 m", "value": 1, "unit": "m", "meters": 1 },
-      { "name": "meters identity: -0.25 m", "value": -0.25, "unit": "m", "meters": -0.25 },
-      { "name": "meters identity: 0 m", "value": 0, "unit": "m", "meters": 0 },
-      { "name": "meters identity: 2.7 m", "value": 2.7, "unit": "m", "meters": 2.7 },
-      { "name": "negative zero cm normalizes to positive zero", "value": -0.0, "unit": "cm", "meters": 0 }
+      {
+        "name": "spec: 50 cm -> 0.50 m",
+        "value": 50,
+        "unit": "cm",
+        "meters": 0.5
+      },
+      {
+        "name": "spec: 100 cm -> 1.00 m",
+        "value": 100,
+        "unit": "cm",
+        "meters": 1.0
+      },
+      {
+        "name": "spec: -25 cm -> -0.25 m",
+        "value": -25,
+        "unit": "cm",
+        "meters": -0.25
+      },
+      {
+        "name": "40 cm -> 0.40 m",
+        "value": 40,
+        "unit": "cm",
+        "meters": 0.4
+      },
+      {
+        "name": "240 cm -> 2.40 m",
+        "value": 240,
+        "unit": "cm",
+        "meters": 2.4
+      },
+      {
+        "name": "270 cm -> 2.70 m",
+        "value": 270,
+        "unit": "cm",
+        "meters": 2.7
+      },
+      {
+        "name": "1 cm -> 0.01 m",
+        "value": 1,
+        "unit": "cm",
+        "meters": 0.01
+      },
+      {
+        "name": "0 cm -> 0 m",
+        "value": 0,
+        "unit": "cm",
+        "meters": 0
+      },
+      {
+        "name": "fractional cm: 2.5 cm -> 0.025 m",
+        "value": 2.5,
+        "unit": "cm",
+        "meters": 0.025
+      },
+      {
+        "name": "non-terminating binary: 1.1 cm -> nearest double of 1.1/100",
+        "value": 1.1,
+        "unit": "cm",
+        "meters": 0.011000000000000001
+      },
+      {
+        "name": "correctly-rounded division, not multiplication by 0.01",
+        "value": 6537.04249344076,
+        "unit": "cm",
+        "meters": 65.3704249344076
+      },
+      {
+        "name": "large: 100000 cm -> 1000 m",
+        "value": 100000,
+        "unit": "cm",
+        "meters": 1000
+      },
+      {
+        "name": "meters identity: 0.5 m",
+        "value": 0.5,
+        "unit": "m",
+        "meters": 0.5
+      },
+      {
+        "name": "meters identity: 1 m",
+        "value": 1,
+        "unit": "m",
+        "meters": 1
+      },
+      {
+        "name": "meters identity: -0.25 m",
+        "value": -0.25,
+        "unit": "m",
+        "meters": -0.25
+      },
+      {
+        "name": "meters identity: 0 m",
+        "value": 0,
+        "unit": "m",
+        "meters": 0
+      },
+      {
+        "name": "meters identity: 2.7 m",
+        "value": 2.7,
+        "unit": "m",
+        "meters": 2.7
+      },
+      {
+        "name": "negative zero cm normalizes to positive zero",
+        "value": -0.0,
+        "unit": "cm",
+        "meters": 0
+      }
     ],
     "invalid": [
-      { "name": "unsupported unit mm", "value": 50, "unit": "mm", "error_code": "INVALID_UNITS", "error_key": "UNSUPPORTED_UNIT" },
-      { "name": "unsupported unit spelled out", "value": 50, "unit": "meters", "error_code": "INVALID_UNITS", "error_key": "UNSUPPORTED_UNIT" },
-      { "name": "unsupported unit uppercase", "value": 50, "unit": "CM", "error_code": "INVALID_UNITS", "error_key": "UNSUPPORTED_UNIT" },
-      { "name": "unsupported unit empty", "value": 50, "unit": "", "error_code": "INVALID_UNITS", "error_key": "UNSUPPORTED_UNIT" },
-      { "name": "string value", "value": "50", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
-      { "name": "null value", "value": null, "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
-      { "name": "boolean value", "value": true, "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
-      { "name": "missing value", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
-      { "name": "nan value", "value": "__NAN__", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
-      { "name": "positive infinity value", "value": "__INF__", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
-      { "name": "negative infinity value", "value": "__NEG_INF__", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
-      { "name": "nan value in meters", "value": "__NAN__", "unit": "m", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
-      { "name": "infinity value in meters", "value": "__INF__", "unit": "m", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" }
+      {
+        "name": "unsupported unit mm",
+        "value": 50,
+        "unit": "mm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "unsupported unit spelled out",
+        "value": 50,
+        "unit": "meters",
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "unsupported unit uppercase",
+        "value": 50,
+        "unit": "CM",
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "unsupported unit empty",
+        "value": 50,
+        "unit": "",
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "string value",
+        "value": "50",
+        "unit": "cm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "null value",
+        "value": null,
+        "unit": "cm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "boolean value",
+        "value": true,
+        "unit": "cm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "missing value",
+        "unit": "cm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "nan value",
+        "value": "__NAN__",
+        "unit": "cm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "positive infinity value",
+        "value": "__INF__",
+        "unit": "cm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "negative infinity value",
+        "value": "__NEG_INF__",
+        "unit": "cm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "nan value in meters",
+        "value": "__NAN__",
+        "unit": "m",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "infinity value in meters",
+        "value": "__INF__",
+        "unit": "m",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      }
     ],
     "malformed": [
-      { "name": "measurement is null", "measurement": null, "error_code": "INVALID_UNITS", "error_key": "NOT_A_MEASUREMENT" },
-      { "name": "measurement is a number", "measurement": 50, "error_code": "INVALID_UNITS", "error_key": "NOT_A_MEASUREMENT" },
-      { "name": "measurement is a string", "measurement": "50 cm", "error_code": "INVALID_UNITS", "error_key": "NOT_A_MEASUREMENT" },
-      { "name": "measurement is an array", "measurement": [50, "cm"], "error_code": "INVALID_UNITS", "error_key": "NOT_A_MEASUREMENT" }
+      {
+        "name": "measurement is null",
+        "measurement": null,
+        "error_code": "INVALID_UNITS",
+        "error_key": "NOT_A_MEASUREMENT"
+      },
+      {
+        "name": "measurement is a number",
+        "measurement": 50,
+        "error_code": "INVALID_UNITS",
+        "error_key": "NOT_A_MEASUREMENT"
+      },
+      {
+        "name": "measurement is a string",
+        "measurement": "50 cm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NOT_A_MEASUREMENT"
+      },
+      {
+        "name": "measurement is an array",
+        "measurement": [
+          50,
+          "cm"
+        ],
+        "error_code": "INVALID_UNITS",
+        "error_key": "NOT_A_MEASUREMENT"
+      }
     ]
   },
   "directions": {
     "description": "Named world-space direction -> axis + sign. Complete and total over the canonical Direction enum.",
     "valid": [
-      { "name": "spec: right -> +X", "direction": "right", "axis": "x", "sign": 1 },
-      { "name": "left -> -X", "direction": "left", "axis": "x", "sign": -1 },
-      { "name": "forward -> +Y", "direction": "forward", "axis": "y", "sign": 1 },
-      { "name": "back -> -Y", "direction": "back", "axis": "y", "sign": -1 },
-      { "name": "up -> +Z", "direction": "up", "axis": "z", "sign": 1 },
-      { "name": "down -> -Z", "direction": "down", "axis": "z", "sign": -1 }
+      {
+        "name": "spec: right -> +X",
+        "direction": "right",
+        "axis": "x",
+        "sign": 1
+      },
+      {
+        "name": "left -> -X",
+        "direction": "left",
+        "axis": "x",
+        "sign": -1
+      },
+      {
+        "name": "forward -> +Y",
+        "direction": "forward",
+        "axis": "y",
+        "sign": 1
+      },
+      {
+        "name": "back -> -Y",
+        "direction": "back",
+        "axis": "y",
+        "sign": -1
+      },
+      {
+        "name": "up -> +Z",
+        "direction": "up",
+        "axis": "z",
+        "sign": 1
+      },
+      {
+        "name": "down -> -Z",
+        "direction": "down",
+        "axis": "z",
+        "sign": -1
+      }
     ],
     "invalid": [
-      { "name": "uppercase token", "direction": "Right", "error_code": "VALIDATION_ERROR" },
-      { "name": "prose is not a token", "direction": "to the right", "error_code": "VALIDATION_ERROR" },
-      { "name": "camera-relative wording deferred", "direction": "toward camera", "error_code": "VALIDATION_ERROR" },
-      { "name": "unknown token", "direction": "sideways", "error_code": "VALIDATION_ERROR" },
-      { "name": "empty token", "direction": "", "error_code": "VALIDATION_ERROR" },
-      { "name": "null token", "direction": null, "error_code": "VALIDATION_ERROR" },
-      { "name": "numeric token", "direction": 1, "error_code": "VALIDATION_ERROR" }
+      {
+        "name": "uppercase token",
+        "direction": "Right",
+        "error_code": "VALIDATION_ERROR"
+      },
+      {
+        "name": "prose is not a token",
+        "direction": "to the right",
+        "error_code": "VALIDATION_ERROR"
+      },
+      {
+        "name": "camera-relative wording deferred",
+        "direction": "toward camera",
+        "error_code": "VALIDATION_ERROR"
+      },
+      {
+        "name": "unknown token",
+        "direction": "sideways",
+        "error_code": "VALIDATION_ERROR"
+      },
+      {
+        "name": "empty token",
+        "direction": "",
+        "error_code": "VALIDATION_ERROR"
+      },
+      {
+        "name": "null token",
+        "direction": null,
+        "error_code": "VALIDATION_ERROR"
+      },
+      {
+        "name": "numeric token",
+        "direction": 1,
+        "error_code": "VALIDATION_ERROR"
+      }
     ]
   },
   "deltas": {
@@ -72,7 +320,11 @@
         "direction": "right",
         "value": 50,
         "unit": "cm",
-        "delta": { "x": 0.5, "y": 0, "z": 0 },
+        "delta": {
+          "x": 0.5,
+          "y": 0,
+          "z": 0
+        },
         "axis": "x",
         "meters": 0.5
       },
@@ -81,7 +333,11 @@
         "direction": "left",
         "value": 25,
         "unit": "cm",
-        "delta": { "x": -0.25, "y": 0, "z": 0 },
+        "delta": {
+          "x": -0.25,
+          "y": 0,
+          "z": 0
+        },
         "axis": "x",
         "meters": -0.25
       },
@@ -90,7 +346,11 @@
         "direction": "left",
         "value": 50,
         "unit": "cm",
-        "delta": { "x": -0.5, "y": 0, "z": 0 },
+        "delta": {
+          "x": -0.5,
+          "y": 0,
+          "z": 0
+        },
         "axis": "x",
         "meters": -0.5
       },
@@ -99,7 +359,11 @@
         "direction": "right",
         "value": 0.5,
         "unit": "m",
-        "delta": { "x": 0.5, "y": 0, "z": 0 },
+        "delta": {
+          "x": 0.5,
+          "y": 0,
+          "z": 0
+        },
         "axis": "x",
         "meters": 0.5
       },
@@ -108,7 +372,11 @@
         "direction": "up",
         "value": 240,
         "unit": "cm",
-        "delta": { "x": 0, "y": 0, "z": 2.4 },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 2.4
+        },
         "axis": "z",
         "meters": 2.4
       },
@@ -117,7 +385,11 @@
         "direction": "down",
         "value": 100,
         "unit": "cm",
-        "delta": { "x": 0, "y": 0, "z": -1 },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": -1
+        },
         "axis": "z",
         "meters": -1
       },
@@ -126,7 +398,11 @@
         "direction": "forward",
         "value": 1,
         "unit": "m",
-        "delta": { "x": 0, "y": 1, "z": 0 },
+        "delta": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
         "axis": "y",
         "meters": 1
       },
@@ -135,7 +411,11 @@
         "direction": "back",
         "value": 1,
         "unit": "m",
-        "delta": { "x": 0, "y": -1, "z": 0 },
+        "delta": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
         "axis": "y",
         "meters": -1
       },
@@ -144,7 +424,11 @@
         "direction": "left",
         "value": 0,
         "unit": "cm",
-        "delta": { "x": 0, "y": 0, "z": 0 },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
         "axis": "x",
         "meters": 0
       },
@@ -153,7 +437,11 @@
         "direction": "right",
         "value": 0,
         "unit": "m",
-        "delta": { "x": 0, "y": 0, "z": 0 },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
         "axis": "x",
         "meters": 0
       },
@@ -162,7 +450,11 @@
         "direction": "left",
         "value": -0.0,
         "unit": "cm",
-        "delta": { "x": 0, "y": 0, "z": 0 },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
         "axis": "x",
         "meters": 0
       }
@@ -252,5 +544,1015 @@
         "error_key": "UNSUPPORTED_DIRECTION"
       }
     ]
+  },
+  "angles": {
+    "description": "AngleMeasurement -> canonical radians. `radians` is the expected EXACT result: deg -> rad is one multiplication by the single constant pi/180, so both languages produce bit-identical doubles and exact comparison is correct here. Conversion is NOT normalization: no case expects a value reduced modulo a full turn.",
+    "valid": [
+      {
+        "name": "spec: 0 deg -> 0 rad",
+        "value": 0,
+        "unit": "deg",
+        "radians": 0.0
+      },
+      {
+        "name": "spec: 45 deg -> pi/4",
+        "value": 45,
+        "unit": "deg",
+        "radians": 0.7853981633974483
+      },
+      {
+        "name": "spec: 90 deg -> pi/2",
+        "value": 90,
+        "unit": "deg",
+        "radians": 1.5707963267948966
+      },
+      {
+        "name": "spec: 180 deg -> pi",
+        "value": 180,
+        "unit": "deg",
+        "radians": 3.141592653589793
+      },
+      {
+        "name": "spec: -45 deg -> -pi/4",
+        "value": -45,
+        "unit": "deg",
+        "radians": -0.7853981633974483
+      },
+      {
+        "name": "spec: 1 rad passes through",
+        "value": 1,
+        "unit": "rad",
+        "radians": 1.0
+      },
+      {
+        "name": "30 deg -> pi/6",
+        "value": 30,
+        "unit": "deg",
+        "radians": 0.5235987755982988
+      },
+      {
+        "name": "60 deg -> pi/3",
+        "value": 60,
+        "unit": "deg",
+        "radians": 1.0471975511965976
+      },
+      {
+        "name": "270 deg -> 3pi/2",
+        "value": 270,
+        "unit": "deg",
+        "radians": 4.71238898038469
+      },
+      {
+        "name": "full turn is not collapsed to zero",
+        "value": 360,
+        "unit": "deg",
+        "radians": 6.283185307179586
+      },
+      {
+        "name": "two full turns are not collapsed",
+        "value": 720,
+        "unit": "deg",
+        "radians": 12.566370614359172
+      },
+      {
+        "name": "negative full turn is not collapsed",
+        "value": -360,
+        "unit": "deg",
+        "radians": -6.283185307179586
+      },
+      {
+        "name": "beyond a full turn keeps its excess",
+        "value": 405,
+        "unit": "deg",
+        "radians": 7.0685834705770345
+      },
+      {
+        "name": "fractional degrees",
+        "value": 22.5,
+        "unit": "deg",
+        "radians": 0.39269908169872414
+      },
+      {
+        "name": "one degree",
+        "value": 1,
+        "unit": "deg",
+        "radians": 0.017453292519943295
+      },
+      {
+        "name": "negative radians pass through",
+        "value": -1.25,
+        "unit": "rad",
+        "radians": -1.25
+      },
+      {
+        "name": "zero radians normalizes negative zero",
+        "value": -0.0,
+        "unit": "rad",
+        "radians": 0.0
+      },
+      {
+        "name": "negative-zero degrees normalizes",
+        "value": -0.0,
+        "unit": "deg",
+        "radians": 0.0
+      },
+      {
+        "name": "pi radians pass through unchanged",
+        "value": 3.141592653589793,
+        "unit": "rad",
+        "radians": 3.141592653589793
+      },
+      {
+        "name": "token alias: degrees",
+        "value": 45,
+        "unit": "degrees",
+        "radians": 0.7853981633974483
+      },
+      {
+        "name": "token alias: degree",
+        "value": 45,
+        "unit": "degree",
+        "radians": 0.7853981633974483
+      },
+      {
+        "name": "token alias: degree sign",
+        "value": 45,
+        "unit": "°",
+        "radians": 0.7853981633974483
+      },
+      {
+        "name": "token alias: radians",
+        "value": 1,
+        "unit": "radians",
+        "radians": 1.0
+      },
+      {
+        "name": "token alias: mixed case DEG",
+        "value": 90,
+        "unit": "DEG",
+        "radians": 1.5707963267948966
+      },
+      {
+        "name": "token alias: padded",
+        "value": 90,
+        "unit": "  deg  ",
+        "radians": 1.5707963267948966
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unsupported unit gradians",
+        "value": 100,
+        "unit": "grad",
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "unsupported unit turns",
+        "value": 1,
+        "unit": "turn",
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "unsupported unit arcminutes",
+        "value": 30,
+        "unit": "arcmin",
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "length unit is not an angle unit",
+        "value": 45,
+        "unit": "cm",
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "missing unit",
+        "value": 45,
+        "unit": null,
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "numeric unit",
+        "value": 45,
+        "unit": 180,
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "empty unit",
+        "value": 45,
+        "unit": "",
+        "error_code": "INVALID_UNITS",
+        "error_key": "UNSUPPORTED_UNIT"
+      },
+      {
+        "name": "NaN degrees",
+        "value": "__NAN__",
+        "unit": "deg",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "Infinity degrees",
+        "value": "__INF__",
+        "unit": "deg",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "negative Infinity degrees",
+        "value": "__NEG_INF__",
+        "unit": "deg",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "NaN radians",
+        "value": "__NAN__",
+        "unit": "rad",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "Infinity radians",
+        "value": "__INF__",
+        "unit": "rad",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "string value",
+        "value": "45",
+        "unit": "deg",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "null value",
+        "value": null,
+        "unit": "deg",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      },
+      {
+        "name": "boolean value",
+        "value": true,
+        "unit": "deg",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_VALUE"
+      }
+    ],
+    "malformed": [
+      {
+        "name": "measurement is null",
+        "measurement": null,
+        "error_code": "INVALID_UNITS",
+        "error_key": "NOT_A_MEASUREMENT"
+      },
+      {
+        "name": "measurement is a number",
+        "measurement": 45,
+        "error_code": "INVALID_UNITS",
+        "error_key": "NOT_A_MEASUREMENT"
+      },
+      {
+        "name": "measurement is a string",
+        "measurement": "45 deg",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NOT_A_MEASUREMENT"
+      },
+      {
+        "name": "measurement is an array",
+        "measurement": [
+          45,
+          "deg"
+        ],
+        "error_code": "INVALID_UNITS",
+        "error_key": "NOT_A_MEASUREMENT"
+      }
+    ]
+  },
+  "resize": {
+    "description": "Normalized (percent, direction) size intent -> absolute multiplicative factor. `factor` is the expected EXACT result: the arithmetic is one correctly-rounded division by 100, so both languages agree bit for bit. The utility never sees scene state; Task 10 multiplies this factor by authoritative snapshot dimensions.",
+    "valid": [
+      {
+        "name": "spec: 0% smaller -> 1",
+        "percent": 0,
+        "direction": "smaller",
+        "factor": 1.0
+      },
+      {
+        "name": "spec: 0% larger -> 1",
+        "percent": 0,
+        "direction": "larger",
+        "factor": 1.0
+      },
+      {
+        "name": "spec: 20% smaller -> 0.8",
+        "percent": 20,
+        "direction": "smaller",
+        "factor": 0.8
+      },
+      {
+        "name": "spec: 25% larger -> 1.25",
+        "percent": 25,
+        "direction": "larger",
+        "factor": 1.25
+      },
+      {
+        "name": "spec: 99% smaller -> 0.01",
+        "percent": 99,
+        "direction": "smaller",
+        "factor": 0.01
+      },
+      {
+        "name": "50% smaller -> 0.5",
+        "percent": 50,
+        "direction": "smaller",
+        "factor": 0.5
+      },
+      {
+        "name": "50% larger -> 1.5",
+        "percent": 50,
+        "direction": "larger",
+        "factor": 1.5
+      },
+      {
+        "name": "100% larger doubles",
+        "percent": 100,
+        "direction": "larger",
+        "factor": 2.0
+      },
+      {
+        "name": "200% larger triples",
+        "percent": 200,
+        "direction": "larger",
+        "factor": 3.0
+      },
+      {
+        "name": "no arbitrary upper bound on growth",
+        "percent": 10000,
+        "direction": "larger",
+        "factor": 101.0
+      },
+      {
+        "name": "fractional percent smaller",
+        "percent": 12.5,
+        "direction": "smaller",
+        "factor": 0.875
+      },
+      {
+        "name": "fractional percent larger",
+        "percent": 12.5,
+        "direction": "larger",
+        "factor": 1.125
+      },
+      {
+        "name": "just under total reduction",
+        "percent": 99.9,
+        "direction": "smaller",
+        "factor": 0.0009999999999999432
+      },
+      {
+        "name": "one percent smaller",
+        "percent": 1,
+        "direction": "smaller",
+        "factor": 0.99
+      },
+      {
+        "name": "one percent larger",
+        "percent": 1,
+        "direction": "larger",
+        "factor": 1.01
+      }
+    ],
+    "invalid": [
+      {
+        "name": "spec: 100% smaller is a deletion",
+        "percent": 100,
+        "direction": "smaller",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "TOTAL_REDUCTION"
+      },
+      {
+        "name": "spec: more than 100% smaller",
+        "percent": 120,
+        "direction": "smaller",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "TOTAL_REDUCTION"
+      },
+      {
+        "name": "spec: negative percent smaller",
+        "percent": -20,
+        "direction": "smaller",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NEGATIVE_PERCENT"
+      },
+      {
+        "name": "negative percent larger",
+        "percent": -20,
+        "direction": "larger",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NEGATIVE_PERCENT"
+      },
+      {
+        "name": "negative fractional percent",
+        "percent": -0.5,
+        "direction": "smaller",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NEGATIVE_PERCENT"
+      },
+      {
+        "name": "unknown direction",
+        "percent": 20,
+        "direction": "bigger",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "UNSUPPORTED_DIRECTION"
+      },
+      {
+        "name": "world direction is not a size direction",
+        "percent": 20,
+        "direction": "left",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "UNSUPPORTED_DIRECTION"
+      },
+      {
+        "name": "missing direction",
+        "percent": 20,
+        "direction": null,
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "UNSUPPORTED_DIRECTION"
+      },
+      {
+        "name": "numeric direction",
+        "percent": 20,
+        "direction": 1,
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "UNSUPPORTED_DIRECTION"
+      },
+      {
+        "name": "mixed case direction is not normalized here",
+        "percent": 20,
+        "direction": "Smaller",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "UNSUPPORTED_DIRECTION"
+      },
+      {
+        "name": "NaN percent",
+        "percent": "__NAN__",
+        "direction": "smaller",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_PERCENT"
+      },
+      {
+        "name": "Infinity percent",
+        "percent": "__INF__",
+        "direction": "larger",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_PERCENT"
+      },
+      {
+        "name": "negative Infinity percent",
+        "percent": "__NEG_INF__",
+        "direction": "smaller",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_PERCENT"
+      },
+      {
+        "name": "string percent",
+        "percent": "20",
+        "direction": "smaller",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_PERCENT"
+      },
+      {
+        "name": "null percent",
+        "percent": null,
+        "direction": "smaller",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_PERCENT"
+      },
+      {
+        "name": "boolean percent",
+        "percent": true,
+        "direction": "smaller",
+        "error_code": "INVALID_UNITS",
+        "error_key": "NON_FINITE_PERCENT"
+      }
+    ],
+    "factors": {
+      "description": "validate_size_factor / validateSizeFactor over explicit factors.",
+      "valid": [
+        {
+          "name": "identity",
+          "value": 1.0,
+          "factor": 1.0
+        },
+        {
+          "name": "four fifths",
+          "value": 0.8,
+          "factor": 0.8
+        },
+        {
+          "name": "tiny but positive",
+          "value": 1e-09,
+          "factor": 1e-09
+        },
+        {
+          "name": "large growth",
+          "value": 1000.0,
+          "factor": 1000.0
+        }
+      ],
+      "invalid": [
+        {
+          "name": "zero collapses the object",
+          "value": 0,
+          "error_code": "VALIDATION_ERROR",
+          "error_key": "NON_POSITIVE_FACTOR"
+        },
+        {
+          "name": "negative zero collapses the object",
+          "value": -0.0,
+          "error_code": "VALIDATION_ERROR",
+          "error_key": "NON_POSITIVE_FACTOR"
+        },
+        {
+          "name": "negative mirrors rather than resizes",
+          "value": -0.8,
+          "error_code": "VALIDATION_ERROR",
+          "error_key": "NON_POSITIVE_FACTOR"
+        },
+        {
+          "name": "NaN factor",
+          "value": "__NAN__",
+          "error_code": "INVALID_UNITS",
+          "error_key": "NON_FINITE_FACTOR"
+        },
+        {
+          "name": "Infinity factor",
+          "value": "__INF__",
+          "error_code": "INVALID_UNITS",
+          "error_key": "NON_FINITE_FACTOR"
+        },
+        {
+          "name": "string factor",
+          "value": "0.8",
+          "error_code": "INVALID_UNITS",
+          "error_key": "NON_FINITE_FACTOR"
+        },
+        {
+          "name": "null factor",
+          "value": null,
+          "error_code": "INVALID_UNITS",
+          "error_key": "NON_FINITE_FACTOR"
+        },
+        {
+          "name": "boolean factor",
+          "value": true,
+          "error_code": "INVALID_UNITS",
+          "error_key": "NON_FINITE_FACTOR"
+        }
+      ]
+    }
+  },
+  "colors": {
+    "description": "Canonical colour is LINEAR sRGB RGBA with finite channels in [0, 1]. `transfer` vectors pin the sRGB electro-optical transfer function; they are compared within a documented tolerance because the power segment uses pow, which is not guaranteed bit-identical across libm implementations (observed identical between CPython and Node on the development machine). The PALETTE does not depend on pow: it is authored in canonical linear literals, so named lookups are exactly equal in both languages.",
+    "valid": [
+      {
+        "name": "opaque white",
+        "color": {
+          "r": 1,
+          "g": 1,
+          "b": 1,
+          "a": 1
+        }
+      },
+      {
+        "name": "opaque black",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        }
+      },
+      {
+        "name": "fully transparent",
+        "color": {
+          "r": 0.5,
+          "g": 0.5,
+          "b": 0.5,
+          "a": 0
+        }
+      },
+      {
+        "name": "channel boundaries mixed",
+        "color": {
+          "r": 0,
+          "g": 1,
+          "b": 0,
+          "a": 1
+        }
+      },
+      {
+        "name": "explicit provider-style colour",
+        "color": {
+          "r": 0.7912979403326302,
+          "g": 0.6444796819705821,
+          "b": 0.4620769996544071,
+          "a": 1
+        }
+      },
+      {
+        "name": "arbitrary mid colour",
+        "color": {
+          "r": 0.123456789,
+          "g": 0.987654321,
+          "b": 0.5,
+          "a": 0.25
+        }
+      },
+      {
+        "name": "negative zero channel normalizes",
+        "color": {
+          "r": -0.0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "channel below zero",
+        "color": {
+          "r": -0.1,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "CHANNEL_OUT_OF_RANGE"
+      },
+      {
+        "name": "channel above one",
+        "color": {
+          "r": 1.5,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "CHANNEL_OUT_OF_RANGE"
+      },
+      {
+        "name": "alpha above one",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1.0001
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "CHANNEL_OUT_OF_RANGE"
+      },
+      {
+        "name": "alpha below zero",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": -1
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "CHANNEL_OUT_OF_RANGE"
+      },
+      {
+        "name": "byte range instead of unit range",
+        "color": {
+          "r": 230,
+          "g": 210,
+          "b": 181,
+          "a": 255
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "CHANNEL_OUT_OF_RANGE"
+      },
+      {
+        "name": "NaN channel",
+        "color": {
+          "r": "__NAN__",
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NON_FINITE_CHANNEL"
+      },
+      {
+        "name": "Infinity channel",
+        "color": {
+          "r": "__INF__",
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NON_FINITE_CHANNEL"
+      },
+      {
+        "name": "string channel",
+        "color": {
+          "r": "0.5",
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NON_FINITE_CHANNEL"
+      },
+      {
+        "name": "boolean channel",
+        "color": {
+          "r": true,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NON_FINITE_CHANNEL"
+      },
+      {
+        "name": "missing alpha",
+        "color": {
+          "r": 1,
+          "g": 1,
+          "b": 1
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "MISSING_CHANNEL"
+      },
+      {
+        "name": "missing blue",
+        "color": {
+          "r": 1,
+          "g": 1,
+          "a": 1
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "MISSING_CHANNEL"
+      },
+      {
+        "name": "extra property",
+        "color": {
+          "r": 1,
+          "g": 1,
+          "b": 1,
+          "a": 1,
+          "space": "srgb"
+        },
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NOT_A_COLOR"
+      },
+      {
+        "name": "colour name instead of channels",
+        "color": "warm beige",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NOT_A_COLOR"
+      },
+      {
+        "name": "array form",
+        "color": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NOT_A_COLOR"
+      },
+      {
+        "name": "null colour",
+        "color": null,
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NOT_A_COLOR"
+      }
+    ],
+    "named": [
+      {
+        "name": "warm beige",
+        "input": "warm beige",
+        "color": {
+          "r": 0.7912979403326302,
+          "g": 0.6444796819705821,
+          "b": 0.4620769996544071,
+          "a": 1.0
+        }
+      },
+      {
+        "name": "beige",
+        "input": "beige",
+        "color": {
+          "r": 0.9130986517934192,
+          "g": 0.9130986517934192,
+          "b": 0.7156935005064807,
+          "a": 1.0
+        }
+      },
+      {
+        "name": "white",
+        "input": "white",
+        "color": {
+          "r": 1.0,
+          "g": 1.0,
+          "b": 1.0,
+          "a": 1.0
+        }
+      },
+      {
+        "name": "black",
+        "input": "black",
+        "color": {
+          "r": 0.0,
+          "g": 0.0,
+          "b": 0.0,
+          "a": 1.0
+        }
+      },
+      {
+        "name": "grey",
+        "input": "grey",
+        "color": {
+          "r": 0.21586050011389926,
+          "g": 0.21586050011389926,
+          "b": 0.21586050011389926,
+          "a": 1.0
+        }
+      },
+      {
+        "name": "gray spelling alias",
+        "input": "gray",
+        "color": {
+          "r": 0.21586050011389926,
+          "g": 0.21586050011389926,
+          "b": 0.21586050011389926,
+          "a": 1.0
+        }
+      },
+      {
+        "name": "mixed case and padding normalize",
+        "input": "  Warm   BEIGE ",
+        "color": {
+          "r": 0.7912979403326302,
+          "g": 0.6444796819705821,
+          "b": 0.4620769996544071,
+          "a": 1.0
+        }
+      }
+    ],
+    "unnamed": [
+      {
+        "name": "unknown colour name",
+        "input": "burnt sienna",
+        "error_code": "UNSUPPORTED_INSTRUCTION",
+        "error_key": "UNKNOWN_COLOR_NAME"
+      },
+      {
+        "name": "beige-like prose is not forced into the palette",
+        "input": "a sort of warm beige-ish tone",
+        "error_code": "UNSUPPORTED_INSTRUCTION",
+        "error_key": "UNKNOWN_COLOR_NAME"
+      },
+      {
+        "name": "empty name",
+        "input": "",
+        "error_code": "UNSUPPORTED_INSTRUCTION",
+        "error_key": "UNKNOWN_COLOR_NAME"
+      },
+      {
+        "name": "whitespace only",
+        "input": "   ",
+        "error_code": "UNSUPPORTED_INSTRUCTION",
+        "error_key": "UNKNOWN_COLOR_NAME"
+      },
+      {
+        "name": "non-string name",
+        "input": 7,
+        "error_code": "UNSUPPORTED_INSTRUCTION",
+        "error_key": "UNKNOWN_COLOR_NAME"
+      },
+      {
+        "name": "hex string is not a name",
+        "input": "#E6D2B5",
+        "error_code": "UNSUPPORTED_INSTRUCTION",
+        "error_key": "UNKNOWN_COLOR_NAME"
+      }
+    ],
+    "transfer": {
+      "description": "Encoded sRGB channel -> linear light. Reference vectors, compared within tolerance 1e-12.",
+      "tolerance": 1e-12,
+      "cases": [
+        {
+          "name": "zero maps to zero",
+          "encoded": 0,
+          "linear": 0.0
+        },
+        {
+          "name": "one maps to one",
+          "encoded": 1,
+          "linear": 1.0
+        },
+        {
+          "name": "piecewise threshold",
+          "encoded": 0.04045,
+          "linear": 0.0031308049535603713
+        },
+        {
+          "name": "just below threshold is linear segment",
+          "encoded": 0.04,
+          "linear": 0.0030959752321981426
+        },
+        {
+          "name": "known midtone: 0.5 encoded is NOT 0.5 linear",
+          "encoded": 0.5,
+          "linear": 0.21404114048223255
+        },
+        {
+          "name": "8-bit mid grey 128",
+          "encoded": 0.5019607843137255,
+          "linear": 0.21586050011389926
+        },
+        {
+          "name": "8-bit 230 (warm beige red)",
+          "encoded": 0.9019607843137255,
+          "linear": 0.7912979403326302
+        },
+        {
+          "name": "8-bit 210 (warm beige green)",
+          "encoded": 0.8235294117647058,
+          "linear": 0.6444796819705821
+        },
+        {
+          "name": "8-bit 181 (warm beige blue)",
+          "encoded": 0.7098039215686275,
+          "linear": 0.4620769996544071
+        },
+        {
+          "name": "8-bit 245 (css beige red)",
+          "encoded": 0.9607843137254902,
+          "linear": 0.9130986517934192
+        },
+        {
+          "name": "8-bit 220 (css beige blue)",
+          "encoded": 0.8627450980392157,
+          "linear": 0.7156935005064807
+        },
+        {
+          "name": "high value",
+          "encoded": 0.9,
+          "linear": 0.7874122893956174
+        },
+        {
+          "name": "low value in power segment",
+          "encoded": 0.05,
+          "linear": 0.003935939504088967
+        }
+      ],
+      "rejected": [
+        {
+          "name": "above one",
+          "encoded": 1.5
+        },
+        {
+          "name": "below zero",
+          "encoded": -0.1
+        },
+        {
+          "name": "NaN",
+          "encoded": "__NAN__"
+        },
+        {
+          "name": "Infinity",
+          "encoded": "__INF__"
+        },
+        {
+          "name": "string",
+          "encoded": "0.5"
+        },
+        {
+          "name": "null",
+          "encoded": null
+        },
+        {
+          "name": "boolean",
+          "encoded": true
+        }
+      ]
+    }
   }
 }

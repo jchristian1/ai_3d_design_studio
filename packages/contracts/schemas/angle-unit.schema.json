@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "angle-unit.schema.json",
+  "title": "AngleUnit",
+  "description": "Angular units accepted at an input boundary. RADIANS is the canonical internal unit (see .kiro/steering/blender.md and Spec 002 Requirement 7): Blender's rotation_euler is radians, so choosing radians means zero conversion at the Blender boundary. Degrees exist here only so a user-facing value can be converted ONCE, at the edge, in packages/spatial — exactly the role centimetres play in length-unit.schema.json. The enum holds the NORMALIZED wire values only. Human spellings ('degree', 'degrees', '°', 'radian', 'radians') are accepted as input TOKENS by studio_spatial.normalize_angle_unit and collapse to these two values before anything crosses a boundary, so a payload can never carry an unnormalized unit. Deliberately narrow: gradians, turns and arcminutes have no product requirement, and an unknown unit must fail validation rather than be guessed at.",
+  "type": "string",
+  "enum": ["rad", "deg"]
+}

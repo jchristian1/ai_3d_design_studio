@@ -325,6 +325,15 @@ class MoveObjectResult:
 #: Canonical schema: length-unit.schema.json
 LengthUnit = Literal["m", "cm"]
 
+#: Angular units accepted at an input boundary. RADIANS is the canonical internal
+#: unit (Blender's rotation_euler is radians, so nothing converts at the Blender
+#: boundary); degrees exist so a user-facing value is converted once, at the edge.
+#: These are the NORMALIZED wire values: human spellings ("degrees", "°") are
+#: accepted as tokens by studio_spatial and collapse to these before crossing a
+#: boundary.
+#: Canonical schema: angle-unit.schema.json
+AngleUnit = Literal["rad", "deg"]
+
 #: A Blender WORLD-SPACE axis. World-space only for this milestone;
 #: camera-relative interpretation is explicitly deferred.
 #: Canonical schema: axis.schema.json
@@ -338,6 +347,7 @@ Direction = Literal["right", "left", "forward", "back", "up", "down"]
 AxisSign = Literal[1, -1]
 
 LENGTH_UNITS: tuple[LengthUnit, ...] = ("m", "cm")
+ANGLE_UNITS: tuple[AngleUnit, ...] = ("rad", "deg")
 AXES: tuple[Axis, ...] = ("x", "y", "z")
 DIRECTIONS: tuple[Direction, ...] = (
     "right",
@@ -359,6 +369,29 @@ class Measurement:
 
     value: float
     unit: LengthUnit
+
+
+@dataclass(frozen=True)
+class AngleMeasurement:
+    """An angle with an EXPLICIT unit, before conversion to canonical radians.
+
+    The unit is mandatory: a bare number is ambiguous, and guessing "probably
+    degrees" is the class of mistake that puts a 45-radian rotation into a scene.
+
+    An INPUT-boundary shape only. Once interpreted, an angle travels as a plain
+    number of radians in a named field (``rotation_euler_radians``), so an
+    AngleMeasurement never reaches the worker — the same discipline that keeps
+    :class:`Measurement` out of a Job payload.
+
+    Direction of rotation is carried by the SIGN of ``value``, and the value is
+    deliberately NOT reduced modulo a full turn: conversion and normalization are
+    different concerns.
+
+    Canonical schema: ``angle-measurement.schema.json``
+    """
+
+    value: float
+    unit: AngleUnit
 
 
 @dataclass(frozen=True)

@@ -4879,6 +4879,183 @@
           ]
         }
       ]
+    },
+    {
+      "schema": "angle-unit.schema.json",
+      "valid": [
+        {
+          "name": "radians is canonical",
+          "data": "rad"
+        },
+        {
+          "name": "degrees is an input unit",
+          "data": "deg"
+        }
+      ],
+      "invalid": [
+        {
+          "name": "spelled-out degrees is a token, not a wire value",
+          "data": "degrees"
+        },
+        {
+          "name": "spelled-out radians is a token, not a wire value",
+          "data": "radians"
+        },
+        {
+          "name": "degree sign is a token, not a wire value",
+          "data": "°"
+        },
+        {
+          "name": "uppercase",
+          "data": "DEG"
+        },
+        {
+          "name": "gradians are not supported",
+          "data": "grad"
+        },
+        {
+          "name": "turns are not supported",
+          "data": "turn"
+        },
+        {
+          "name": "a length unit is not an angle unit",
+          "data": "cm"
+        },
+        {
+          "name": "not a string",
+          "data": 180
+        }
+      ]
+    },
+    {
+      "schema": "angle-measurement.schema.json",
+      "valid": [
+        {
+          "name": "45 degrees",
+          "data": {
+            "value": 45,
+            "unit": "deg"
+          }
+        },
+        {
+          "name": "negative degrees",
+          "data": {
+            "value": -45,
+            "unit": "deg"
+          }
+        },
+        {
+          "name": "zero",
+          "data": {
+            "value": 0,
+            "unit": "deg"
+          }
+        },
+        {
+          "name": "one radian",
+          "data": {
+            "value": 1,
+            "unit": "rad"
+          }
+        },
+        {
+          "name": "pi radians",
+          "data": {
+            "value": 3.141592653589793,
+            "unit": "rad"
+          }
+        },
+        {
+          "name": "beyond a full turn is representable",
+          "data": {
+            "value": 720,
+            "unit": "deg"
+          }
+        },
+        {
+          "name": "fractional degrees",
+          "data": {
+            "value": 22.5,
+            "unit": "deg"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing unit",
+          "data": {
+            "value": 45
+          }
+        },
+        {
+          "name": "missing value",
+          "data": {
+            "unit": "deg"
+          }
+        },
+        {
+          "name": "unnormalized unit token",
+          "data": {
+            "value": 45,
+            "unit": "degrees"
+          }
+        },
+        {
+          "name": "unsupported unit",
+          "data": {
+            "value": 100,
+            "unit": "grad"
+          }
+        },
+        {
+          "name": "length unit",
+          "data": {
+            "value": 45,
+            "unit": "cm"
+          }
+        },
+        {
+          "name": "string value",
+          "data": {
+            "value": "45",
+            "unit": "deg"
+          }
+        },
+        {
+          "name": "boolean value",
+          "data": {
+            "value": true,
+            "unit": "deg"
+          }
+        },
+        {
+          "name": "an axis belongs to the operation, not the measurement",
+          "data": {
+            "value": 45,
+            "unit": "deg",
+            "axis": "z"
+          }
+        },
+        {
+          "name": "extra property",
+          "data": {
+            "value": 45,
+            "unit": "deg",
+            "normalize": false
+          }
+        },
+        {
+          "name": "not an object",
+          "data": 45
+        },
+        {
+          "name": "array form",
+          "data": [
+            45,
+            "deg"
+          ]
+        }
+      ]
     }
   ]
 }

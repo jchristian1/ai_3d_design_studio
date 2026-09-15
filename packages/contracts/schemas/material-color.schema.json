@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "material-color.schema.json",
   "title": "MaterialColor",
-  "description": "A canonical colour: linear sRGB with straight alpha, each channel a float in [0, 1]. Linear sRGB is chosen because it is what Blender's Principled BSDF `base_color` expects, so no colour-space conversion happens at the Blender boundary — the same reasoning that makes METERS and RADIANS canonical. A colour NAME ('warm beige') is never representable here: names are interpreted above the worker and arrive as explicit validated numbers. JSON cannot encode NaN/Infinity, so the finite rule is additionally enforced by the validation layer.",
+  "description": "A canonical colour: LINEAR sRGB with straight alpha, each channel a finite float in [0, 1]. 'Linear sRGB' is meant precisely: sRGB primaries and white point, with the sRGB transfer function DECODED, so r, g and b are linear-light values. These are NOT encoded/'gamma' sRGB values of the kind written as #E6D2B5 or rgb(230 210 181) in CSS or in a colour picker; those are transfer-encoded, and calling them linear is the exact ambiguity this contract removes. The difference is large, not academic: 0.5 encoded is 0.2159 linear. Conversion from an encoded value happens in exactly one place, studio_spatial.colors.srgb_encoded_channel_to_linear, and dividing an 8-bit value by 255 is explicitly NOT that conversion. `a` is a plain unitless coverage scalar in [0, 1] and carries NO transfer function — decoding alpha would be a category error. Linear is canonical because it is what Blender's Principled BSDF base_color expects, so no colour-space conversion happens at the Blender boundary — the same reasoning that makes METERS and RADIANS canonical. A colour NAME ('warm beige') is never representable here: names are interpreted above the worker, against a deliberately tiny deterministic palette or by a real provider, and arrive as explicit validated numbers. The palette is a convenience, not a restriction: any schema-valid explicit colour is acceptable. JSON cannot encode NaN/Infinity, so the finite rule is additionally enforced by the validation layer.",
   "type": "object",
   "properties": {
-    "r": { "type": "number", "minimum": 0, "maximum": 1, "description": "Linear sRGB red." },
-    "g": { "type": "number", "minimum": 0, "maximum": 1, "description": "Linear sRGB green." },
-    "b": { "type": "number", "minimum": 0, "maximum": 1, "description": "Linear sRGB blue." },
-    "a": { "type": "number", "minimum": 0, "maximum": 1, "description": "Straight alpha; 1 is fully opaque." }
+    "r": { "type": "number", "minimum": 0, "maximum": 1, "description": "Linear-light red (sRGB primary)." },
+    "g": { "type": "number", "minimum": 0, "maximum": 1, "description": "Linear-light green (sRGB primary)." },
+    "b": { "type": "number", "minimum": 0, "maximum": 1, "description": "Linear-light blue (sRGB primary)." },
+    "a": { "type": "number", "minimum": 0, "maximum": 1, "description": "Straight alpha, unitless; 1 is fully opaque. Not transfer-encoded." }
   },
   "required": ["r", "g", "b", "a"],
   "additionalProperties": false

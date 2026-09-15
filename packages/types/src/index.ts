@@ -283,6 +283,34 @@ export interface Measurement {
 }
 
 /**
+ * Angular units accepted at an input boundary. RADIANS is the canonical internal
+ * unit (Blender's rotation_euler is radians, so nothing converts at the Blender
+ * boundary); degrees exist so a user-facing value is converted once, at the edge.
+ * These are the NORMALIZED wire values: human spellings ("degrees", "°") are
+ * accepted as tokens by @studio/spatial and collapse to these before crossing a
+ * boundary.
+ * Canonical schema: angle-unit.schema.json
+ */
+export type AngleUnit = "rad" | "deg";
+
+/**
+ * An angle with an EXPLICIT unit, before conversion to canonical radians.
+ *
+ * The unit is mandatory: a bare number is ambiguous. An INPUT-boundary shape only —
+ * once interpreted, an angle travels as a plain number of radians in a named field
+ * (`rotation_euler_radians`), so an AngleMeasurement never reaches the worker.
+ *
+ * Direction of rotation is carried by the SIGN of `value`, and the value is
+ * deliberately NOT reduced modulo a full turn.
+ *
+ * Canonical schema: angle-measurement.schema.json
+ */
+export interface AngleMeasurement {
+  value: number;
+  unit: AngleUnit;
+}
+
+/**
  * A Blender WORLD-SPACE axis. World-space only for this milestone;
  * camera-relative interpretation is explicitly deferred.
  * Canonical schema: axis.schema.json
@@ -309,6 +337,8 @@ export interface AxisDirection {
 }
 
 export const LENGTH_UNITS: readonly LengthUnit[] = ["m", "cm"] as const;
+
+export const ANGLE_UNITS: readonly AngleUnit[] = ["rad", "deg"] as const;
 
 export const AXES: readonly Axis[] = ["x", "y", "z"] as const;
 

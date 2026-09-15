@@ -91,7 +91,7 @@ Four decisions were closed by review before Task 1 and are now binding:
   - No agent code, no worker code, no Blender in this task.
   - _Requirements: 1.3, 1.4, 1.5, 1.8, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 12.5_
 
-- [ ] 2. Canonical angle, scale and colour utilities
+- [x] 2. Canonical angle, scale and colour utilities
   - Add `angles` to `packages/spatial` (TypeScript + Python): degrees → radians as the
     single conversion site, with **radians as the canonical internal angular unit**.
   - Add canonical schemas for the new cross-boundary vocabulary needed by the operation
@@ -551,3 +551,48 @@ no `tsconfig.json`, so `node --test` type-strips without type-checking them. The
 `scene.ts`, `scene.test.ts` and `emit-scene-verdicts.ts` were type-checked explicitly
 against the repo's strict settings and are clean; three pre-existing
 `as Record<string, unknown>` cast errors remain in `jobs.test.ts` and were left alone.
+
+
+---
+
+## Task 2 — implementation notes
+
+One deliberate deviation, disclosed rather than silently absorbed:
+
+1. **No canonical schema was added for the resize factor or for
+   `(percent, direction)`.** The task listed it as "if specified", and the reviewed
+   Spec 002 documents do not specify one: Requirement 7.4 makes the canonical resize
+   mutation `set_object_dimensions` carrying absolute metres, so a factor never
+   crosses a boundary and a schema for it would be a contract with no wire — exactly
+   the "schema for an internal helper" the task warned against. `(percent, direction)`
+   becomes canonical vocabulary in Task 6, as part of the model-proposal schema, where
+   it genuinely crosses the untrusted boundary. Both languages declare the closed
+   `SIZE_DIRECTIONS` token set in the meantime, with parity asserted by the corpus.
+
+Two things outside the task text were changed, both disclosed:
+
+2. **`AngleUnit` / `AngleMeasurement` live in `studio_types` / `@studio/types`**, not
+   in `packages/spatial`, matching where `LengthUnit` and `Measurement` already live.
+   `packages/spatial` imports the vocabulary and owns only the conversion, so the
+   shared type packages remain the one place a cross-boundary type is declared.
+3. **`packages/spatial/python` was added to `pytest pythonpath`.** `spatial_test_support`
+   was previously importable only by accident — pytest prepends the directory of each
+   collected test file, so `packages/spatial/python/test_*.py` happened to put it on
+   `sys.path` before `tests/spatial/` was collected, which made `pytest tests/spatial`
+   alone fail with an ImportError depending on collection order. It is test-only
+   tooling in the same category as `studio_fixtures`, which was already declared there.
+
+Decisions worth recording, because a later task could undo them by accident:
+
+- **`radians_to_degrees` returns a bare float, not an `AngleResult`.** That result
+  type's field is named `radians`; reusing it to carry degrees would be precisely the
+  unit-mislabelling the module exists to prevent.
+- **The palette is authored in canonical LINEAR literals**, with the encoded hex kept
+  as documented provenance and a test asserting the hex decodes to the literals. This
+  is deliberate: the power segment of the sRGB transfer function uses `pow`, which is
+  not guaranteed bit-identical across libm implementations, so deriving the palette at
+  import time would make cross-language palette equality depend on an implementation
+  detail. Observed bit-identical between CPython and Node here; the parity contract is
+  a documented 1e-12 tolerance for transfer output and EXACT equality for the palette.
+- **Angle and resize parity are exact (bit-for-bit).** Both are single arithmetic
+  operations on doubles, so no tolerance is needed or accepted there.

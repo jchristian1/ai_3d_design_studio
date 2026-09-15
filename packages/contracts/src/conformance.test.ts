@@ -30,8 +30,8 @@ import {
   validateAgainstSchema,
 } from "./index.ts";
 import type { ChatRequest, ChatResponse } from "./index.ts";
-import { ARTIFACT_TYPES, JOB_STATUSES, JOB_TYPES } from "@studio/types";
-import type { Job, PreviewArtifact, Vec3 } from "@studio/types";
+import { ANGLE_UNITS, ARTIFACT_TYPES, JOB_STATUSES, JOB_TYPES } from "@studio/types";
+import type { AngleMeasurement, Job, PreviewArtifact, Vec3 } from "@studio/types";
 import { CHAT_REQUEST_FIELDS, validateChatRequest } from "@studio/validation";
 
 interface Case {
@@ -105,6 +105,38 @@ test("job.job_type resolves to the canonical job-type enum", () => {
   assert.deepEqual(
     schemaEnum(SCHEMA_FILES.Job, ["job_type"]),
     schemaEnum(SCHEMA_FILES.JobType),
+  );
+});
+
+test("ANGLE_UNITS equals canonical angle-unit enum", () => {
+  assert.deepEqual([...ANGLE_UNITS], schemaEnum(SCHEMA_FILES.AngleUnit));
+});
+
+test("angle-measurement.unit resolves to the canonical angle-unit enum", () => {
+  assert.deepEqual(
+    schemaEnum(SCHEMA_FILES.AngleMeasurement, ["unit"]),
+    schemaEnum(SCHEMA_FILES.AngleUnit),
+  );
+});
+
+test("angle and length unit vocabularies are disjoint", () => {
+  // 'm' is not an angle and 'rad' is not a length. Sharing a token would make a
+  // mis-typed unit silently interpretable.
+  const angles = new Set(schemaEnum(SCHEMA_FILES.AngleUnit));
+  for (const unit of schemaEnum(SCHEMA_FILES.LengthUnit)) {
+    assert.ok(!angles.has(unit), `shared unit token: ${unit}`);
+  }
+});
+
+test("AngleMeasurement field set matches canonical schema", () => {
+  const maximal: Required<AngleMeasurement> = { value: 45, unit: "deg" };
+  assert.deepEqual(
+    Object.keys(maximal).sort(),
+    schemaProperties(SCHEMA_FILES.AngleMeasurement),
+  );
+  assert.deepEqual(
+    ["unit", "value"],
+    schemaRequired(SCHEMA_FILES.AngleMeasurement),
   );
 });
 

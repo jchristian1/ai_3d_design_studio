@@ -28,3 +28,15 @@ def decode_value(value: Any) -> Any:
     if value == "__NEG_INF__":
         return float("-inf")
     return value
+
+
+def decode_color(value: Any) -> Any:
+    """Decode sentinels inside a colour object.
+
+    A colour case carries its non-finite channel as a sentinel, so the object has
+    to be walked rather than passed through :func:`decode_value`, which only
+    handles scalars.
+    """
+    if not isinstance(value, dict):
+        return decode_value(value)
+    return {key: decode_value(channel) for key, channel in value.items()}

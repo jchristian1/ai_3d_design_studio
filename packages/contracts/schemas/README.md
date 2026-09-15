@@ -42,7 +42,32 @@ tests then fail until both representations are realigned.
 | `axis.schema.json` | `Axis` enum | Blender **world-space** axes only |
 | `direction.schema.json` | `Direction` enum | Named world-space directions, **not** camera-relative |
 | `axis-direction.schema.json` | `AxisDirection` | Resolved axis + sign (`right` → `{x, +1}`) |
+| `angle-unit.schema.json` | `AngleUnit` enum | Input angle units: `rad`, `deg`. **Radians** is canonical internally |
+| `angle-measurement.schema.json` | `AngleMeasurement` | Value + explicit angle unit, pre-conversion. No axis field: an axis belongs to the operation |
 | `conformance-cases.json` | Shared test corpus | Language-neutral valid/invalid cases |
+
+### Angles, resize and colour (Spec 002, Task 2)
+
+`angle-unit` holds the **normalized** wire values only (`rad`, `deg`). Human spellings
+(`degrees`, `radian`, `°`) are accepted as input *tokens* by `studio_spatial` /
+`@studio/spatial` and collapse to those two before anything crosses a boundary — the
+same treatment direction tokens get. Gradians and turns are deliberately absent.
+
+Radians are canonical because Blender's `rotation_euler` is radians, so nothing is
+converted at the Blender boundary. Degrees are converted exactly once, in
+`packages/spatial`, using one precomputed constant (`RADIANS_PER_DEGREE = π / 180`), so
+`45 deg` is exactly `π/4` in both languages. **Conversion is not normalization**:
+nothing reduces an angle modulo 2π, because `720°` is a legitimate two-turn instruction.
+
+Resize intent has **no canonical schema on purpose**. A resize factor never crosses a
+boundary: `set_object_dimensions` carries absolute metres, so the factor is an internal
+intermediate and a schema for it would be a contract with no wire. `(percent, direction)`
+enters the canonical vocabulary in Task 6, as part of the model-proposal schema.
+
+`material-color.schema.json` states its colour space precisely: sRGB primaries with the
+transfer function **decoded** to linear light, alpha a plain unitless scalar that is
+never gamma transformed. Encoded `#RRGGBB` values are not linear, and the only supported
+conversion is `srgbEncodedChannelToLinear`; dividing by 255 is explicitly not it.
 
 ## Spec 002 additions — scene description (Task 1)
 

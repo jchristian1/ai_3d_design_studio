@@ -33,9 +33,11 @@ from studio_contracts import (
     validate_against_schema,
 )
 from studio_types import (
+    ANGLE_UNITS,
     ARTIFACT_TYPES,
     JOB_STATUSES,
     JOB_TYPES,
+    AngleMeasurement,
     Job,
     MoveObjectPayload,
     ObjectRef,
@@ -116,6 +118,24 @@ def test_job_types_equal_canonical_enum():
     assert list(JOB_TYPES) == schema_enum(SCHEMA_FILES["JobType"])
 
 
+def test_angle_units_equal_canonical_enum():
+    assert list(ANGLE_UNITS) == schema_enum(SCHEMA_FILES["AngleUnit"])
+
+
+def test_angle_measurement_unit_resolves_to_the_canonical_enum():
+    assert schema_enum(SCHEMA_FILES["AngleMeasurement"], ["unit"]) == schema_enum(
+        SCHEMA_FILES["AngleUnit"]
+    )
+
+
+def test_angle_and_length_unit_vocabularies_are_disjoint():
+    """'m' is not an angle and 'rad' is not a length. Sharing a token would make a
+    mis-typed unit silently interpretable."""
+    assert not set(schema_enum(SCHEMA_FILES["AngleUnit"])) & set(
+        schema_enum(SCHEMA_FILES["LengthUnit"])
+    )
+
+
 def test_artifact_types_equal_canonical_enum():
     assert list(ARTIFACT_TYPES) == schema_enum(SCHEMA_FILES["ArtifactType"])
 
@@ -150,6 +170,7 @@ def _field_names(cls) -> list[str]:
         (Job, "Job"),
         (Vec3, "Vec3"),
         (PreviewArtifact, "PreviewArtifact"),
+        (AngleMeasurement, "AngleMeasurement"),
     ],
 )
 def test_dataclass_fields_match_canonical_properties(cls, schema_key):
@@ -178,6 +199,7 @@ def test_dataclass_fields_match_canonical_properties(cls, schema_key):
             ],
         ),
         ("Vec3", ["x", "y", "z"]),
+        ("AngleMeasurement", ["unit", "value"]),
         (
             "PreviewArtifact",
             [

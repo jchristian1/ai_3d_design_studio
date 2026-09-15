@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "angle-measurement.schema.json",
+  "title": "AngleMeasurement",
+  "description": "An angle with an EXPLICIT unit, before conversion to canonical radians. The unit is mandatory: a bare number is ambiguous, and guessing 'probably degrees' is exactly the class of mistake that puts a 45-radian rotation into a Blender scene. This is an INPUT-boundary shape only. Once interpreted, an angle travels as a plain number of radians in a named field (rotation_euler_radians, desired_after_radians), so an AngleMeasurement never reaches the worker — the same discipline that keeps Measurement out of a Job payload. Direction of rotation is carried by the SIGN of the value, so an operation never needs a separate direction token. JSON cannot encode NaN/Infinity; the finite rule is enforced by the validation layer (studio_spatial.angles), which reports INVALID_UNITS. Note what is absent: no axis field. An axis belongs to the OPERATION that rotates something, not to the measurement of an angle.",
+  "type": "object",
+  "properties": {
+    "value": {
+      "type": "number",
+      "description": "Magnitude in the given unit. May be negative (rotation about the axis in the negative direction) and is deliberately NOT reduced modulo a full turn: 720 degrees is a legitimate two-turn instruction, and collapsing it to 0 would destroy intent. Conversion and normalization are different concerns."
+    },
+    "unit": { "$ref": "angle-unit.schema.json" }
+  },
+  "required": ["value", "unit"],
+  "additionalProperties": false
+}

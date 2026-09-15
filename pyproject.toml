@@ -85,10 +85,19 @@ blender_worker = "services/blender-worker/blender_worker"
 
 [tool.pytest.ini_options]
 # The runtime packages come from the editable install, not from here. Only the
-# test-only fixture tooling (studio_fixtures) needs a path entry, because it is
-# test tooling rather than a runtime package and is deliberately not installed.
+# test-only tooling needs a path entry, because it is test tooling rather than a
+# runtime package and is deliberately not installed:
+#   tests/fixtures            -> studio_fixtures (Blender seed fixture helpers)
+#   packages/spatial/python   -> spatial_test_support (shared corpus loader)
+#
+# `spatial_test_support` was previously importable only by accident: pytest prepends
+# the directory of each collected test file, so `packages/spatial/python/test_*.py`
+# happened to put it on sys.path before `tests/spatial/` was collected. That made
+# `pytest tests/spatial` alone fail with an ImportError depending on collection
+# order. Declaring it here makes every spatial suite runnable on its own.
 pythonpath = [
     "tests/fixtures",
+    "packages/spatial/python",
 ]
 testpaths = [
     "packages",

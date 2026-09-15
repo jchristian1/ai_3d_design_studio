@@ -11,10 +11,20 @@
 
 import {
   directionDeltaMeters,
+  resizeFactor,
   resolveDirection,
+  resolveNamedColor,
+  srgbEncodedChannelToLinear,
   toMeters,
+  toRadians,
+  validateMaterialColor,
+  validateSizeFactor,
 } from "../src/index.ts";
-import { decodeValue, loadSpatialCases } from "../src/test-support.ts";
+import {
+  decodeColor,
+  decodeValue,
+  loadSpatialCases,
+} from "../src/test-support.ts";
 
 const cases = loadSpatialCases();
 
@@ -101,6 +111,123 @@ for (const c of [...cases.deltas.valid, ...cases.deltas.invalid]) {
           },
         }
       : { error_code: r.error.code, error_message: r.error.message }),
+  });
+}
+
+// --- Spec 002 Task 2: angles -------------------------------------------------
+//
+// Angle conversion is one multiplication by a single constant, so parity is
+// asserted on the EXACT bits, exactly like length conversion.
+for (const c of [...cases.angles.valid, ...cases.angles.invalid]) {
+  const r = toRadians({ value: decodeValue(c.value), unit: c.unit });
+  verdicts.push({
+    group: "angle",
+    case: c.name,
+    ok: r.ok,
+    ...(r.ok
+      ? { radians: encodeNumber(r.radians) }
+      : { error_code: r.error.code, error_message: r.error.message }),
+  });
+}
+
+for (const c of cases.angles.malformed) {
+  const r = toRadians(decodeValue(c.measurement));
+  verdicts.push({
+    group: "angle-malformed",
+    case: c.name,
+    ok: r.ok,
+    ...(r.ok
+      ? { radians: encodeNumber(r.radians) }
+      : { error_code: r.error.code, error_message: r.error.message }),
+  });
+}
+
+// --- Spec 002 Task 2: resize -------------------------------------------------
+//
+// One correctly-rounded division by 100, so exact-bit parity again.
+for (const c of [...cases.resize.valid, ...cases.resize.invalid]) {
+  const r = resizeFactor(decodeValue(c.percent), c.direction);
+  verdicts.push({
+    group: "resize",
+    case: c.name,
+    ok: r.ok,
+    ...(r.ok
+      ? { factor: encodeNumber(r.factor) }
+      : { error_code: r.error.code, error_message: r.error.message }),
+  });
+}
+
+for (const c of [...cases.resize.factors.valid, ...cases.resize.factors.invalid]) {
+  const r = validateSizeFactor(decodeValue(c.value));
+  verdicts.push({
+    group: "size-factor",
+    case: c.name,
+    ok: r.ok,
+    ...(r.ok
+      ? { factor: encodeNumber(r.factor) }
+      : { error_code: r.error.code, error_message: r.error.message }),
+  });
+}
+
+// --- Spec 002 Task 2: colour -------------------------------------------------
+//
+// Validation verdicts and PALETTE values are compared exactly: the palette is
+// authored in canonical linear literals, so no `pow` is involved. Transfer-function
+// output is compared by the Python side within the corpus tolerance, because `pow`
+// is not guaranteed bit-identical across libm implementations.
+for (const c of [...cases.colors.valid, ...cases.colors.invalid]) {
+  const r = validateMaterialColor(decodeColor(c.color));
+  verdicts.push({
+    group: "color",
+    case: c.name,
+    ok: r.ok,
+    ...(r.ok
+      ? {
+          color: {
+            r: encodeNumber(r.color.r),
+            g: encodeNumber(r.color.g),
+            b: encodeNumber(r.color.b),
+            a: encodeNumber(r.color.a),
+          },
+        }
+      : { error_code: r.error.code, error_message: r.error.message }),
+  });
+}
+
+for (const c of [...cases.colors.named, ...cases.colors.unnamed]) {
+  const r = resolveNamedColor(c.input);
+  verdicts.push({
+    group: "named-color",
+    case: c.name,
+    ok: r.ok,
+    ...(r.ok
+      ? {
+          color: {
+            r: encodeNumber(r.color.r),
+            g: encodeNumber(r.color.g),
+            b: encodeNumber(r.color.b),
+            a: encodeNumber(r.color.a),
+          },
+        }
+      : { error_code: r.error.code, error_message: r.error.message }),
+  });
+}
+
+for (const c of cases.colors.transfer.cases) {
+  const linear = srgbEncodedChannelToLinear(c.encoded);
+  verdicts.push({
+    group: "srgb-transfer",
+    case: c.name,
+    ok: linear !== undefined,
+    ...(linear === undefined ? {} : { linear: encodeNumber(linear) }),
+  });
+}
+
+for (const c of cases.colors.transfer.rejected) {
+  verdicts.push({
+    group: "srgb-transfer-rejected",
+    case: c.name,
+    ok: srgbEncodedChannelToLinear(decodeValue(c.encoded)) !== undefined,
   });
 }
 
