@@ -15,8 +15,9 @@ backend-independent. Nothing below replaces them.
 > **2. The official Blender Lab MCP is our Blender backend. We are not building a second
 > MCP server.**
 >
-> **3. No model-authored code. Every character of Python that reaches Blender was written
-> and reviewed by us.**
+> **3. Astra may write Blender Python, and the platform decides what runs unattended.**
+> Scene-only code runs; code reaching further is shown to the user for approval before
+> anything executes.
 
 ```
 Browser
@@ -58,7 +59,8 @@ leaking the boundary.
 | Canonical units, angles, colour | **ours** (`packages/spatial`) | consumes converted values |
 | Proposal validation and capability policy | **ours** | — |
 | **Semantic capability vocabulary** | **ours** | — (upstream has none — §2.3) |
-| **Guarded execution templates** | **ours** (closed catalogue, §6) | executes what we send |
+| **Platform scripts for platform-initiated work** | **ours** (§6.1) | executes what we send |
+| **Classification and approval of model-authored code** | **ours** (§6.2, §6.3) | executes what we send |
 | Job durability, retry, idempotency | **ours** (journal) | — |
 | Project locks, recovery points, project isolation, save | **ours** | — |
 | Cloud worker connectivity (outbound, authenticated) | **ours** | — |
@@ -68,7 +70,7 @@ leaking the boundary.
 | **Scene / object / blend-file summaries** | — | **official** |
 | **Blender Python API + manual documentation search** | — | **official** |
 | **Screenshots, thumbnail and viewport render to path** | — | **official**, Tier B |
-| **Generic `execute_blender_code`** | **never offered to a model** | official exposes it |
+| **Generic `execute_blender_code`** | **reached only through the classifier** | official exposes it |
 
 ---
 
@@ -146,9 +148,9 @@ The consequence, stated plainly:
 > Using the official MCP as our Blender backend means **every mutation is Python**. There
 > is no third option in which we both mutate the scene and never send code.
 
-This is precisely why Requirement 11 exists. The platform sends Python — but only Python
-it wrote, from a closed reviewed catalogue, parameterised with validated canonical values.
-The model never authors, edits, selects or sees a character of it.
+That is why §6 exists. The platform sends Python from two sources: its own reviewed
+scripts for operations it initiates, and **Astra's own code**, classified before it runs
+and held for the user's approval when it reaches beyond the scene.
 
 ### 2.4 The upstream's own execution model — which is the same template pattern
 
@@ -316,7 +318,7 @@ Implementations:
 
 ### Capability registry, as mapped against the verified inventory
 
-| Capability | Official native tool | Template needed |
+| Capability | Official native tool | Platform script |
 |---|---|---|
 | `inspect_scene` | `get_objects_summary` (+ `get_object_detail_summary` per object) | possibly, to supply unit settings and world dimensions the summaries omit — Task 3 step 6 decides |
 | `inspect_object` | `get_object_detail_summary` | no |
@@ -369,107 +371,138 @@ Properties, all test-enforced:
 
 ---
 
-## 6. Guarded execution templates — the mechanism
+## 6. Model-authored Python, classified and approved
 
-This section is the heart of Requirement 11. It exists because §2.3 leaves no alternative:
-mutation through the official MCP is Python, so the question is not *whether* code is sent
-but *who wrote it*.
+Section 2.3 leaves no alternative: mutation through the official MCP is Python. The
+decision — taken deliberately, with the security posture understood and accepted for
+this local single-user machine — is that **the model may author that Python**.
 
-### 6.1 Shape
+The reason is capability. A fixed catalogue of hand-written operations makes the product
+only as good as the list someone maintained. Letting Astra write Blender Python makes
+every Blender operation reachable on day one, which for architectural modelling is the
+difference between a demo and a tool.
 
-Each template is a module in `backends/official/templates/` containing exactly two things:
-
-```python
-# move_object.py  — illustrative shape, not final code
-
-class Params(NamedTuple):          # typed, validated, canonical
-    object_name: str               # a validated identifier present in the snapshot
-    x: float                       # metres
-    y: float
-    z: float
-
-SOURCE = """\
-import bpy
-def main(p):
-    obj = bpy.data.objects.get(p.object_name)
-    if obj is None:
-        return {"status": "object_not_found"}
-    obj.location = (p.x, p.y, p.z)
-    bpy.context.view_layer.update()
-    return {"status": "ok",
-            "location": tuple(obj.matrix_world.translation)}
-"""                                # a FIXED literal, reviewed like production code
-```
-
-Rendering is a single, shared, audited function:
+### 6.1 The two paths
 
 ```
-render(template, params) -> str
-    assert type(params) is template.Params      # typed record, nothing else accepted
-    validate(params)                            # ranges, finiteness, identifier existence
-    return template.SOURCE + FOOTER.replace(PARAMS_PLACEHOLDER, repr(params))
+                            ┌─ platform semantic capability ─┐
+agent emits a capability ───┤                                 ├──→ backend ──→ Blender
+                            └─ execute_blender_python ────────┘
+                                        │
+                                classify (AST)
+                                        │
+                        ┌───────────────┼───────────────┐
+                      auto        approval required   refused
+                        │                │               │
+                     execute      ask the user        never runs
+                                  in the chat
+                                   │        │
+                              approve     reject
+                                   │        │
+                              execute    never runs
 ```
 
-That is the same convention the upstream project uses for its own tools (§2.4): fixed
-source text, one placeholder, one `repr()` of a typed record. It is adopted deliberately
-rather than invented.
+**Platform semantic capabilities** (`move_object`, `create_wall`, `export_glb`, …) are
+preferred where they exist: their Python is ours, their arguments are validated canonical
+values, they are idempotent by construction, and they never interrupt the user. Their
+source is a fixed literal with a single `repr`-encoded substitution site, so a hostile
+parameter cannot change the rendered program's structure (proved in
+`test_platform_scripts.py`).
 
-### 6.2 Rules, each with a test
+**`execute_blender_python`** carries a body the model wrote. It is classified before
+anything runs.
 
-| Rule | Enforcement |
+### 6.2 The classifier
+
+`capability/classifier.py` parses the code and returns `auto`, `approval_required`, or
+`refused`.
+
+| Classified | When |
 |---|---|
-| Template source is a fixed literal, never assembled at runtime | AST guard: no f-string, no `%`, no `.format`, no `+` on source, no `join` producing source, in any template module |
-| **No interpolation of object names or any value into Python source** | The only substitution site is the single parameter placeholder; a test renders with adversarial values (`"'; import os"`, embedded newlines, `__import__`) and asserts the rendered program's AST is *structurally identical* to the benign rendering, differing only in one literal |
-| Parameters are structured and safely encoded | `repr()` of a `NamedTuple` of validated scalars and validated identifiers; a free-form string field that is not a validated identifier cannot exist |
-| Objects are addressed by validated stable identity | Identifier must resolve in the authoritative SceneSnapshot before rendering (Requirements 7.9, 11.6) |
-| No `eval`/`exec` of model text, no shell, no subprocess, no arbitrary import, no arbitrary path, no arbitrary URL, no package install | AST guard over template sources plus a rendered-source scan; a positive-control test proves the guard fires |
-| The catalogue is **closed** | The registry enumerates templates; an unknown semantic capability returns a structured DENY, tested |
-| No model output can select or reach a template | A test asserts model output flows only into validated `CapabilityArguments`, and that no code path passes provider text to `render` |
-| Templates carry no safety semantics | Templates are narrow single-operation programs; locks, journals, recovery points, preconditions and verification live in `MutationGuard` (Requirement 13.7) |
+| **auto** | only Blender scene modules (`bpy`, `bmesh`, `mathutils`) and ordinary computation (`math`, `json`, `itertools`, …) |
+| **approval required** | imports outside that set; `eval` / `exec` / `compile` / `__import__` / `open`; interpreter dunders; `bpy.ops.wm.*` file and application operators (`open_mainfile`, `save_as_mainfile`, `read_factory_settings`, `quit_blender`, `url_open`, …); attributes that reach a process, the filesystem or the network; absolute path literals |
+| **refused** | the code does not parse |
 
-### 6.3 What a template is *not*
+Each finding carries a line number and a plain-language reason, so the approval card
+shows *"line 2: imports shutil, which is outside ordinary Blender scene work"* rather
+than an AST dump.
 
-- It is not a Blender abstraction layer. It performs one bounded operation and reports the
-  state it observed.
-- It is not where safety lives. `MutationGuard` decides *whether* to invoke and *whether it
-  worked*.
-- It is not a general scripting facility. There is no template that takes code, an
-  expression, an operator name, an attribute path, or a path/URL.
-- It is not upstream code. No upstream tool-code text is copied into this repository (§14).
+### 6.3 The approval round trip
+
+Approval is a first-class agent outcome, not a UI convention:
+
+1. The classifier flags the code. **No job is created.** Nothing has run.
+2. The turn ends as an `ApprovalRequired` outcome carrying the code, the findings and an
+   `approval_id`, persisted with the project so it survives a restart.
+3. The chat renders an approval card: the actual code, the reasons, Approve / Reject.
+4. Reject ends the operation. Approve issues a token
+   `approved:<sha256(code)>` and creates the job.
+5. The backend re-derives the digest from the code it was handed and **refuses a
+   mismatch**. Approving one thing and executing another is therefore not possible.
+6. The approval covers that one operation. It is never a standing permission.
+
+The enforcement point is the backend, not the browser — a UI that forgot to ask cannot
+become an execution path.
+
+### 6.4 What this is honestly worth
+
+The classifier is **friction and visibility, not containment**. Recorded plainly because
+the alternative is someone later trusting it:
+
+* A determined author defeats static analysis
+  (`getattr(__builtins__, "ev" + "al")`, attribute chains assembled from strings, a
+  relative path written through a Blender operator).
+* The upstream offers nothing to fall back on: its `weak_sandbox.py` says it "isn't
+  really a sandbox, more guidance that some things should not be done", and blocks
+  roughly three operators.
+* Blender's own documentation for this server warns it executes model code without
+  guards and recommends a VM or a machine without sensitive files.
+
+So the **effective security boundary is the operating system** (Requirement 12.10): the
+worker and Blender hold the privileges of the account that launched them, and approved
+code can do anything that account can do. Running the worker as a restricted user, or in
+a container with only the project directory mounted, is the supported containment and is
+documented as a follow-up rather than silently assumed.
+
+`test_capability_classifier.py` asserts the known bypasses as *known limitations*, so
+the gap stays documented instead of becoming folklore.
+
+### 6.5 Durability applies to model code too
+
+Arbitrary code makes the Spec 001 wrapper more important, not less. A re-run of "build
+nine walls" would otherwise produce eighteen. So `execute_blender_python` goes through
+the same path as everything else: project lock, recovery point, durable intent,
+read-back verification, save-before-success (§9).
+
+And a returned `{"status": "ok"}` is never evidence. The observed post-state is.
 
 ---
 
-## 7. Replacing templates with native tools later
+## 7. Upgrading when the official MCP gains native tools
 
-The whole point of the boundary. When the official MCP gains native semantic tools — for
-example `object.move`, `material.set_color`, `scene.inspect` — the upgrade is:
+The boundary still does its job, and the win is now larger: native semantic tools would
+let capabilities move *out* of both the platform-script set and the model-authored path.
 
 ```
-   before:  platform capability  →  guarded execution template  →  execute_blender_code
-   after:   platform capability  →  official semantic MCP tool
+   today:  platform capability  →  platform script     →  execute_blender_code_for_cli
+           platform capability  →  model-authored code →  execute_blender_code_for_cli
+   later:  platform capability  →  official semantic MCP tool
 ```
 
-The change is confined to two files inside the backend: the registry entry for that
-capability, and (eventually) the deletion of its template module. **Nothing above
-`BlenderCapabilityProvider` changes** — not the agent, not the proposal schema, not the
-capability vocabulary, not the guard, not the Jobs, not the API, not the browser.
+The change is confined to `OfficialBlenderLabBackend` and its registry. **Nothing above
+`BlenderCapabilityProvider` changes** — not the agent, not the capability vocabulary,
+not the guard, not the jobs, not the API, not the browser.
 
-How that is *proved* rather than asserted (Requirement 17.5):
+How that is proved rather than asserted:
 
-1. Capability tests are written against `BlenderCapabilityProvider`, not against templates.
-2. A registry-level test executes one capability through two implementations — template and
-   a simulated native tool — and asserts identical canonical `CapabilityResult` and
-   identical resulting `scene_version`.
-3. An AST test asserts no module above the backend imports a template, names a template, or
-   contains Python-as-data.
-4. The compatibility test records the native tools that exist today, so the day a semantic
-   tool appears upstream, it fails and prompts the swap instead of the swap being missed.
+1. Capability tests target `BlenderCapabilityProvider`, not scripts.
+2. `FakeBlenderCapabilityProvider` implements the same protocol, and the whole stack is
+   tested against it offline — which is itself the substitutability proof.
+3. The `-m mcp` compatibility test pins the official inventory and **fails the day a
+   semantic mutation tool appears**, prompting the swap instead of it being missed.
 
-The same mechanism is what makes a community MCP a *possible provider* (Requirement 9.12):
-it would be another `BlenderCapabilityProvider` implementation, reviewed on its own merits,
-with nothing above the boundary changing.
-
----
+The same seam is what would make a community MCP a *possible provider* (Requirement
+9.12) rather than a rewrite.
 
 ## 8. SceneSnapshot: same contract, new producer
 
@@ -607,8 +640,10 @@ unchanged. The only difference is that a resolved operation is dispatched to a c
 
 | Threat | Control |
 |---|---|
-| Prompt injection → code execution | No code-execution capability is in the model's catalogue; model output is data validated into typed `CapabilityArguments`; only fixed templates render Python, and never from model text |
-| Model smuggles Python through a parameter | Parameters are validated scalars and validated identifiers encoded as one Python literal; the adversarial-rendering test proves program structure cannot change |
+| Prompt injection → code execution the user did not intend | Model code is classified before it runs; anything reaching the filesystem, network, a subprocess or the dynamic-code builtins is shown to the user with the actual code and requires explicit approval. This is friction and visibility, not containment — see §6.4 |
+| Model smuggles code through a SEMANTIC capability's parameter | Parameters are validated scalars and identifiers encoded as one `repr` literal; the adversarial-rendering test proves program structure cannot change |
+| User approves one thing, something else executes | The approval token is a digest of the exact code; the backend re-derives it and refuses a mismatch |
+| Approval becomes a standing permission | Approvals are per-operation and never remembered |
 | Model names a backend tool directly | The catalogue contains platform capability names only; the backend is the sole translator |
 | Unknown upstream tool becomes reachable | Policy fails closed; compatibility test fails on inventory change |
 | Model supplies a path or URL | No path/URL field exists in any proposal, plan, Job, capability argument or template parameter; render destinations are platform-derived |
@@ -746,9 +781,12 @@ invalid object, invalid units, duplicate job, interrupted operation.
 - **Official Blender Lab MCP is the primary Blender backend**, behind
   `BlenderCapabilityProvider` / `OfficialBlenderLabBackend`.
 - **We are not building a second MCP server.**
-- **No model-authored code, no user-authored arbitrary Python.** Mutation Python comes only
-  from a closed catalogue of reviewed, parameterised, platform-owned templates.
-- **Unknown semantic capability → DENY.**
+- **Astra may author Blender Python**, classified before execution, with anything reaching
+  beyond the scene held for explicit per-operation user approval (§6). Platform-owned
+  scripts remain for operations the platform itself initiates.
+- **A capability with neither a platform script nor a model-authored body → `CAPABILITY_UNAVAILABLE`.**
+- **The effective security boundary for model code is the operating system**, not the
+  classifier (§6.4, Requirement 12.10).
 - **Community MCPs are references / possible future providers / review-gated fallback only.**
   Not integrated in Task 3.
 - **Policy fails closed**; the upstream weak sandbox is defence-in-depth, never authorisation.

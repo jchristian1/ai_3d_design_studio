@@ -412,58 +412,73 @@ reachable, so that adopting the official MCP does not adopt its entire surface.
 8. WHEN the permitted catalogue is assembled for a model THEN it SHALL be derived from the
    policy, so a model cannot name a capability it was never offered.
 
-### Requirement 11 — No model-authored code; closed catalogue of guarded execution templates
+### Requirement 11 — Model-authored Python, classified and approved
 
-**User Story:** As the platform owner, I want every character of Python that reaches
-Blender to have been written and reviewed by us, so that adopting a code-oriented MCP
-does not hand execution to a language model.
+**User Story:** As a designer, I want Astra to be able to do real Blender work rather
+than only the handful of operations someone hand-coded, while still seeing and
+approving anything that reaches beyond my scene.
+
+#### Context, recorded because it drives every criterion below
+
+The official Blender MCP exposes no semantic mutation tool (design §2.3, verified at
+the pinned commit). Every mutation is Python. So the question was never whether code
+is sent to Blender, only who writes it. The decision, taken deliberately and with the
+security posture understood, is that **the model may author Python**, because it makes
+the product genuinely capable instead of limited to a fixed list.
+
+The upstream provides no protection worth relying on: its own ``weak_sandbox.py``
+states it "isn't really a sandbox", and Blender's documentation warns the server runs
+model code without guards. Therefore this requirement buys visibility and consent, and
+Requirement 12.10 records where real containment actually lives.
 
 #### Acceptance Criteria
 
-1. WHEN Spec 002 is implemented THEN **no model-authored code SHALL be permitted**, and
-   **no user-authored arbitrary Python SHALL be permitted**. There is no exception, no
-   developer flag in the product path, and no "advanced mode".
-2. WHEN the model's capability catalogue is assembled THEN it SHALL NOT contain a generic
-   `execute_python`, `execute_blender_code`, `run_script` or equivalent capability, under
-   any name.
-3. IF the official MCP has no native semantic tool for a required capability THEN the
-   capability MAY be served by Python that satisfies ALL of the following:
-   - generated entirely by platform-owned, reviewed templates;
-   - parameterised only with validated canonical values;
-   - never authored or modified by the LLM;
-   - never accepted from the browser;
-   - never accepted from an MCP response;
-   - narrow to the intended operation.
-4. WHEN a guarded execution template is written THEN its Python source text SHALL be a
-   fixed literal in this repository, reviewed like production code, and SHALL NOT be
-   assembled, concatenated or selected at runtime from any untrusted input.
-5. WHEN a template is parameterised THEN parameters SHALL be passed through a structured,
-   safely encoded mechanism. There SHALL BE **no string interpolation of object names, or
-   of any other value, directly into Python source**: no f-string, no `%`, no `.format`,
-   and no concatenation of a value into template text.
-6. WHEN a template addresses an object THEN it SHALL address it by a validated stable
-   identifier that exists in the authoritative SceneSnapshot.
-7. WHEN a template is executed THEN it SHALL NOT `eval` or `exec` model text, SHALL NOT
-   invoke a shell or subprocess, SHALL NOT perform an arbitrary import, SHALL NOT accept
-   an arbitrary filesystem path, SHALL NOT accept an arbitrary URL, and SHALL NOT install
-   a package.
-8. WHEN the template catalogue is defined THEN it SHALL be **closed**: a fixed, enumerated
-   set. WHEN a semantic capability has no entry in the catalogue and no native tool THEN
-   the platform SHALL **DENY** it with a structured capability-named failure.
-9. WHEN a template's parameter record is validated THEN every field SHALL be a canonical
-   scalar, vector or validated identifier of a declared type and range; a field of
-   free-form string type that is not a validated identifier SHALL NOT exist.
-10. WHEN the template catalogue is tested THEN automated tests SHALL prove: the catalogue
-    is closed and enumerated; each template's rendered source for a given parameter record
-    is exactly the expected text; an attempt to smuggle Python through a parameter value
-    (quotes, newlines, `__import__`, `;`) cannot alter the rendered program's structure;
-    and no code path renders a template from model output.
-11. WHEN a source guard runs THEN it SHALL statically prove that template modules contain
-    no dynamic source construction, and that no module outside the template catalogue
-    sends Python to the backend.
-12. WHEN a native semantic tool becomes available for a capability THEN replacing that
-    capability's template with the native tool SHALL be a change confined to
-    `OfficialBlenderLabBackend` and its registry (Requirement 17.5).
+1. WHEN the agent needs a Blender operation THEN it MAY emit either a platform
+   semantic capability or a ``execute_blender_python`` capability carrying Python it
+   authored.
+2. WHEN the platform owns an exact semantic capability for an operation THEN the agent
+   SHOULD prefer it, because a semantic capability is verifiable, idempotent by
+   construction, and needs no approval.
+3. WHEN model-authored Python is received THEN the platform SHALL classify it
+   statically BEFORE any execution, and the classification SHALL happen on the
+   platform side rather than in the browser.
+4. WHEN classification runs THEN it SHALL return exactly one of: **auto** (the code
+   only touches the scene), **approval required** (the code reaches further), or
+   **refused** (the code is not valid Python).
+5. WHEN code only uses Blender scene modules and ordinary computation THEN it SHALL be
+   classified **auto** and SHALL run without interrupting the user.
+6. WHEN code imports or reaches the filesystem, a subprocess, the network, package
+   installation, the dynamic-code builtins (``eval``, ``exec``, ``compile``,
+   ``__import__``), interpreter internals, file-management Blender operators, or an
+   absolute path THEN it SHALL be classified **approval required**.
+7. WHEN code is classified **approval required** THEN the platform SHALL NOT execute
+   it, SHALL surface it to the user in the conversation with the ACTUAL code and a
+   plain-language reason per finding, and SHALL offer approve and reject.
+8. WHEN the user rejects THEN the code SHALL never execute and the operation SHALL end
+   with a structured outcome.
+9. WHEN the user approves THEN the platform SHALL issue an approval token bound to a
+   digest of THAT EXACT code, and the backend SHALL re-derive the digest and refuse a
+   mismatch, so approving one thing and executing another is not possible.
+10. WHEN an approval is issued THEN it SHALL apply to one operation only and SHALL NOT
+    become a standing permission, a session-wide setting, or a remembered preference.
+11. WHEN code is classified **refused** THEN it SHALL never execute, and the failure
+    SHALL be reported as a validation error rather than presented to the user as a
+    decision.
+12. WHEN a capability has neither a platform implementation nor a model-authored body
+    THEN the platform SHALL return ``CAPABILITY_UNAVAILABLE`` and SHALL NOT improvise.
+13. WHEN model-authored Python executes THEN it SHALL still pass through the full
+    durability wrapper of Requirement 13: project lock, recovery point, durable intent,
+    read-back verification, and save-before-success. Arbitrary code makes this MORE
+    important, not less: a re-run of "build nine walls" would otherwise duplicate them.
+14. WHEN the classifier is documented THEN it SHALL be described as friction and
+    visibility rather than containment, and its bypasses SHALL be recorded in tests so
+    no later reader mistakes it for a security boundary.
+15. WHEN platform-owned Python exists for a semantic capability THEN its source SHALL
+    be a fixed literal parameterised at a single substitution site with
+    ``repr``-encoded validated values, so a hostile parameter cannot alter the rendered
+    program's structure, proved by test.
+16. WHEN the browser or an MCP response supplies a value THEN it SHALL NEVER become
+    executable code: only the agent may author code, and only through criterion 1.
 
 ### Requirement 12 — Blender and MCP exposure
 
@@ -501,6 +516,13 @@ outside the workstation, so that adopting a local listener creates no entry poin
 9. WHEN a developer-only diagnostic capability exists THEN it SHALL be isolated from the
    product path and disabled by default, and a test SHALL assert it is absent from the
    production-safe configuration.
+10. WHEN model-authored Python is enabled (Requirement 11) THEN the platform SHALL
+    record plainly that the effective security boundary is the OPERATING SYSTEM, not the
+    classifier: the worker and Blender run with the privileges of the account that
+    launched them, and code the user approves can do anything that account can do.
+    Running the worker as a restricted user, or in a container with only the project
+    directory mounted, SHALL be documented as the supported way to contain this, and
+    SHALL NOT be silently assumed to be in place.
 
 ### Requirement 13 — Durable mutation guard around non-idempotent backend calls
 
@@ -717,28 +739,184 @@ new intelligence and a new backend do not cost existing correctness.
    any recorded preview constant SHALL be re-baselined explicitly rather than an assertion
    being loosened.
 
+### Requirement 20 — Astra through the local Codex client, with no API key
+
+**User Story:** As the owner of this machine, I want the studio to use my existing
+ChatGPT/Codex allowance through the Codex client I already have, without any API key
+anywhere in the product.
+
+#### Acceptance Criteria
+
+1. WHEN the real provider is implemented THEN it SHALL reach GPT-6 Astra through the
+   OFFICIAL locally installed Codex client, using Christian's ChatGPT login.
+2. WHEN the provider runs THEN the product SHALL NOT use the OpenAI API, an
+   `OPENAI_API_KEY`, the Responses API, API billing, or any API-key entry field. No
+   API key SHALL be read, stored, logged, transmitted, or accepted by the backend, the
+   frontend, or configuration.
+3. WHEN authentication state is needed THEN it SHALL be determined through supported
+   Codex functionality, and the platform SHALL NOT implement ChatGPT OAuth, scrape
+   chatgpt.com, call undocumented endpoints, or parse Codex credential files.
+4. WHEN the browser displays connection state THEN it SHALL show "Astra via Codex" with
+   one of: Codex not installed · Codex update required · Login required · Connecting ·
+   Connected via ChatGPT · Astra unavailable · Usage unavailable.
+5. IF the installed Codex cannot use Astra THEN the platform SHALL say Codex must be
+   updated and SHALL NOT silently substitute a different model while claiming Astra.
+6. WHEN login is required THEN the UI SHALL surface the exact supported Codex action,
+   and SHALL NEVER request the user's ChatGPT password.
+7. WHEN the provider communicates with Codex THEN it SHALL use structured
+   machine-readable output with a declared response schema, SHALL NOT parse decorative
+   terminal output, and SHALL NOT treat stderr as model output.
+8. WHEN the provider is selected THEN it SHALL be configuration only, behind the
+   existing `AgentProvider` abstraction, so nothing above it changes when the provider
+   changes.
+
+### Requirement 21 — Project-scoped references and uploads
+
+**User Story:** As a designer, I want my plans and photos to belong to the project, so
+they stay available across messages and restarts.
+
+#### Acceptance Criteria
+
+1. WHEN a file is uploaded THEN it SHALL belong to a PROJECT rather than to one message.
+2. WHEN the MVP accepts uploads THEN it SHALL accept PNG, JPEG, WebP, PDF, plain text
+   and Markdown.
+3. WHEN a file is validated THEN the platform SHALL check the extension, the declared
+   and sniffed content type, a maximum size, and project scope, and SHALL sanitise the
+   filename.
+4. WHEN a filename is stored THEN path traversal SHALL be impossible, and the storage
+   location SHALL be platform-derived from `project_id` — never chosen by the model, the
+   browser, or the filename.
+5. WHEN an archive is uploaded THEN it SHALL NOT be extracted.
+6. WHEN references are addressed in a contract, a prompt, or the browser THEN they SHALL
+   be addressed by ID; a local absolute filesystem path SHALL NEVER be exposed.
+7. WHEN a reference is stored THEN its SHA-256 SHALL be recorded, and re-uploading
+   identical content SHALL reuse the existing derived artefacts rather than redoing work.
+
+### Requirement 22 — PDF and image ingestion for multimodal analysis
+
+**User Story:** As a designer, I want to hand Astra an architectural PDF and have it
+actually see the drawing.
+
+#### Acceptance Criteria
+
+1. WHEN a PDF is ingested THEN the original SHALL be preserved unmodified.
+2. WHEN a PDF is ingested THEN native text and vector text SHALL be extracted FIRST, and
+   OCR SHALL NOT be the default path.
+3. WHEN a PDF is ingested THEN each page SHALL be rendered to an image, and the page
+   number and useful page dimensions or resolution SHALL be preserved.
+4. WHEN page images exist THEN they SHALL be addressable as project references by ID.
+5. WHEN Astra needs to see an image THEN the actual image SHALL be provided through the
+   supported Codex multimodal image-input mechanism. Putting a filesystem path in a
+   prompt and assuming the model saw the file SHALL NOT be treated as multimodal input.
+6. WHEN provider-neutral context is assembled THEN it SHALL carry user text, images,
+   document text, project facts, relevant reference summaries, the SceneSnapshot, the
+   selected object and clarification state — and the provider SHALL own how attachments
+   are delivered.
+7. WHEN references are sent repeatedly THEN unchanged large references SHALL NOT be
+   re-sent every turn: extracted text, rendered pages and analyses SHALL be cached by
+   content hash, explicit attachments SHALL always be included, and other references
+   SHALL be selected by relevance and recency, with prompts kept bounded.
+
+### Requirement 23 — Structured design understanding and clarification
+
+**User Story:** As a designer, I want Astra to ask me for the measurement it is missing
+instead of inventing it.
+
+#### Acceptance Criteria
+
+1. WHEN references are analysed THEN the platform SHALL obtain a validated structured
+   `DesignAnalysis` before modelling, covering at least: reference ids, plan type, scale
+   status, known dimensions, spaces, walls, openings, architectural features, objects,
+   assumptions, unresolved questions, and a proposed modelling sequence.
+2. WHEN a `DesignAnalysis` is stored THEN chain-of-thought SHALL NOT be persisted; only
+   structured design facts and results.
+3. WHEN required information is missing — no scale, no ceiling height, an unidentifiable
+   opening — THEN the platform SHALL return a `Clarification` naming what it needs.
+4. WHILE a REQUIRED clarification is unresolved THEN ZERO Blender modelling mutations
+   SHALL occur.
+5. WHEN the user answers in the normal chat THEN the answer SHALL update durable project
+   design facts and planning SHALL continue.
+6. WHEN design facts are persisted THEN they SHALL survive a backend and app restart, and
+   SHALL remain lightweight rather than becoming a vector database.
+
+### Requirement 24 — Interactive 3D workspace
+
+**User Story:** As a designer, I want to see and click my model in the browser while I
+keep talking to Astra.
+
+#### Acceptance Criteria
+
+1. WHEN a model exists THEN the browser SHALL display it as an interactive GLB scene
+   using an established Three.js-based solution, with orbit, zoom, pan, a loading state,
+   an error state, and responsive resize.
+2. WHEN a new model artefact is produced THEN the viewer SHALL refresh, SHALL keep the
+   previous model visible while the next one loads, and SHALL preserve camera position
+   across a refresh where reasonable.
+3. WHEN GLB generation fails THEN the last valid model SHALL remain, and the PNG preview
+   SHALL be shown as a fallback where available.
+4. WHEN an object is clicked THEN `studio_object_id` SHALL be recovered from GLB
+   metadata where practical, the object SHALL highlight, and the inspector SHALL show
+   display name, type, position, dimensions and basic material.
+5. WHEN an object is selected THEN `selected_object_id` SHALL reach the agent context, so
+   "make this wall 20 cm taller" resolves to that wall.
+6. WHEN identifiers are displayed THEN stable internal ids SHALL appear only in developer
+   details, never as primary UX.
+7. WHEN the workspace is laid out THEN the composer SHALL be anchored at the BOTTOM like
+   ChatGPT, with the design workspace above it: a top toolbar carrying project, Astra
+   status, Blender status and model status; a collapsible left references sidebar; the 3D
+   model taking maximum central space; a collapsible right inspector; and conversation
+   history expandable upward, independently scrollable and collapsible.
+8. WHEN one request produces many internal operations THEN the browser SHALL show ONE
+   Astra reply slot whose progress updates in place, never one bubble per operation.
+9. WHEN anything is rendered THEN it SHALL contain no job id, MCP tool name, filesystem
+   path, platform script name, or backend debug detail. Model-authored code SHALL be
+   shown only inside an approval request, where seeing it is the entire point.
+
+### Requirement 25 — Graceful degradation
+
+**User Story:** As a user, I want the parts that work to keep working when something is
+not connected.
+
+#### Acceptance Criteria
+
+1. WHEN Astra is not connected THEN the workspace SHALL still load, uploads SHALL still
+   work, and a Connect action SHALL be offered.
+2. WHEN Blender is not connected THEN Astra MAY still analyse files and discuss the
+   project, and a modelling request SHALL explain that Blender must connect.
+3. WHEN an MCP call fails THEN the project SHALL NOT be corrupted and a useful
+   unavailable state SHALL be returned.
+4. WHEN the plan is uncertain THEN the platform SHALL ask rather than invent dimensions.
+
 ---
 
 ## Out of scope (explicitly deferred)
 
-These are deliberately **not** part of Spec 002:
+The MVP is deliberately a LOCAL, SINGLE-USER product. These are not part of it:
 
 - authentication, real users, production authorization
 - billing, quotas, cost controls
 - multi-user collaboration
 - production deployment, TLS termination, cloud infrastructure
-- multiple worker scheduling
-- Three.js interactive scene, object selection by clicking
+- multiple workers, worker scheduling, Redis, PostgreSQL
+- vector databases and large-scale retrieval
 - live viewport streaming, WebRTC
-- persistent long-term project memory, design-decision history
+- production BIM, IFC or Revit interoperability
+- photorealistic final render workflow
 - version history or undo UI
 - full material / node-graph authoring
-- photorealistic final render workflow
 - camera-relative direction interpretation
 - shared-read / exclusive-write locking
 - forking, vendoring or maintaining a Blender MCP implementation
 - integrating a community Blender MCP (reference only, review-gated — Requirement 9.12)
-- high-level architectural composition (walls, rooms, floor plans) — enabled by
-  Requirement 17, delivered later
-- uploaded floor plans and reference photos as model context — scoped by Requirement
-  17.6, and deferred to Spec 003 unless Task 12 concludes otherwise
+
+### Now IN scope, having moved here from deferral
+
+Recorded because earlier revisions of this document deferred them, and the MVP does not:
+
+- project-scoped uploads, references and PDF ingestion (Requirements 21, 22)
+- multimodal image input to the agent (Requirement 22)
+- interactive Three.js scene and object selection by clicking (Requirement 24)
+- architectural composition: walls, floors, ceilings, openings, placeholders
+  (Requirements 17, 24)
+- durable local project memory as lightweight design facts (Requirement 23)
+- model-authored Blender Python, classified and user-approved (Requirement 11)
