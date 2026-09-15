@@ -158,6 +158,88 @@
       ]
     },
     {
+      "schema": "length-unit.schema.json",
+      "valid": [
+        { "name": "meters", "data": "m" },
+        { "name": "centimeters", "data": "cm" }
+      ],
+      "invalid": [
+        { "name": "millimeters not supported in this milestone", "data": "mm" },
+        { "name": "spelled out", "data": "meters" },
+        { "name": "uppercase", "data": "M" },
+        { "name": "not a string", "data": 1 }
+      ]
+    },
+    {
+      "schema": "measurement.schema.json",
+      "valid": [
+        { "name": "50 cm", "data": { "value": 50, "unit": "cm" } },
+        { "name": "0.5 m", "data": { "value": 0.5, "unit": "m" } },
+        { "name": "negative 25 cm", "data": { "value": -25, "unit": "cm" } },
+        { "name": "zero", "data": { "value": 0, "unit": "m" } }
+      ],
+      "invalid": [
+        { "name": "missing unit", "data": { "value": 50 } },
+        { "name": "missing value", "data": { "unit": "cm" } },
+        { "name": "unknown unit", "data": { "value": 50, "unit": "mm" } },
+        { "name": "string value", "data": { "value": "50", "unit": "cm" } },
+        {
+          "name": "extra property",
+          "data": { "value": 50, "unit": "cm", "axis": "x" }
+        },
+        { "name": "not an object", "data": 50 }
+      ]
+    },
+    {
+      "schema": "axis.schema.json",
+      "valid": [
+        { "name": "x", "data": "x" },
+        { "name": "y", "data": "y" },
+        { "name": "z", "data": "z" }
+      ],
+      "invalid": [
+        { "name": "uppercase", "data": "X" },
+        { "name": "unknown axis", "data": "w" },
+        { "name": "not a string", "data": 0 }
+      ]
+    },
+    {
+      "schema": "direction.schema.json",
+      "valid": [
+        { "name": "right", "data": "right" },
+        { "name": "left", "data": "left" },
+        { "name": "forward", "data": "forward" },
+        { "name": "back", "data": "back" },
+        { "name": "up", "data": "up" },
+        { "name": "down", "data": "down" }
+      ],
+      "invalid": [
+        { "name": "uppercase", "data": "Right" },
+        { "name": "camera-relative wording is not supported", "data": "toward camera" },
+        { "name": "unknown direction", "data": "sideways" },
+        { "name": "not a string", "data": 1 }
+      ]
+    },
+    {
+      "schema": "axis-direction.schema.json",
+      "valid": [
+        { "name": "positive x", "data": { "axis": "x", "sign": 1 } },
+        { "name": "negative x", "data": { "axis": "x", "sign": -1 } },
+        { "name": "positive z", "data": { "axis": "z", "sign": 1 } }
+      ],
+      "invalid": [
+        { "name": "zero sign", "data": { "axis": "x", "sign": 0 } },
+        { "name": "fractional sign", "data": { "axis": "x", "sign": 0.5 } },
+        { "name": "missing sign", "data": { "axis": "x" } },
+        { "name": "missing axis", "data": { "sign": 1 } },
+        { "name": "unknown axis", "data": { "axis": "w", "sign": 1 } },
+        {
+          "name": "extra property",
+          "data": { "axis": "x", "sign": 1, "meters": 0.5 }
+        }
+      ]
+    },
+    {
       "schema": "job.schema.json",
       "valid": [
         {

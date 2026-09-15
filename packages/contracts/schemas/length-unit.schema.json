@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "length-unit.schema.json",
+  "title": "LengthUnit",
+  "description": "Units accepted at an input boundary. METERS is the canonical internal unit (see .kiro/steering/blender.md); centimeters are accepted only so user-facing measurements can be converted once, at the edge. Spec 001 requires exactly cm and m.",
+  "type": "string",
+  "enum": ["m", "cm"]
+}

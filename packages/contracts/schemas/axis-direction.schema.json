@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "axis-direction.schema.json",
+  "title": "AxisDirection",
+  "description": "The resolved result of interpreting a named Direction: a Blender world-space axis plus a sign. Example: 'right' resolves to { axis: 'x', sign: 1 }. This is pure vocabulary — it carries no distance and never touches Blender.",
+  "type": "object",
+  "properties": {
+    "axis": { "$ref": "axis.schema.json" },
+    "sign": {
+      "type": "integer",
+      "enum": [-1, 1],
+      "description": "+1 along the axis, -1 against it."
+    }
+  },
+  "required": ["axis", "sign"],
+  "additionalProperties": false
+}

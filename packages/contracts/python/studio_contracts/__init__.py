@@ -69,6 +69,11 @@ SCHEMA_FILES: dict[str, str] = {
     "ChatResponse": "chat-response.schema.json",
     "ErrorResponse": "error-response.schema.json",
     "ErrorCode": "error-code.schema.json",
+    "LengthUnit": "length-unit.schema.json",
+    "Measurement": "measurement.schema.json",
+    "Axis": "axis.schema.json",
+    "Direction": "direction.schema.json",
+    "AxisDirection": "axis-direction.schema.json",
 }
 
 

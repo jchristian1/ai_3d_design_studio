@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "axis.schema.json",
+  "title": "Axis",
+  "description": "A Blender WORLD-SPACE axis. Axes are world-space only for this milestone; camera-relative interpretation is explicitly deferred (Spec 001).",
+  "type": "string",
+  "enum": ["x", "y", "z"]
+}

@@ -32,6 +32,11 @@ tests then fail until both representations are realigned.
 | `chat-response.schema.json` | `ChatResponse` | Conditional rules bind `status` to `error` |
 | `error-response.schema.json` | Structured error payload | `code` + human-readable `message` |
 | `error-code.schema.json` | `ErrorCode` enum | The one canonical error-code list |
+| `length-unit.schema.json` | `LengthUnit` enum | Input units: `m`, `cm`. Meters is canonical internally |
+| `measurement.schema.json` | `Measurement` | Value + explicit unit, pre-conversion |
+| `axis.schema.json` | `Axis` enum | Blender **world-space** axes only |
+| `direction.schema.json` | `Direction` enum | Named world-space directions, **not** camera-relative |
+| `axis-direction.schema.json` | `AxisDirection` | Resolved axis + sign (`right` → `{x, +1}`) |
 | `conformance-cases.json` | Shared test corpus | Language-neutral valid/invalid cases |
 
 `chat-response.schema.json` encodes two contract rules that would otherwise live only in

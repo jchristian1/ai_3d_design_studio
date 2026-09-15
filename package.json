@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "test": "npm run test:ts && npm run test:py",
-    "test:ts": "node --test packages/contracts/src/*.test.ts packages/validation/src/*.test.ts",
+    "test:ts": "node --test packages/contracts/src/*.test.ts packages/validation/src/*.test.ts packages/spatial/src/*.test.ts",
     "test:py": "python3 -m pytest",
     "test:conformance": "node --test packages/contracts/src/conformance.test.ts && python3 -m pytest packages/contracts/python/test_conformance.py tests/contracts"
   },

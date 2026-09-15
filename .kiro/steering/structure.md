@@ -16,6 +16,7 @@ ai_3d_design_studio/
 ├── packages/
 │   ├── contracts/
 │   ├── types/
+│   ├── spatial/
 │   ├── ui/
 │   └── validation/
 ├── database/
@@ -57,6 +58,20 @@ Shared API and event contracts.
 
 packages/types
 Shared data types.
+
+packages/spatial
+Deterministic, scene-independent spatial utilities including:
+
+- unit conversion
+- world-axis direction mapping
+- spatial math shared across services
+
+It must remain independent of:
+
+- AI providers
+- Blender APIs
+- camera/view state
+- scene state
 
 packages/validation
 Reusable validation rules.

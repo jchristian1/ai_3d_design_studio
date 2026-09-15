@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "measurement.schema.json",
+  "title": "Measurement",
+  "description": "A distance with an explicit unit, as supplied at an input boundary before conversion to canonical meters. JSON cannot encode NaN/Infinity, so the finite-value rule is additionally enforced by the conversion utilities, which reject non-finite input with INVALID_UNITS.",
+  "type": "object",
+  "properties": {
+    "value": { "type": "number" },
+    "unit": { "$ref": "length-unit.schema.json" }
+  },
+  "required": ["value", "unit"],
+  "additionalProperties": false
+}

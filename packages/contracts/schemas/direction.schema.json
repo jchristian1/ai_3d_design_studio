@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "direction.schema.json",
+  "title": "Direction",
+  "description": "A named WORLD-SPACE direction. The mapping to axis and sign is fixed and deterministic (see axis-direction.schema.json). 'right' maps to Blender world-space +X. These names are NOT camera-relative; camera-relative interpretation is explicitly deferred (Spec 001).",
+  "type": "string",
+  "enum": ["right", "left", "forward", "back", "up", "down"]
+}

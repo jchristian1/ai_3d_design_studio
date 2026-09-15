@@ -1,0 +1,256 @@
+{
+  "description": "Language-neutral behaviour corpus for Spec 001 Task 2. Both @studio/spatial (TypeScript) and studio_spatial (Python) execute these exact cases and must produce identical results, including error codes and messages. Adding a case here exercises both languages at once.",
+  "conversion": {
+    "description": "Measurement -> canonical meters. `meters` is the expected exact result.",
+    "valid": [
+      { "name": "spec: 50 cm -> 0.50 m", "value": 50, "unit": "cm", "meters": 0.5 },
+      { "name": "spec: 100 cm -> 1.00 m", "value": 100, "unit": "cm", "meters": 1.0 },
+      { "name": "spec: -25 cm -> -0.25 m", "value": -25, "unit": "cm", "meters": -0.25 },
+      { "name": "40 cm -> 0.40 m", "value": 40, "unit": "cm", "meters": 0.4 },
+      { "name": "240 cm -> 2.40 m", "value": 240, "unit": "cm", "meters": 2.4 },
+      { "name": "270 cm -> 2.70 m", "value": 270, "unit": "cm", "meters": 2.7 },
+      { "name": "1 cm -> 0.01 m", "value": 1, "unit": "cm", "meters": 0.01 },
+      { "name": "0 cm -> 0 m", "value": 0, "unit": "cm", "meters": 0 },
+      { "name": "fractional cm: 2.5 cm -> 0.025 m", "value": 2.5, "unit": "cm", "meters": 0.025 },
+      { "name": "non-terminating binary: 1.1 cm -> nearest double of 1.1/100", "value": 1.1, "unit": "cm", "meters": 0.011000000000000001 },
+      { "name": "correctly-rounded division, not multiplication by 0.01", "value": 6537.04249344076, "unit": "cm", "meters": 65.3704249344076 },
+      { "name": "large: 100000 cm -> 1000 m", "value": 100000, "unit": "cm", "meters": 1000 },
+      { "name": "meters identity: 0.5 m", "value": 0.5, "unit": "m", "meters": 0.5 },
+      { "name": "meters identity: 1 m", "value": 1, "unit": "m", "meters": 1 },
+      { "name": "meters identity: -0.25 m", "value": -0.25, "unit": "m", "meters": -0.25 },
+      { "name": "meters identity: 0 m", "value": 0, "unit": "m", "meters": 0 },
+      { "name": "meters identity: 2.7 m", "value": 2.7, "unit": "m", "meters": 2.7 },
+      { "name": "negative zero cm normalizes to positive zero", "value": -0.0, "unit": "cm", "meters": 0 }
+    ],
+    "invalid": [
+      { "name": "unsupported unit mm", "value": 50, "unit": "mm", "error_code": "INVALID_UNITS", "error_key": "UNSUPPORTED_UNIT" },
+      { "name": "unsupported unit spelled out", "value": 50, "unit": "meters", "error_code": "INVALID_UNITS", "error_key": "UNSUPPORTED_UNIT" },
+      { "name": "unsupported unit uppercase", "value": 50, "unit": "CM", "error_code": "INVALID_UNITS", "error_key": "UNSUPPORTED_UNIT" },
+      { "name": "unsupported unit empty", "value": 50, "unit": "", "error_code": "INVALID_UNITS", "error_key": "UNSUPPORTED_UNIT" },
+      { "name": "string value", "value": "50", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
+      { "name": "null value", "value": null, "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
+      { "name": "boolean value", "value": true, "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
+      { "name": "missing value", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
+      { "name": "nan value", "value": "__NAN__", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
+      { "name": "positive infinity value", "value": "__INF__", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
+      { "name": "negative infinity value", "value": "__NEG_INF__", "unit": "cm", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
+      { "name": "nan value in meters", "value": "__NAN__", "unit": "m", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" },
+      { "name": "infinity value in meters", "value": "__INF__", "unit": "m", "error_code": "INVALID_UNITS", "error_key": "NON_FINITE_VALUE" }
+    ],
+    "malformed": [
+      { "name": "measurement is null", "measurement": null, "error_code": "INVALID_UNITS", "error_key": "NOT_A_MEASUREMENT" },
+      { "name": "measurement is a number", "measurement": 50, "error_code": "INVALID_UNITS", "error_key": "NOT_A_MEASUREMENT" },
+      { "name": "measurement is a string", "measurement": "50 cm", "error_code": "INVALID_UNITS", "error_key": "NOT_A_MEASUREMENT" },
+      { "name": "measurement is an array", "measurement": [50, "cm"], "error_code": "INVALID_UNITS", "error_key": "NOT_A_MEASUREMENT" }
+    ]
+  },
+  "directions": {
+    "description": "Named world-space direction -> axis + sign. Complete and total over the canonical Direction enum.",
+    "valid": [
+      { "name": "spec: right -> +X", "direction": "right", "axis": "x", "sign": 1 },
+      { "name": "left -> -X", "direction": "left", "axis": "x", "sign": -1 },
+      { "name": "forward -> +Y", "direction": "forward", "axis": "y", "sign": 1 },
+      { "name": "back -> -Y", "direction": "back", "axis": "y", "sign": -1 },
+      { "name": "up -> +Z", "direction": "up", "axis": "z", "sign": 1 },
+      { "name": "down -> -Z", "direction": "down", "axis": "z", "sign": -1 }
+    ],
+    "invalid": [
+      { "name": "uppercase token", "direction": "Right", "error_code": "VALIDATION_ERROR" },
+      { "name": "prose is not a token", "direction": "to the right", "error_code": "VALIDATION_ERROR" },
+      { "name": "camera-relative wording deferred", "direction": "toward camera", "error_code": "VALIDATION_ERROR" },
+      { "name": "unknown token", "direction": "sideways", "error_code": "VALIDATION_ERROR" },
+      { "name": "empty token", "direction": "", "error_code": "VALIDATION_ERROR" },
+      { "name": "null token", "direction": null, "error_code": "VALIDATION_ERROR" },
+      { "name": "numeric token", "direction": 1, "error_code": "VALIDATION_ERROR" }
+    ]
+  },
+  "deltas": {
+    "description": "direction + distance MAGNITUDE -> world-space delta in meters. Only the resolved axis is non-zero. Direction is carried by the direction token alone, so a negative distance is rejected rather than silently reversing the direction. Zero is a valid magnitude. The generic conversion utility remains signed; this rule applies only at this composition boundary.",
+    "valid": [
+      {
+        "name": "spec scenario: move 50 cm to the right",
+        "direction": "right",
+        "value": 50,
+        "unit": "cm",
+        "delta": { "x": 0.5, "y": 0, "z": 0 },
+        "axis": "x",
+        "meters": 0.5
+      },
+      {
+        "name": "positive magnitude with left token points along -X",
+        "direction": "left",
+        "value": 25,
+        "unit": "cm",
+        "delta": { "x": -0.25, "y": 0, "z": 0 },
+        "axis": "x",
+        "meters": -0.25
+      },
+      {
+        "name": "left 50 cm",
+        "direction": "left",
+        "value": 50,
+        "unit": "cm",
+        "delta": { "x": -0.5, "y": 0, "z": 0 },
+        "axis": "x",
+        "meters": -0.5
+      },
+      {
+        "name": "right 0.5 m equals right 50 cm",
+        "direction": "right",
+        "value": 0.5,
+        "unit": "m",
+        "delta": { "x": 0.5, "y": 0, "z": 0 },
+        "axis": "x",
+        "meters": 0.5
+      },
+      {
+        "name": "up 240 cm",
+        "direction": "up",
+        "value": 240,
+        "unit": "cm",
+        "delta": { "x": 0, "y": 0, "z": 2.4 },
+        "axis": "z",
+        "meters": 2.4
+      },
+      {
+        "name": "down 100 cm",
+        "direction": "down",
+        "value": 100,
+        "unit": "cm",
+        "delta": { "x": 0, "y": 0, "z": -1 },
+        "axis": "z",
+        "meters": -1
+      },
+      {
+        "name": "forward 1 m",
+        "direction": "forward",
+        "value": 1,
+        "unit": "m",
+        "delta": { "x": 0, "y": 1, "z": 0 },
+        "axis": "y",
+        "meters": 1
+      },
+      {
+        "name": "back 1 m",
+        "direction": "back",
+        "value": 1,
+        "unit": "m",
+        "delta": { "x": 0, "y": -1, "z": 0 },
+        "axis": "y",
+        "meters": -1
+      },
+      {
+        "name": "zero magnitude in cm yields zero delta with no negative zero",
+        "direction": "left",
+        "value": 0,
+        "unit": "cm",
+        "delta": { "x": 0, "y": 0, "z": 0 },
+        "axis": "x",
+        "meters": 0
+      },
+      {
+        "name": "zero magnitude in m yields zero delta",
+        "direction": "right",
+        "value": 0,
+        "unit": "m",
+        "delta": { "x": 0, "y": 0, "z": 0 },
+        "axis": "x",
+        "meters": 0
+      },
+      {
+        "name": "negative zero is not a negative magnitude",
+        "direction": "left",
+        "value": -0.0,
+        "unit": "cm",
+        "delta": { "x": 0, "y": 0, "z": 0 },
+        "axis": "x",
+        "meters": 0
+      }
+    ],
+    "invalid": [
+      {
+        "name": "negative magnitude rejected: right -25 cm",
+        "direction": "right",
+        "value": -25,
+        "unit": "cm",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NEGATIVE_MAGNITUDE"
+      },
+      {
+        "name": "negative magnitude rejected: left -25 cm",
+        "direction": "left",
+        "value": -25,
+        "unit": "cm",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NEGATIVE_MAGNITUDE"
+      },
+      {
+        "name": "negative magnitude rejected in meters: up -1 m",
+        "direction": "up",
+        "value": -1,
+        "unit": "m",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NEGATIVE_MAGNITUDE"
+      },
+      {
+        "name": "tiny negative magnitude rejected",
+        "direction": "right",
+        "value": -0.001,
+        "unit": "cm",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "NEGATIVE_MAGNITUDE"
+      },
+      {
+        "name": "bad direction is rejected before conversion",
+        "direction": "sideways",
+        "value": 50,
+        "unit": "cm",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "UNSUPPORTED_DIRECTION"
+      },
+      {
+        "name": "bad unit is rejected",
+        "direction": "right",
+        "value": 50,
+        "unit": "mm",
+        "error_code": "INVALID_UNITS"
+      },
+      {
+        "name": "unit error takes precedence over negative magnitude",
+        "direction": "right",
+        "value": -50,
+        "unit": "mm",
+        "error_code": "INVALID_UNITS"
+      },
+      {
+        "name": "non-finite distance is rejected",
+        "direction": "right",
+        "value": "__NAN__",
+        "unit": "cm",
+        "error_code": "INVALID_UNITS"
+      },
+      {
+        "name": "infinite distance is rejected",
+        "direction": "right",
+        "value": "__INF__",
+        "unit": "m",
+        "error_code": "INVALID_UNITS"
+      },
+      {
+        "name": "negative infinity is rejected as non-finite, not as magnitude",
+        "direction": "right",
+        "value": "__NEG_INF__",
+        "unit": "m",
+        "error_code": "INVALID_UNITS"
+      },
+      {
+        "name": "both invalid: direction error takes precedence",
+        "direction": "sideways",
+        "value": "__NAN__",
+        "unit": "mm",
+        "error_code": "VALIDATION_ERROR",
+        "error_key": "UNSUPPORTED_DIRECTION"
+      }
+    ]
+  }
+}

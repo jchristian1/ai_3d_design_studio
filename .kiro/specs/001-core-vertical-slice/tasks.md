@@ -12,9 +12,14 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - Reserve `services/agent/providers/` so `AstraProvider`/`CodexProvider` can be added later without changing API, jobs, MCP, worker, or Blender code.
   - _Requirements: 2.1, 2.3_
 
-- [ ] 2. Unit conversion and interpretation utilities
-  - Implement cm→m conversion and direction→axis mapping (right=+X, etc.).
-  - Unit tests: `"50 cm" → 0.50`, `"40 cm" → 0.40`; `right → (+1,0,0)` etc.
+- [x] 2. Unit conversion and interpretation utilities
+  - Add canonical schemas for the new cross-boundary vocabulary: `length-unit`, `measurement`, `axis`, `direction`, `axis-direction`.
+  - Implement `packages/spatial` (TypeScript + Python): cm→m / m→m conversion and world-space direction→axis+sign mapping.
+  - `right` = Blender world-space +X. Camera-relative interpretation explicitly deferred.
+  - No Blender calls and no natural-language/AI reasoning in these utilities; they stay pure and deterministic.
+  - Reject invalid/non-finite measurements consistently with `INVALID_UNITS`; unknown directions with `VALIDATION_ERROR`.
+  - Signed measurement semantics: generic conversion stays signed (`-25 cm → -0.25 m`), but `directionDeltaMeters` requires a non-negative distance magnitude so direction is never encoded twice (`left` + `-25 cm` → `VALIDATION_ERROR`). Zero is a valid magnitude.
+  - Unit tests: `"50 cm" → 0.50`, `"100 cm" → 1.00`, `"-25 cm" → -0.25`; `right → axis x, sign +1`; plus shared-corpus and cross-language parity tests.
   - _Requirements: 3.2, 3.3_
 
 - [ ] 3. MCP `move_object` tool

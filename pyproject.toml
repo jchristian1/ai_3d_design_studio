@@ -4,6 +4,7 @@ pythonpath = [
     "packages/types/python",
     "packages/contracts/python",
     "packages/validation/python",
+    "packages/spatial/python",
 ]
 testpaths = [
     "packages",
