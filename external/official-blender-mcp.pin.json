@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Pinned identity of the OFFICIAL Blender Lab MCP used as this project's Blender backend.",
+    "This file is the single source of truth for the pin. Never use 'latest'.",
+    "Upgrade procedure (see .kiro/specs/002-intelligent-scene-agent/design.md):",
+    "  discover -> compatibility suite -> security suite -> real Blender acceptance -> only then move the pin."
+  ],
+  "project": "Blender MCP",
+  "maintainer": "Blender Lab",
+  "documentation_url": "https://www.blender.org/lab/mcp-server/",
+  "canonical_repository": "https://projects.blender.org/lab/blender_mcp.git",
+  "pinned_commit": "ff54e4d8f6b09502f2f466189cca0e52b4a91643",
+  "pinned_commit_date": "2026-09-11",
+  "pinned_commit_subject": "Update 5.2: manual & API",
+  "mcp_server": {
+    "distribution_name": "blender-mcp",
+    "declared_version": "1.0.2",
+    "source_subdirectory": "mcp",
+    "console_entry_point": "blender-mcp",
+    "requires_python": ">=3.10",
+    "dependencies": ["docutils", "mcp[cli]>=1.2.0,<2", "pyyaml"],
+    "transport": "stdio",
+    "pypi_warning": "PyPI 'blender-mcp' is a DIFFERENT community project (ahujasid/blender-mcp). Never pip install it."
+  },
+  "blender_addon": {
+    "extension_id": "mcp",
+    "declared_version": "1.0.0",
+    "source_subdirectory": "addon/blender_mcp_addon",
+    "blender_version_min": "5.1.0",
+    "required_for": "interactive tools only (get_objects_summary, get_object_detail_summary, screenshots, jump_to_*)",
+    "not_required_for": "the *_for_cli tools, which run 'blender --background <blend_file>' directly"
+  },
+  "licence": "GPL-3.0-or-later (Blender Authors)",
+  "integration_style": "separate-process protocol integration over MCP stdio; never imported, never vendored, never forked",
+  "verified_blender": {
+    "version": "5.2.2 LTS",
+    "build_date": "2026-09-15",
+    "note": "locally verified on Blender 5.2.2; upstream declares blender_version_min 5.1.0"
+  }
+}

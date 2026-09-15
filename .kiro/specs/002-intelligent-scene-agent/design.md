@@ -3,201 +3,216 @@
 Spec 001 is the baseline. This document describes only what changes and what is added.
 Where a Spec 001 boundary works, it is reused as-is and named rather than restated.
 
-Tasks 1 and 2 are **complete and retained**. They are the reason this refactor is cheap:
-the canonical scene contracts, the `studio-scene-v1` digest, and the deterministic
+Tasks 1 and 2 are **complete and retained**, and they are the reason this refactor is
+cheap: the canonical scene contracts, the `studio-scene-v1` digest, and the deterministic
 metres / radians / sizing / colour utilities are all platform-owned and
-implementation-independent. Nothing below replaces them.
+backend-independent. Nothing below replaces them.
 
-## The two governing ideas
+## The three governing ideas
 
 > **1. The model gains language ability, not authority.**
 >
-> **2. We do not reinvent Blender MCP.**
-
-The first is unchanged from the original design. The second is this refactor: an
-existing Blender MCP implementation becomes the Blender **capability engine**, behind a
-platform-owned adapter, reached over the real Model Context Protocol.
+> **2. The official Blender Lab MCP is our Blender backend. We are not building a second
+> MCP server.**
+>
+> **3. No model-authored code. Every character of Python that reaches Blender was written
+> and reviewed by us.**
 
 ```
-UNTRUSTED                          TRUSTED (ours)                    EXTERNAL
-────────────────────────────       ──────────────────────────        ──────────────
-user message                  ─┐
-SceneSnapshot (safe, read-only)├─→ ContextBuilder ─→ LLM ─→ Proposal
-conversation / clarification  ─┘                              │
-                                                              ▼
-                                         schema validation + object resolution
-                                         + capability policy + unit conversion
-                                                              │
-                                              AgentOutcome ───┤
-                                                              ▼
-                                         JobFactory → canonical Job → worker
-                                                              │
-                                                 durable guard (scene_version,
-                                                 expected-before, desired-after)
-                                                              │
-                                                  BlenderMcpGateway
-                                                              │  MCP (stdio)
-                                                              ▼
-                                                    external Blender MCP server
-                                                              │  loopback TCP
-                                                              ▼
-                                                    Blender add-on → Blender
+Browser
+  → FastAPI control plane
+    → AgentProvider                       (language only; proposes semantic operations)
+      → authoritative scene context       (SceneSnapshot, scene_version)
+        → validated semantic proposal     (schema + resolution + policy)
+          → platform safety / policy / durability layer
+             (locks · recovery points · journal · idempotency · verification)
+            → BlenderCapabilityProvider   (platform-owned, backend-agnostic)
+              → OfficialBlenderLabBackend (the only component that knows the official MCP)
+                → official Blender MCP server  ⇐ MCP/stdio
+                  → official Blender MCP add-on ⇐ loopback TCP
+                    → Blender
 ```
+
+Everything above `BlenderCapabilityProvider` is backend-agnostic. That line is where the
+architecture's value is concentrated: it is what makes a future native-semantic-tool
+upgrade (§7) a local change, and it is what keeps a community MCP a *possible provider*
+rather than a rewrite.
 
 ---
 
 ## 1. Who owns what
 
-This table is the point of the refactor. If a future task starts writing something in
-the right-hand column, it is duplicating work.
+If a future task starts writing something in the right-hand column, it is duplicating
+work. If it starts writing something in the left-hand column *inside* the backend, it is
+leaking the boundary.
 
-| Concern | Our platform | Existing Blender MCP |
+| Concern | Our platform | Official Blender MCP |
 |---|---|---|
 | Natural-language conversation | **ours** | — |
 | LLM provider selection and abstraction | **ours** | — |
-| Prompt/context construction | **ours** | — |
-| Scene grounding as a canonical contract | **ours** (`SceneSnapshot`) | supplies raw scene/object data |
+| Prompt / context construction | **ours** | — |
+| Scene grounding as a canonical contract | **ours** (`SceneSnapshot`) | supplies raw scene/object summaries |
 | `scene_version` identity and preconditions | **ours** (`studio-scene-v1`) | — |
 | Clarification and ambiguity handling | **ours** | — |
-| Object identity (`studio_object_id`) and resolution | **ours** | supplies Blender names |
+| Object identity (`studio_object_id`) and resolution | **ours** | addresses objects by Blender name |
 | Canonical units, angles, colour | **ours** (`packages/spatial`) | consumes converted values |
-| Proposal validation and capability policy | **ours** (`McpToolPolicy`) | — |
+| Proposal validation and capability policy | **ours** | — |
+| **Semantic capability vocabulary** | **ours** | — (upstream has none — §2.3) |
+| **Guarded execution templates** | **ours** (closed catalogue, §6) | executes what we send |
 | Job durability, retry, idempotency | **ours** (journal) | — |
-| Project locks, recovery points, project isolation | **ours** | — |
+| Project locks, recovery points, project isolation, save | **ours** | — |
 | Cloud worker connectivity (outbound, authenticated) | **ours** | — |
 | Browser UX, transcript, preview presentation | **ours** | — |
-| **Blender object manipulation implementation** | — | **existing MCP** |
-| **Object creation / geometry** | — | **existing MCP** |
-| **Materials implementation** | — | **existing MCP** |
-| **Rendering / viewport screenshot** | — | **existing MCP** |
-| **Asset integrations** (Poly Haven, Sketchfab, Poly Pizza, Hyper3D, Hunyuan3D) | — | **existing MCP**, Tier B |
-| **Export (GLB/FBX)** | — | **existing MCP**, Tier B |
-| **Blender API / node schema lookup** | — | **existing MCP** |
-| **Arbitrary Python in Blender** | **our policy DENIES by default** | existing MCP exposes it |
+| **Blender process integration and add-on** | — | **official** |
+| **Code execution transport into Blender** | — | **official** |
+| **Scene / object / blend-file summaries** | — | **official** |
+| **Blender Python API + manual documentation search** | — | **official** |
+| **Screenshots, thumbnail and viewport render to path** | — | **official**, Tier B |
+| **Generic `execute_blender_code`** | **never offered to a model** | official exposes it |
 
 ---
 
-## 2. The selected implementation, pinned
+## 2. The official implementation, as verified
+
+### 2.1 Identity
 
 | | |
 |---|---|
-| Implementation | `ahujasid/blender-mcp` ("MCP for Blender") |
-| Distribution | PyPI package `blender-mcp` |
-| **Pinned version** | **`blender-mcp==1.9.4`** (published 2026-09-15) |
-| **Pinned commit** | `7684c6b3ad2aa0710bbdb1cb06b497c90899ae00` |
-| Licence | MIT |
-| Its dependencies | `mcp<2,>=1.9.0`, `httpx>=0.27.0`; requires Python ≥ 3.10 |
-| Add-on | `addon.py`, `bl_info` version `(1, 7)`, installed by `uvx blender-mcp install-addon` from the SAME pinned package |
-| Add-on↔server handshake | `ADDON_PROTOCOL_VERSION` / `EXPECTED_ADDON_PROTOCOL_VERSION`, reported by `get_addon_status` |
-| Transport, client→server | MCP over stdio (`uvx blender-mcp`) |
-| Transport, server→Blender | plain JSON over TCP to the add-on, default `localhost:9876`, configurable via `BLENDER_HOST` / `BLENDER_PORT` or `--port` |
-| Upstream safe mode | `BLENDER_MCP_SAFE_MODE=1` — validates scripts before execution |
-| Upstream telemetry | **ON by default**; disabled with `DISABLE_TELEMETRY=true` |
+| Project | **Blender MCP**, maintained by the **Blender Lab** |
+| Documentation | `https://www.blender.org/lab/mcp-server/` |
+| Canonical source | `https://projects.blender.org/lab/blender_mcp` |
+| Read via | GitHub mirror `Wenri/blender_mcp`, branch `main`, commit **`4309a39646e644261624bfcd2bca669b343b7621`** (2026-08-06) — the identity actually inspected for this design |
+| Components | a Blender **add-on** (`addon/blender_mcp_addon/`) and an **MCP server** (`mcp/blmcp/`) |
+| Add-on | extension id `mcp`, name `MCP`, version `1.0.0`, maintainer `Blender Lab`, `blender_version_min = "5.1.0"` |
+| Add-on permission | declares `network`: "Runs a local TCP socket server for MCP client communication" |
+| MCP server | distribution name `blender-mcp`, version `1.0.0`, console entry point `blender-mcp`, `requires-python >= 3.10`, dependencies `docutils`, `mcp[cli]>=1.2.0`, `pyyaml` |
+| Licence | `SPDX: GPL-3.0-or-later` (© Blender Authors) on both add-on and server sources |
+| Transport, client→server | MCP over **stdio**; the MCP client launches the server process |
+| Transport, server→Blender | NUL-delimited JSON over **TCP** to the add-on: `{"type": "execute", "code": …, "strict_json": …}` |
+| Host / port | `BLENDER_MCP_HOST` (default `localhost`), `BLENDER_MCP_PORT` (default `9876`), socket timeout 300 s |
+| Background variants | `*_for_cli` tools run `blender --background <blend_file> --python-expr …`; Blender binary from `BLENDER_PATH`, timeout 120 s |
+| Documented install | add-on by drag-and-drop into Blender (repository, then add-on) or *Install from Disk*; MCP server from an `.mcpb` MCP Bundle on the release page, or from source |
 
-Pinning is possible and required in both dimensions: the version pins the SERVER, and
-because the add-on ships inside the same package, `uvx blender-mcp==1.9.4 install-addon`
-pins the ADD-ON too. Those two must agree — the server checks the add-on's protocol
-version at startup — so they are always pinned as a pair.
+> **Distribution-name collision — read before installing anything.** PyPI's
+> `blender-mcp` is the **community** project `ahujasid/blender-mcp` (1.9.4), which is a
+> different implementation. The official server declares the same distribution name
+> `blender-mcp` but is distributed from Blender's own repository and release bundles.
+> `pip install blender-mcp` therefore installs the **wrong** project. Task 3 step 1 must
+> record precisely which artefact was installed and from where.
 
-### 2.1 Discovered tool inventory (31 tools, at 1.9.4)
+Because Blender's own Forgejo instance refused automated fetches during this design pass,
+the inspected identity above is the **mirror** commit. Task 3 step 1 must reconcile it
+with the canonical `projects.blender.org` identity and record whichever is authoritative
+for the pin.
 
-Read from the pinned source. Task 3 re-derives this list at runtime via `tools/list`
-and fails if it differs.
+### 2.2 Tool inventory as verified (26 tools)
 
-| Tool | Tier | Note |
+Derived from the upstream `readme_tools.rst` and `mcp/blmcp/tools/` at the commit above.
+Task 3 re-derives this at runtime via `tools/list`; a difference must FAIL
+(Requirement 9.10, 16.5).
+
+| Tool | Tier | Purpose |
 |---|---|---|
-| `get_scene_info` | **A** | the primary snapshot source |
-| `get_object_info` | **A** | per-object detail |
-| `get_viewport_screenshot` | **A** | needs a GUI viewport (see §2.3) |
-| `describe_node_type` | **A** | schema lookup, creates a throwaway node tree |
-| `bpy_api_lookup` | **A** | RNA/API reference lookup, read-only |
-| `get_addon_status` | **A** | version handshake |
-| `get_polyhaven_status`, `get_hyper3d_status`, `get_sketchfab_status`, `get_polypizza_status`, `get_hunyuan3d_status` | **A** | capability probes, no external fetch |
-| `disable_telemetry` | **A** | used by us at startup, not offered to the model |
-| `search_polyhaven_assets`, `get_polyhaven_categories`, `download_polyhaven_asset`, `set_texture` | **B** | remote asset service |
-| `search_sketchfab_models`, `get_sketchfab_model_preview`, `download_sketchfab_model` | **B** | remote asset service, credentials |
-| `search_polypizza_models`, `download_polypizza_model` | **B** | remote asset service, credentials |
-| `generate_hyper3d_model_via_text`, `generate_hyper3d_model_via_images`, `poll_rodin_job_status`, `import_generated_asset` | **B** | external AI generation, credentials |
-| `generate_hunyuan3d_model`, `poll_hunyuan_job_status`, `import_generated_asset_hunyuan` | **B** | external AI generation, credentials |
-| `export_scene` | **B** | writes files outside the project |
-| **`execute_blender_code`** | **C** | arbitrary Python in Blender |
+| `get_objects_summary` | **A** | scene collection hierarchy and its objects — primary snapshot source |
+| `get_object_detail_summary` | **A** | per-object detail by `name`: type, transforms, parent/children, modifiers, constraints, materials, visibility, data-block, collections |
+| `get_blendfile_summary_path_info` | **A** | blend-file path, save status, age, backups |
+| `get_blendfile_summary_datablocks` | **A** | data-block counts, active workspace, render engine |
+| `get_blendfile_summary_missing_files` | **A** | missing external references |
+| `get_blendfile_summary_of_linked_libraries` | **A** | linked-library tree |
+| `get_blendfile_summary_usage_guess` | **A** | heuristic use-case guess |
+| the five `get_blendfile_summary_*_for_cli` variants | **A** | same, by opening a `blend_file` in background Blender |
+| `get_python_api_docs`, `search_api_docs`, `search_manual_docs` | **A** | bundled API / manual reference |
+| `get_screenshot_of_window_as_json` | **A** | window layout, active object, selection |
+| `get_screenshot_of_area_as_image`, `get_screenshot_of_window_as_image` | **A** | PNG screenshots (require a GUI window) |
+| `jump_to_tab_by_name`, `jump_to_tab_by_space_type`, `jump_to_view3d_object_by_name`, `jump_to_view3d_object_data_by_name` | **B** | mutate UI state |
+| `render_thumbnail_to_path`, `render_viewport_to_path` | **B** | render to an `output_path` — platform-derived destination only |
+| **`execute_blender_code`** | **C** | arbitrary Python in the connected Blender instance |
+| **`execute_blender_code_for_cli`** | **C** | arbitrary Python in a background Blender opened on `blend_file` |
 
-### 2.2 THE DECISIVE FINDING: this upstream has no semantic mutation tools
+Both Tier C tools are annotated `destructiveHint=True` upstream.
 
-At 1.9.4 there is **no** `create_object`, `modify_object`, `delete_object`,
-`set_material`, `transform_object` or equivalent tool. Earlier versions had some; they
-are gone. The README's "create, delete and modify shapes" and "apply or create
-materials" capabilities are delivered **through `execute_blender_code`**.
+### 2.3 The decisive finding: the official MCP has no semantic mutation tools
 
-The consequence has to be stated plainly, because it contradicts the naive form of this
-refactor:
+At the verified commit there is **no** `move`, `rotate`, `scale`, `set_material`,
+`create_object`, `delete_object` or `duplicate` tool — and no namespaced equivalent. The
+project describes itself as *"a natural language interface with Blender's Python API,
+improving access to documentation, and allowing users to explore and understand complex
+setups"*, and its tool surface matches that description exactly: **inspection,
+documentation, screenshots, rendering, viewport navigation — plus generic code
+execution.**
 
-> If `execute_blender_code` is Tier C and denied by default, then adopting
-> `ahujasid/blender-mcp` gives the platform **read, screenshot, asset download and
-> export — and zero ability to move, rotate, resize or recolour anything.**
+The consequence, stated plainly:
 
-So "reuse the MCP for mutations, and deny arbitrary Python" is not simultaneously
-satisfiable against this particular upstream. Three options exist. **This is an open
-decision (§14, D1) and Task 3 exists to inform it — not to quietly pick one.**
+> Using the official MCP as our Blender backend means **every mutation is Python**. There
+> is no third option in which we both mutate the scene and never send code.
 
-**Option 1 — Hybrid: external MCP for reads and assets, platform-owned semantic
-mutations.** Keep the Spec 001 `move_object` implementation and add the small remaining
-transforms as platform capabilities; use the MCP for inspection, screenshots, node/API
-lookup, asset import and export. Honest about scope, keeps Tier C denied, and the
-mutation code we own is small and already proven. Cost: we still own a little bpy, which
-is what the refactor wants to stop.
+This is precisely why Requirement 11 exists. The platform sends Python — but only Python
+it wrote, from a closed reviewed catalogue, parameterised with validated canonical values.
+The model never authors, edits, selects or sees a character of it.
 
-**Option 2 — Platform-generated code through `execute_blender_code`, never
-model-authored.** Treat the tool as a private transport: the platform emits
-*parameterised code from a fixed, reviewed template catalogue* (e.g. "set object X
-rotation_euler to (0,0,0.785398)"), with values already validated and converted. The
-model never sees the tool and never authors a character of it.
-- Preserves "the model never authors code" and reuses upstream's execution path.
-- But the templates ARE a Blender implementation living in our repo, so it only
-  partly achieves the refactor's goal, and it re-enables the single most dangerous
-  upstream tool for our own use — acceptable only with upstream safe mode ON,
-  templates reviewed, and no interpolation of model-supplied strings.
+### 2.4 The upstream's own execution model — which is the same template pattern
 
-**Option 3 — Select a different upstream that exposes semantic mutation tools.**
-Candidates seen while researching: `djeada/blender-mcp-server` (~27 tools across
-namespaces, explicit create/material/render/export), `glonorce/Blender_mcp` (~69 tools),
-`RFingAdam/mcp-blender` (~218 tools). These would satisfy "Tier A covers ordinary
-creation, transforms and materials" directly. Cost: less popular, less proven, and each
-needs the same governance review from scratch. Per the instruction not to switch
-silently, this is reported rather than adopted.
+This is the most useful thing found in the source, because it means our template
+mechanism is not a workaround; it is the upstream project's own convention:
 
-The gateway and capability registry are designed so that **all three options are
-implementable behind the same interface**, which is why Task 4 does not depend on this
-decision.
+- Every non-`execute_*` tool is a pair of modules: `<tool>.py` (the MCP-facing tool) and
+  `<tool>_toolcode.py` (the Python that runs inside Blender). Modules ending in
+  `_toolcode` are excluded from tool discovery.
+- The tool loads its fixed tool-code text, appends a calling-convention footer, and
+  substitutes a **single placeholder** (`__BLMCP_PARAMS__`) with `repr()` of a typed
+  `Params` named tuple, then ships the result over the socket via `send_code(...)`.
+- There is no interpolation of values into arbitrary positions in the source; parameters
+  arrive as one Python literal in one place.
 
-### 2.3 Integration risks found in the pinned source
+So the official server's read tools are *fixed reviewed templates parameterised with
+typed values*. Our mutation capabilities adopt exactly that discipline, on our side of the
+boundary. We do **not** copy upstream tool-code text into this repository (§14, licence).
 
-Recorded now so no later task discovers them as surprises.
+### 2.5 The upstream's stated safety posture
 
-1. **Interactive Blender session, not headless subprocess.** The documented flow is:
-   open Blender, enable the add-on, press `N`, click *Start MCP Server*. Spec 001's
-   worker launches a fresh headless Blender per operation and passes it a `.blend` path.
-   Adopting this MCP means a **long-lived Blender process** whose *currently open file*
-   is the thing being operated on. Consequences: the worker must own opening the right
-   project into that session, project isolation becomes a property of session state
-   rather than of a path argument, and the project lock must serialise session use.
-   Whether the add-on can be started reliably in a headless `--python` session is
-   unverified and is a Task 3 spike item.
-2. **`get_viewport_screenshot` needs a viewport.** Spec 001's deterministic Workbench
-   preview does not; it renders offscreen. The preview pipeline therefore stays
-   platform-owned for now, and the MCP screenshot is treated as an additional
-   capability rather than a replacement.
-3. **The add-on socket has no authentication.** Upstream says so directly: anyone who
-   can reach the port can run Python in Blender. That is exactly why Requirement 11
-   makes loopback binding mandatory and forbids exposing or tunnelling the port.
-4. **Telemetry is ON by default** and collects prompts, generated code, screenshots and
-   scene data, and may be used to train models. Every tool also takes a `user_prompt`
-   parameter whose documented purpose is capturing the user's verbatim words. For a
-   product holding users' private design work this is a governance blocker:
-   `DISABLE_TELEMETRY=true` is mandatory (Requirement 15.2) and `user_prompt` is never
-   populated with user content (Requirement 15.3).
-5. **Blender version support** is documented as 3.0+; the development machine runs 5.2.
-   Verified only by the spike.
+Recorded verbatim in substance, because the design must not depend on it:
+
+- The documentation warns that the MCP server executes LLM-generated code in Blender
+  **without guards**, that data can be removed or sent remotely, and recommends running it
+  on a VM or a system without sensitive information.
+- The add-on ships `weak_sandbox.py`, whose own docstring says it *"isn't really a
+  sandbox, more guidance that some things should not be done"* and that a motivated LLM or
+  user can work around it. It blocks a small list — `sys.exit`, `wm.quit_blender`,
+  `wm.read_factory_settings` and similar — chosen for "guaranteed to cause problems",
+  explicitly not for security.
+
+Therefore: **the upstream sandbox is defence-in-depth and never authorisation**
+(Requirement 10.5). The reason our product can be safe on top of an unguarded execution
+transport is that *no untrusted text ever reaches it* — not that the transport is
+protected.
+
+### 2.6 Integration facts that shape later tasks
+
+1. **Two session models exist, and they behave differently.** The interactive path
+   (`execute_blender_code`, all `get_*` tools) acts on the Blender instance's *currently
+   open file*. The `*_for_cli` path opens a `blend_file` per call in
+   `blender --background`. Spec 001's worker is a headless subprocess-per-operation model
+   with an explicit `.blend` path, which maps onto `_for_cli`; the richer read tools and
+   deferred responses are interactive-only. §16, D2.
+2. **`_for_cli` discards changes by default.** `run_blender_cli` runs
+   `--background <blend> --python-expr <wrapper>` and returns a `result` dict; it never
+   saves. A mutation on that path only persists if our template saves deliberately — which
+   is the platform-owned save of Requirement 13.8.
+3. **`synced_blend_for_cli` can create a sibling file.** When a live Blender instance has
+   the same file open with unsaved changes, it saves a numbered copy
+   (`<base>_mcp_0001.blend`), yields that, and deletes it on exit. Spec 001 asserts "no
+   sibling file appears next to the project", so this interaction must be measured
+   (Task 3 step 15) rather than discovered later.
+4. **Deferred responses are interactive-only.** Background mode requires synchronous
+   completion; long operations must be bounded accordingly.
+5. **Screenshots need a GUI window.** Spec 001's deterministic offscreen Workbench
+   preview does not. The preview pipeline stays platform-owned; the official screenshot
+   and render tools are additional capabilities. §16, D7.
+6. **Blender version floor is 5.1.0.** The development machine runs 5.2, so it qualifies —
+   verified in Task 3 step 2, recorded in `verification.md` (Requirement 16.6).
+7. **The add-on's socket has no authentication.** Anyone who can reach the port can run
+   Python in Blender. That is exactly why Requirement 12 makes loopback mandatory and
+   forbids exposure, tunnelling, proxying and browser access.
 
 ---
 
@@ -234,120 +249,237 @@ unchanged.
 └──────────────────────────────────────────────────────────────────────┘
 
 ┌─ services/blender-worker ────────────────────────────────────────────┐
-│  WorkerExecutor         [CHANGED] read vs mutate dispatch            │
-│  MutationGuard          [NEW] scene_version + expected/desired +     │
-│                               already-applied detection (OURS)       │
-│  mcp/gateway.py         [NEW] BlenderMcpGateway (protocol boundary)  │
-│  mcp/policy.py          [NEW] McpToolPolicy (tiers, fail closed)     │
-│  mcp/registry.py        [NEW] capability → tool(s) mapping           │
-│  mcp/normalize.py       [NEW] MCP output → canonical SceneSnapshot   │
-│  mcp/session.py         [NEW] MCP client lifecycle (stdio child)     │
+│  WorkerExecutor              [CHANGED] read vs mutate dispatch       │
+│  MutationGuard               [NEW] scene_version + expected/desired  │
+│                                    + already-applied (OURS)          │
+│  capability/provider.py      [NEW] BlenderCapabilityProvider (Protocol)│
+│  capability/registry.py      [NEW] capability → native tool | template│
+│  capability/policy.py        [NEW] tool policy, fail closed          │
+│  capability/normalize.py     [NEW] backend output → SceneSnapshot    │
+│  backends/official/session.py   [NEW] MCP stdio client lifecycle     │
+│  backends/official/backend.py   [NEW] OfficialBlenderLabBackend      │
+│  backends/official/templates/   [NEW] CLOSED template catalogue      │
+│        move_object.py · rotate_object.py · set_object_dimensions.py  │
+│        set_material_color.py · create_object.py · delete_object.py   │
+│        duplicate_object.py · save_project.py · read_scene.py         │
+│  backends/fake/backend.py       [NEW] FakeBlenderBackend (offline)   │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ MCP stdio
-┌─ EXTERNAL (not in this repo) ─▼──────────────────────────────────────┐
-│  blender-mcp==1.9.4 server  →  loopback TCP 127.0.0.1:9876           │
-│                             →  MCP for Blender add-on  →  Blender    │
+┌─ EXTERNAL (never in this repo) ▼─────────────────────────────────────┐
+│  official Blender MCP server  →  loopback TCP 127.0.0.1:9876         │
+│                               →  official add-on  →  Blender 5.2     │
 └──────────────────────────────────────────────────────────────────────┘
 
-┌─ services/blender-mcp  [LEGACY, retained during migration] ──────────┐
-│  tools/move_object.py · adapters/blender_scene.py                    │
-│  Spec 001's own semantic implementation. Kept as FALLBACK and as a    │
-│  TEST ORACLE until MCP-backed parity is proven (Requirement 18.4).    │
-│  Retiring it is a separate, deliberate step.                          │
+┌─ Spec 001 custom Blender path [ORACLE / FALLBACK] ───────────────────┐
+│  services/blender-mcp/tools/move_object.py                           │
+│  services/blender-mcp/adapters/blender_scene.py                      │
+│  services/blender-worker/blender_ops.py                              │
+│  Retained on `main` as the migration oracle and fallback until        │
+│  official-backend parity is proven (Requirement 19.4). §15.           │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### Why the gateway lives in the worker
+### Why the provider lives in the worker
 
-The MCP server is a local child process talking to a local Blender. Only the worker is
-on that machine. The control plane never speaks MCP, and the agent never speaks MCP —
-it speaks capabilities.
+The official MCP server is a local child process talking to a local Blender. Only the
+worker is on that machine. The control plane never speaks MCP; the agent never speaks MCP
+— it speaks capabilities.
 
 ---
 
-## 4. BlenderMcpGateway and the capability registry
+## 4. BlenderCapabilityProvider
 
 ```python
-class BlenderMcpGateway(Protocol):
+class BlenderCapabilityProvider(Protocol):
     def capabilities(self) -> tuple[Capability, ...]: ...
-    def invoke(self, capability: Capability, arguments: Mapping) -> CapabilityResult: ...
-    def health(self) -> GatewayHealth: ...
+    def invoke(self, capability: Capability, arguments: CapabilityArguments) -> CapabilityResult: ...
+    def health(self) -> BackendHealth: ...
 ```
 
-- `ExistingBlenderMcpGateway` — the implementation for `blender-mcp==1.9.4`. Speaks MCP
-  over stdio using the official `mcp` client SDK. Does **not** import
-  `blender_mcp.*` internals.
-- `FakeBlenderMcpGateway` — records invocations and replays canned MCP responses, so
+`CapabilityArguments` is a **typed canonical record**, never a free-form mapping: metres,
+radians, unitless scale, linear sRGB RGBA, and validated `studio_object_id`s. A capability
+argument type that could carry a path, a URL, a host, a tool name or a code string does not
+exist (Requirement 15.3).
+
+Implementations:
+
+- **`OfficialBlenderLabBackend`** — the primary backend. Speaks MCP over stdio to the
+  pinned official server using the official `mcp` client SDK (our own pinned dependency).
+  Owns process lifecycle, timeouts, reconnect, tool discovery, identity translation, and
+  the template catalogue. Does not import `blmcp.*`.
+- **`FakeBlenderBackend`** — records invocations and replays canned backend responses, so
   every layer above is testable offline with no Blender and no MCP server. This is the
   load-bearing test seam, exactly as `FakeLlmProvider` is for the model.
+- **`LegacyCustomBackend`** *(optional, migration only)* — wraps the retained Spec 001
+  implementation so the same capability can be executed both ways for parity evidence
+  (§15).
 
-### Capability registry
+### Capability registry, as mapped against the verified inventory
 
-```
-CAPABILITY                 → external tool(s) at 1.9.4          policy
-inspect_scene              → get_scene_info (+ get_object_info…)  A
-inspect_object             → get_object_info                      A
-screenshot                 → get_viewport_screenshot              A (GUI-dependent)
-describe_node_type         → describe_node_type                    A
-api_lookup                 → bpy_api_lookup                        A
-create_object              → (none at 1.9.4 — see §2.2)            A when available
-transform_object           → (none at 1.9.4 — see §2.2)            A when available
-set_material_color         → (none at 1.9.4 — see §2.2)            A when available
-render                     → (none at 1.9.4)                       A when available
-import_asset               → download_polyhaven_asset | download_sketchfab_model |
-                             download_polypizza_model | import_generated_asset…   B
-export                     → export_scene                          B
-```
+| Capability | Official native tool | Template needed |
+|---|---|---|
+| `inspect_scene` | `get_objects_summary` (+ `get_object_detail_summary` per object) | possibly, to supply unit settings and world dimensions the summaries omit — Task 3 step 6 decides |
+| `inspect_object` | `get_object_detail_summary` | no |
+| `move_object` | *none* | **yes** |
+| `rotate_object` | *none* | **yes** |
+| `set_object_dimensions` | *none* | **yes** |
+| `set_material_color` | *none* | **yes** |
+| `create_object` | *none* | **yes** |
+| `delete_object` | *none* | **yes** |
+| `duplicate_object` | *none* | **yes** |
+| `save_project` | *none* | **yes** (platform-owned save, Requirement 13.8) |
+| `render` | `render_thumbnail_to_path` / `render_viewport_to_path` | no — Tier B, platform-derived path; Spec 001's deterministic preview remains the product preview |
+| `screenshot` | `get_screenshot_of_*` | no — Tier B, GUI-dependent |
+| `api_lookup` | `get_python_api_docs` / `search_api_docs` | no — developer-facing, not in the model catalogue |
 
-A capability with no mapping in the configured implementation is **unavailable**, and
-the platform reports a structured capability-named failure rather than substituting
-`execute_blender_code`. That is what makes §2.2's gap visible instead of silently routed
-around.
+A capability with neither a native mapping nor a catalogue entry is **unavailable**: the
+platform returns a structured capability-named failure. It is never approximated by
+handing anything to `execute_blender_code` outside the catalogue (Requirements 9.5, 11.8).
 
-The agent only ever sees capability names. `AgentProvider`, routes, `JobFactory`,
-canonical Jobs and the browser never contain `get_scene_info` or any other upstream
-name; a test asserts that.
+The agent only ever sees capability names. `AgentProvider`, routes, `JobFactory`, canonical
+Jobs and the browser never contain `get_objects_summary`, `execute_blender_code`, or any
+other upstream name; a test asserts that.
 
 ---
 
-## 5. McpToolPolicy
+## 5. Capability policy
 
 ```
-discovered tools ──→ McpToolPolicy ──→ permitted capability catalogue ──→ prompt
+discovered tools ──→ policy table ──→ permitted capability catalogue ──→ prompt
                           │
-                          ├─ Tier A  allowed by default
-                          ├─ Tier B  requires explicit platform configuration
-                          ├─ Tier C  denied by default, never offered to a model
+                          ├─ Tier A  read-only, allowed
+                          ├─ Tier B  side effects, requires configuration + bounded args
+                          ├─ Tier C  code execution — NEVER offered to a model
                           └─ unlisted → DENY (fail closed)
 ```
 
 Properties, all test-enforced:
 
-- **Discovery is not permission.** The policy is a platform-owned table; the MCP's
-  `tools/list` is an input to it.
-- **Fail closed.** A tool that appears in a future upstream version and is not
-  classified is denied, and the compatibility test fails so a human classifies it.
-- **Evaluated on our side.** The policy runs in the worker before any MCP call. It does
-  not depend on the external server enforcing anything.
-- **Upstream safe mode is defence-in-depth.** `BLENDER_MCP_SAFE_MODE=1` is enabled
-  because it is free, but it never authorises anything: "safe mode is on, therefore
-  arbitrary execution is safe" is explicitly not a decision this design makes. Upstream
-  safe mode still permits file save, import/export and render operators, and is a
-  static validator of code we would not be sending anyway.
-- **Tier B needs a destination policy.** A model must never choose a filesystem
-  destination or an external URL; import/export paths are platform-derived from
-  `project_id`.
+- **Discovery is not permission.** `tools/list` is an input to a platform-owned table.
+- **Fail closed.** A tool appearing in a future upstream version and not classified is
+  denied, and the compatibility test fails so a human classifies it.
+- **Evaluated on our side**, in the worker, before any MCP call. It does not depend on the
+  server or add-on enforcing anything.
+- **Tier C is reachable only by the template catalogue**, never by the model, never by the
+  browser, never by an MCP response, and never with text that was not rendered from a
+  fixed template (§6).
+- **Tier B needs a destination policy.** `render_*_to_path` takes an `output_path`; it is
+  derived from `project_id` by the platform. No model, user or MCP response may influence
+  it.
 
 ---
 
-## 6. SceneSnapshot: same contract, new producer
+## 6. Guarded execution templates — the mechanism
+
+This section is the heart of Requirement 11. It exists because §2.3 leaves no alternative:
+mutation through the official MCP is Python, so the question is not *whether* code is sent
+but *who wrote it*.
+
+### 6.1 Shape
+
+Each template is a module in `backends/official/templates/` containing exactly two things:
+
+```python
+# move_object.py  — illustrative shape, not final code
+
+class Params(NamedTuple):          # typed, validated, canonical
+    object_name: str               # a validated identifier present in the snapshot
+    x: float                       # metres
+    y: float
+    z: float
+
+SOURCE = """\
+import bpy
+def main(p):
+    obj = bpy.data.objects.get(p.object_name)
+    if obj is None:
+        return {"status": "object_not_found"}
+    obj.location = (p.x, p.y, p.z)
+    bpy.context.view_layer.update()
+    return {"status": "ok",
+            "location": tuple(obj.matrix_world.translation)}
+"""                                # a FIXED literal, reviewed like production code
+```
+
+Rendering is a single, shared, audited function:
+
+```
+render(template, params) -> str
+    assert type(params) is template.Params      # typed record, nothing else accepted
+    validate(params)                            # ranges, finiteness, identifier existence
+    return template.SOURCE + FOOTER.replace(PARAMS_PLACEHOLDER, repr(params))
+```
+
+That is the same convention the upstream project uses for its own tools (§2.4): fixed
+source text, one placeholder, one `repr()` of a typed record. It is adopted deliberately
+rather than invented.
+
+### 6.2 Rules, each with a test
+
+| Rule | Enforcement |
+|---|---|
+| Template source is a fixed literal, never assembled at runtime | AST guard: no f-string, no `%`, no `.format`, no `+` on source, no `join` producing source, in any template module |
+| **No interpolation of object names or any value into Python source** | The only substitution site is the single parameter placeholder; a test renders with adversarial values (`"'; import os"`, embedded newlines, `__import__`) and asserts the rendered program's AST is *structurally identical* to the benign rendering, differing only in one literal |
+| Parameters are structured and safely encoded | `repr()` of a `NamedTuple` of validated scalars and validated identifiers; a free-form string field that is not a validated identifier cannot exist |
+| Objects are addressed by validated stable identity | Identifier must resolve in the authoritative SceneSnapshot before rendering (Requirements 7.9, 11.6) |
+| No `eval`/`exec` of model text, no shell, no subprocess, no arbitrary import, no arbitrary path, no arbitrary URL, no package install | AST guard over template sources plus a rendered-source scan; a positive-control test proves the guard fires |
+| The catalogue is **closed** | The registry enumerates templates; an unknown semantic capability returns a structured DENY, tested |
+| No model output can select or reach a template | A test asserts model output flows only into validated `CapabilityArguments`, and that no code path passes provider text to `render` |
+| Templates carry no safety semantics | Templates are narrow single-operation programs; locks, journals, recovery points, preconditions and verification live in `MutationGuard` (Requirement 13.7) |
+
+### 6.3 What a template is *not*
+
+- It is not a Blender abstraction layer. It performs one bounded operation and reports the
+  state it observed.
+- It is not where safety lives. `MutationGuard` decides *whether* to invoke and *whether it
+  worked*.
+- It is not a general scripting facility. There is no template that takes code, an
+  expression, an operator name, an attribute path, or a path/URL.
+- It is not upstream code. No upstream tool-code text is copied into this repository (§14).
+
+---
+
+## 7. Replacing templates with native tools later
+
+The whole point of the boundary. When the official MCP gains native semantic tools — for
+example `object.move`, `material.set_color`, `scene.inspect` — the upgrade is:
+
+```
+   before:  platform capability  →  guarded execution template  →  execute_blender_code
+   after:   platform capability  →  official semantic MCP tool
+```
+
+The change is confined to two files inside the backend: the registry entry for that
+capability, and (eventually) the deletion of its template module. **Nothing above
+`BlenderCapabilityProvider` changes** — not the agent, not the proposal schema, not the
+capability vocabulary, not the guard, not the Jobs, not the API, not the browser.
+
+How that is *proved* rather than asserted (Requirement 17.5):
+
+1. Capability tests are written against `BlenderCapabilityProvider`, not against templates.
+2. A registry-level test executes one capability through two implementations — template and
+   a simulated native tool — and asserts identical canonical `CapabilityResult` and
+   identical resulting `scene_version`.
+3. An AST test asserts no module above the backend imports a template, names a template, or
+   contains Python-as-data.
+4. The compatibility test records the native tools that exist today, so the day a semantic
+   tool appears upstream, it fails and prompts the swap instead of the swap being missed.
+
+The same mechanism is what makes a community MCP a *possible provider* (Requirement 9.12):
+it would be another `BlenderCapabilityProvider` implementation, reviewed on its own merits,
+with nothing above the boundary changing.
+
+---
+
+## 8. SceneSnapshot: same contract, new producer
 
 The Task 1 contract is unchanged. What changes is where the data comes from.
 
 ```
-get_scene_info  (+ get_object_info per object as needed)
-      ↓  raw MCP JSON  — UNTRUSTED external integration data
-mcp/normalize.py
+get_objects_summary  (+ get_object_detail_summary per object,
+                      + read template if unit/dimension data is missing)
+      ↓  raw backend JSON — UNTRUSTED integration data
+capability/normalize.py
       ↓  validate shape, coerce units, map identity, reject anything unexpected
 canonical SceneObject[] + SceneUnits
       ↓
@@ -358,253 +490,307 @@ SceneSnapshot  →  SceneContextService  →  ContextBuilder  →  provider
 
 Normalisation rules:
 
-- Raw MCP output is validated before a snapshot exists. A missing field, an unexpected
+- Raw backend output is validated before a snapshot exists. A missing field, an unexpected
   type, or a non-finite number is a structured failure, not a defaulted value.
-- Identity: the platform's `studio_object_id` remains authoritative. The adapter is the
-  only place it is translated to and from a Blender object name.
-- Units: metres and radians are asserted at the boundary; if the upstream reports
-  something else, `packages/spatial` converts (Requirement 8.9).
-- **Raw MCP output never reaches `AgentProvider`.** A test asserts the provider's
-  context contains no upstream field names.
-- Anything the upstream cannot report is ABSENT in the snapshot rather than guessed.
-  `SceneObject` already distinguishes "no material" from "black", which is exactly the
-  distinction a normaliser must not blur.
+- Identity: `studio_object_id` remains authoritative. The backend is the only place it is
+  translated to and from a Blender object name.
+- Units: metres and radians are asserted at the boundary; anything else is converted through
+  `packages/spatial` (Requirement 8.9).
+- **Raw backend output never reaches `AgentProvider`.** A test asserts the provider's context
+  contains no upstream field names.
+- Anything the backend cannot report is ABSENT rather than guessed. `SceneObject` already
+  distinguishes "no material" from "black", which is exactly the distinction a normaliser
+  must not blur.
+- A backend value never becomes code, a structure-altering template parameter, or a
+  permission decision (Requirement 15.7).
 
-Known normalisation gaps to resolve in Task 5, from the pinned source: `get_scene_info`
-returns a scene summary whose per-object detail is shallower than `SceneObject`
-requires, so the adapter will likely need `get_object_info` per object — an N+1 read
-pattern whose cost must be measured, and which is the reason `inspect_scene` may map to
-a tool SEQUENCE rather than a single tool.
+Known gaps to resolve in Task 5, from the verified upstream: `get_objects_summary` returns a
+collection hierarchy whose per-object detail is shallower than `SceneObject` requires, so
+per-object `get_object_detail_summary` calls are likely needed (an N+1 read pattern whose
+cost must be measured), and scene unit configuration plus world-space dimensions may require
+the read template. This is why `inspect_scene` may map to a tool *sequence*.
 
 ---
 
-## 7. Mutation: our guard, their implementation
-
-The guard is the part worth owning, and it is not a Blender implementation.
+## 9. Mutation: our guard, their transport
 
 ```
 PlannedOperation (capability-named, canonical units, resolved stable id)
         ↓
-acquire project lock                                     ← ours
+acquire project lock                                          ← ours
         ↓
-inspect authoritative state via gateway (read capability) ← theirs, normalised by us
+inspect authoritative state via read capability               ← official tools, normalised by us
         ↓
-verify scene_version                                     ← ours (Requirement 2)
+verify scene_version                                          ← ours (Requirement 2)
         ↓
-already-applied? desired-after already present → done, DO NOT invoke  ← ours
+already-applied? desired-after already present → done, DO NOT invoke   ← ours
         ↓
-verify expected-before                                   ← ours
+verify expected-before                                        ← ours
         ↓
-persist intended operation + required version + expected/desired + recovery point ← ours
+persist intent + required version + expected/desired + recovery point   ← ours
         ↓
-invoke MUTATION capability through the gateway            ← THEIRS
+invoke mutation capability                                     ← ours (template) via official transport
         ↓
-inspect authoritative state again                         ← theirs, normalised by us
+save the project deliberately                                  ← ours (Requirement 13.8)
         ↓
-verify desired-after reached; compute resulting scene_version ← ours
+inspect authoritative state again                              ← official tools, normalised by us
         ↓
-durable result, journal completion                        ← ours
+verify desired-after reached; compute resulting scene_version   ← ours
+        ↓
+durable result, journal completion                             ← ours
 ```
 
-**Why the guard must exist even though we are reusing an MCP.** An external MCP
-mutation tool makes no retry-safety promise, and a crash between "tool returned" and
-"we recorded it" is precisely the window Spec 001 was built to survive. The guard turns
-a non-idempotent third-party call into an idempotent platform operation by *reading
-before deciding* — the same reasoning as Spec 001, with the read now coming from the
-gateway. The decision order (already-applied → scene version → expected-before) is
-unchanged and is still the thing that stops a verbatim retry being rejected as stale.
+**Why the guard must exist even though we adopted an MCP.** The official transport makes no
+retry-safety promise, and a crash between "the code ran" and "we recorded it" is precisely
+the window Spec 001 was built to survive. The guard turns a non-idempotent call into an
+idempotent platform operation by *reading before deciding*. The decision order
+(already-applied → scene version → expected-before) is unchanged and is still the thing
+that stops a verbatim retry being rejected as stale.
 
-Absolute desired-after targets remain mandatory for every mutating capability, so a
-retry never re-applies a relative delta.
+Absolute desired-after targets remain mandatory for every mutating capability, so a retry
+never re-applies a relative delta. `MutationGuard` contains no bpy, no geometry maths and
+no template source — asserted by an AST test.
 
----
-
-## 8. Units, angles, colour, sizing — unchanged (Task 2)
-
-Canonical: metres, radians, unitless absolute scale, absolute dimensions in metres,
-linear sRGB RGBA. One conversion site (`packages/spatial`), enforced by the source
-guard, now also covering the MCP boundary: percentages and colour names never cross it.
-
-`set_object_dimensions` remains the primary resize representation (design-space size
-intent); `scale_object` remains for explicit transform-scale intent.
+**Do not assume an operation worked because no exception occurred.** A template returning
+`{"status": "ok"}` is evidence of nothing. The observed post-state, read back and verified,
+is the only evidence that counts.
 
 ---
 
-## 9. Object resolution, clarification, multi-operation — unchanged in substance
+## 10. Units, angles, colour, sizing — unchanged (Task 2)
 
-Ordered resolution rules (explicit stable id → exact name → case-insensitive name →
-browser selection → clarification answer → several matches = clarification → none =
+Canonical: metres, radians, unitless absolute scale, absolute dimensions in metres, linear
+sRGB RGBA. One conversion site (`packages/spatial`), enforced by the source guard, now also
+covering the backend boundary: percentages, degrees, direction tokens and colour names never
+cross it, and never appear as template parameters.
+
+`set_object_dimensions` remains the primary resize representation (design-space size intent);
+scale-carrying transform intent remains available for explicit unitless scale.
+
+---
+
+## 11. Object resolution, clarification, multi-operation — unchanged in substance
+
+Ordered resolution rules (explicit stable id → exact name → case-insensitive name → browser
+selection → clarification answer → several matches = clarification → none =
 `OBJECT_NOT_FOUND`), the session-scoped `ClarificationStore`, and the sequential,
-non-atomic, resumable multi-operation semantics with chained scene versions all carry
-over from the pre-refactor design unchanged. The only difference is that a resolved
-operation is dispatched to a capability rather than to a bespoke tool.
+non-atomic, resumable multi-operation semantics with chained scene versions all carry over
+unchanged. The only difference is that a resolved operation is dispatched to a capability.
 
 ---
 
-## 10. Failure semantics
+## 12. Failure semantics
 
 | Failure | Outcome | Jobs | Project |
 |---|---|---|---|
 | Provider unreachable / unauthenticated | `AgentError` `PROVIDER_UNAVAILABLE` | none | untouched |
 | Model output malformed / unknown capability | `AgentError` `VALIDATION_ERROR` | none | untouched |
 | Capability denied by policy | `AgentError` `VALIDATION_ERROR`, refusal recorded | none | untouched |
-| Capability unavailable in this implementation | structured capability-named failure | none | untouched |
+| Capability has no native tool and no template entry | structured capability-named failure (DENY) | none | untouched |
 | MCP server not running / add-on not connected | `BLENDER_UNAVAILABLE` | none | untouched |
-| MCP add-on/server version mismatch | `BLENDER_UNAVAILABLE` at startup handshake | none | untouched |
-| Raw MCP output fails normalisation | `VALIDATION_ERROR` | none | untouched |
+| Add-on / server disagreement at startup | `BLENDER_UNAVAILABLE` before any capability is served | none | untouched |
+| Raw backend output fails normalisation | `VALIDATION_ERROR` | none | untouched |
 | Ambiguous referent | `Clarification` | none | untouched |
 | Scene changed since planning | `SCENE_VERSION_MISMATCH`, snapshot refreshed, ≤1 auto re-plan | that Job fails | untouched |
 | Target object moved | `PRECONDITION_MISMATCH` | that Job fails | untouched |
-| MCP mutation returned but verification failed | `VERIFY_FAILED`, recovery point preserved | that Job fails | consistent |
+| Template ran but verification failed | `VERIFY_FAILED`, recovery point preserved | that Job fails | consistent |
+| Save failed after a successful mutation | `VERIFY_FAILED`, not reported as success | that Job fails | recovery point preserved |
 | Lock conflict (read or mutate) | `LOCK_CONFLICT` | that Job fails | untouched |
 | Mutation fails mid-plan | per-operation status | earlier applied, later not attempted | consistent |
 | Preview fails | job still `succeeded` + `preview_error` | — | mutation durable |
 
 ---
 
-## 11. Security
+## 13. Security
 
 ### Threat model
 
 | Threat | Control |
 |---|---|
-| Prompt injection → code execution | `execute_blender_code` is Tier C and never in the model's catalogue; model output is data validated against a capability schema and never forwarded to a code-execution tool |
-| Model names a third-party tool directly | The catalogue contains platform capability names only; the adapter is the sole translator |
+| Prompt injection → code execution | No code-execution capability is in the model's catalogue; model output is data validated into typed `CapabilityArguments`; only fixed templates render Python, and never from model text |
+| Model smuggles Python through a parameter | Parameters are validated scalars and validated identifiers encoded as one Python literal; the adversarial-rendering test proves program structure cannot change |
+| Model names a backend tool directly | The catalogue contains platform capability names only; the backend is the sole translator |
 | Unknown upstream tool becomes reachable | Policy fails closed; compatibility test fails on inventory change |
-| Model supplies a path or URL | No path/URL field exists in any proposal, plan, Job or capability argument; import/export destinations are platform-derived |
+| Model supplies a path or URL | No path/URL field exists in any proposal, plan, Job, capability argument or template parameter; render destinations are platform-derived |
 | Model overrides identity | `project_id`/`user_id`/`session_id` come from `TrustedIdentity`; the proposal schema has no identity fields |
-| Model bypasses object resolution | Every reference resolved server-side against the snapshot |
-| MCP add-on port reachable from off-machine | Loopback-only binding, config guard rejects non-loopback, never exposed or tunnelled, no browser access (Requirement 11) |
-| Third party receives user design data | Telemetry disabled by default and verified; `user_prompt` never populated with user content |
-| Tier B service exfiltrates or imports arbitrary content | Disabled unless configured; bounded providers; platform-chosen destinations |
-| Raw MCP output poisons the agent | Normalised and validated first; provider never sees raw output |
+| Model bypasses object resolution | Every reference resolved server-side against the snapshot before rendering |
+| MCP response influences execution | Backend output is normalised, validated data only; it can never become code, a structure-altering parameter, or a permission decision |
+| Add-on port reachable from off-machine | Loopback-only, config guard rejects non-loopback, never exposed / tunnelled / proxied, no browser access (Requirement 12) |
+| Wrong project modified | Every job carries `project_id`; the backend proves it is acting on that project before mutating (Requirement 13.9) |
+| Upstream telemetry or off-machine transmission | Disabled by default and verified in configuration tests; no user content in third-party analytics parameters |
+| Developer-only dangerous tooling leaks to production | Isolated from the product path, disabled by default, absence asserted in the production-safe configuration |
 
 ### The revised Spec 001 invariant
 
-Spec 001 asserted **"the workstation never listens"** and enforced it with an AST guard
-over the worker package. Spec 002 must relax the letter of that rule, because the
-external add-on legitimately opens a local socket, while keeping the property that
-actually matters:
+Spec 001 asserted **"the workstation never listens"** and enforced it with an AST guard over
+the worker package. Spec 002 must relax the *letter* of that rule, because the official
+add-on legitimately opens a local socket, while keeping the property that matters:
 
-> **No Blender or MCP service on the workstation is externally reachable.**
+> **No Blender or MCP execution interface is externally reachable.**
 
-Concretely: loopback binding only; never `0.0.0.0`; never a LAN or public address by
-default; the add-on port is never exposed through the control plane, tunnelled, or
-port-forwarded; the browser has no access to it; and the worker→control-plane connection
-stays outbound and authenticated. The old AST guard is re-scoped from "no bind calls
-anywhere" to "our code opens no listening socket, and the external MCP host must be
-loopback" — a configuration guard plus a narrower code guard, replacing a rule that is
-no longer literally true.
+Concretely: loopback binding only; never `0.0.0.0`, LAN or public; the add-on port is never
+exposed through the control plane, tunnelled, proxied or port-forwarded; the browser has no
+access to it; and the worker→control-plane connection stays outbound and authenticated. The
+old AST guard is re-scoped from "no bind calls anywhere" to "our code opens no listening
+socket, and the configured backend host must be loopback" — a configuration guard plus a
+narrower code guard, replacing a rule that is no longer literally true.
 
 ---
 
-## 12. Testing architecture
+## 14. Third-party governance
 
-Four tiers. **The default suite stays deterministic and offline** — no network, no API
-key, no Blender, and no MCP server.
+- **Licence.** Both the official add-on and the MCP server carry
+  `SPDX: GPL-3.0-or-later` (© Blender Authors). The integration is therefore deliberately a
+  **separate-process protocol integration**: we launch the pinned server as a child process
+  and speak MCP over stdio. We do not import `blmcp.*`, do not vendor the add-on, and do not
+  copy upstream tool-code text into this repository. Task 3 step 1 records the licence for
+  the exact artefact installed and confirms compatibility.
+- **Pinning.** Server build and add-on build are pinned as a pair, `latest` is never used, and
+  the pin records source, commit/release, add-on build, Blender floor and licence
+  (Requirement 16.1–16.2).
+- **Upgrades are never blind.** discover → compatibility suite → safety tests → Blender
+  acceptance → only then move the pin. A failure anywhere leaves the pin untouched. The
+  verified Blender MCP version, the verified Blender version and the date are recorded in
+  `verification.md` (Requirement 16.3–16.6).
+- **Telemetry / off-machine transmission** is disabled by default and verified; no tool
+  parameter is populated with the user's verbatim words for third-party purposes
+  (Requirement 16.7–16.8).
+- **Community implementations** are references only until explicitly reviewed
+  (Requirement 9.12). Not integrated in Task 3.
+
+---
+
+## 15. Migration strategy
+
+Incremental, and explicitly not a rewrite (Requirement 19.4).
+
+1. **Now:** Spec 001's `move_object` path (`services/blender-mcp`, `blender_ops.py`) remains
+   the working implementation on `main`. Nothing is deleted.
+2. **Task 3:** the official-MCP spike. Proves or disproves that our safe, durable
+   architecture can use the official MCP as its backend without giving the LLM unrestricted
+   execution.
+3. **Tasks 4–6:** provider, backend, policy, normalisation and guard land behind the
+   boundary, with the legacy path still available.
+4. **Task 10:** the guarded core modelling capabilities land. The legacy implementation
+   becomes the **test oracle**: the same operation is executed both ways and the resulting
+   `scene_version` must agree.
+5. **After parity:** retiring the duplicated platform implementation is a separate,
+   deliberately reviewed step (Requirement 19.5) — not part of Spec 002 unless parity is
+   proven early.
+
+**The superseded read work is preserved, not lost.** The platform-owned `inspect_scene`
+implementation written for the *old* Task 3 (its MCP tool, Blender script, `SceneAdapter`
+read methods, worker read path, `inspect-scene-result` contract, and the richer
+`studio_scene` fixture, with 52 passing Blender tests) is committed on branch
+**`wip/spec002-custom-blender-oracle`** at **`fde4115`**. `main` does not carry it. It is the
+read oracle Task 5's normalisation is validated against, and the fixture work is needed
+either way. It is **not** Task 3 progress: Task 3 is the spike below and remains `[ ]`.
+
+---
+
+## 16. Testing architecture
+
+Four tiers. **The default suite stays deterministic and offline** — no network, no API key,
+no Blender, no MCP server.
 
 ```
 1. Unit / contract        pure logic, schema conformance, cross-language parity
                           (Task 1 + Task 2, unchanged)
 
-2. Fake-gateway pipeline  FakeBlenderMcpGateway replays canned MCP responses and
+2. Fake-backend pipeline  FakeBlenderBackend replays canned backend responses and
                           FakeLlmProvider scripts proposals, so the WHOLE pipeline —
                           context → proposal → validation → resolution → policy →
-                          plan → Job → guard → gateway → normalisation → outcome —
+                          plan → Job → guard → capability → normalisation → outcome —
                           is tested with neither Blender nor MCP present.
-                          Policy, fail-closed denial, idempotency and injection
-                          resistance are all proven here.
+                          Policy fail-closed, template-catalogue closure, adversarial
+                          template rendering, idempotency and injection resistance are
+                          all proven here.
 
-3. Real MCP + real Blender  marked `mcp`, opt-in: a running pinned MCP server and a
-                          real Blender session. Includes the compatibility test that
-                          pins the tool inventory and schemas.
+3. Real official MCP      marked `mcp`, opt-in: the pinned official server and a real
+   + real Blender         Blender 5.2. Includes the compatibility test that pins the tool
+                          inventory and schemas, and the real-mutation verification.
 
 4. Live provider          marked separately, opt-in, credential-gated, and a REQUIRED
                           gate before Spec 002 is product-complete.
 ```
 
-The Spec 001 Blender tier (`-m blender`) remains as-is while the legacy implementation
-is retained as the migration oracle.
+The Spec 001 Blender tier (`-m blender`) remains as-is while the legacy implementation is
+retained as the migration oracle.
 
-### Acceptance scenarios (capability-named, unchanged in intent)
+### Acceptance scenarios (capability-named)
 
 | | Instruction | Expected |
 |---|---|---|
 | A | "What objects are in this scene?" | truthful `Answer` from a normalised snapshot; zero Jobs |
-| B | "Move Cube 30 cm left." | verified −0.30 m; preview; success |
+| B | "Move Cube 30 cm left." | verified −0.30 m; saved; preview; success |
 | C | "Rotate Cube 45 degrees around Z." | verified π/4 rad |
 | D | "Make Cube 20% smaller." | absolute 1.6 m dimensions; verified |
 | E | "Make Cube a warm beige." | verified base colour, visible in the preview |
 | F | "Move Cube 20 cm right and make it beige." | ordered ops 0,1; chained versions; ONE browser reply |
 | G | two chairs; "Move the chair right." | `Clarification`; zero Jobs |
-| H | instruction demanding Python/shell/file access | refused; no Tier C call attempted |
+| H | instruction demanding Python / shell / file access | refused; no code-execution call attempted |
 | I | scene modified externally after the snapshot | `SCENE_VERSION_MISMATCH`; nothing mutated |
 | J | a discovered-but-unclassified upstream tool | denied, and the compatibility test fails |
+| K | adversarial object name / parameter value | rendered program structurally identical; no execution change |
+
+Failure cases required at tier 2 and, where meaningful, tier 3: Blender unavailable, worker
+disconnected, MCP server down, add-on disagreement, project lock conflict, render failure,
+invalid object, invalid units, duplicate job, interrupted operation.
 
 ---
 
-## 13. Migration strategy
-
-Incremental, and explicitly not a rewrite (Requirement 18.4).
-
-1. **Now:** Spec 001's `move_object` path and `services/blender-mcp` remain the working
-   implementation. Nothing is deleted.
-2. **Task 3:** integration spike against the pinned upstream. Read-only. Proves or
-   disproves the architecture, and resolves §2.2's mutation question.
-3. **Tasks 4–6:** gateway, policy, normalisation and guard land behind the abstraction,
-   with the legacy path still serving mutations.
-4. **Task 10:** MCP-backed mutation capabilities land where the chosen option provides
-   them. The legacy implementation becomes the **test oracle**: the same operation is
-   executed both ways and the resulting `scene_version` must agree.
-5. **After parity:** retiring the duplicated platform implementation is a separate,
-   deliberately reviewed step — not part of Spec 002 unless parity is proven early.
-
-The Task 3 work already written in the working tree (a platform-owned `inspect_scene`,
-its Blender script, the richer fixture, and the read-path guard) is **retained** under
-this strategy: it is the read oracle the normalisation work in Task 5 is validated
-against, and the fixture is needed either way.
-
----
-
-## 14. Decisions requiring review
+## 17. Decisions requiring review
 
 ### Closed by review
 
-- **Scene-version enforcement** — enforced in-lock precondition with chained
-  per-operation requirements (§7, Requirement 2).
+- **Official Blender Lab MCP is the primary Blender backend**, behind
+  `BlenderCapabilityProvider` / `OfficialBlenderLabBackend`.
+- **We are not building a second MCP server.**
+- **No model-authored code, no user-authored arbitrary Python.** Mutation Python comes only
+  from a closed catalogue of reviewed, parameterised, platform-owned templates.
+- **Unknown semantic capability → DENY.**
+- **Community MCPs are references / possible future providers / review-gated fallback only.**
+  Not integrated in Task 3.
+- **Policy fails closed**; the upstream weak sandbox is defence-in-depth, never authorisation.
+- **Loopback invariant** replaces "never listens" with "no execution interface is externally
+  reachable".
+- **Scene-version enforcement** — in-lock precondition with chained per-operation requirements.
 - **Digest projection** — explicit versioned allow-list `studio-scene-v1` (Task 1).
 - **Resize representation** — `set_object_dimensions` with absolute metres primary.
-- **Canonical colour** — linear sRGB RGBA, with the transfer function decoded.
-- **Reuse over reinvention** — an existing Blender MCP is the capability engine.
-- **Policy fails closed** — an unclassified tool is denied.
-- **Loopback invariant** — replaces "never listens" with "not externally reachable".
-- **Telemetry** — disabled by default, verified in configuration tests.
+- **Canonical colour** — linear sRGB RGBA, transfer function decoded.
 - **Read consistency** — a read holds the project lock.
+- **High-level architectural capability is built above `BlenderCapabilityProvider`**, never as
+  another MCP implementation.
+- **Version pinning** — pair-pinned, never auto-upgraded, verified version recorded in
+  `verification.md`.
 
 ### Open
 
-**D1 — How mutations are performed, given §2.2.** `ahujasid/blender-mcp` 1.9.4 exposes
-no semantic mutation tool; all modelling goes through `execute_blender_code`, which our
-policy denies. Choose Option 1 (hybrid: keep our small mutation set), Option 2
-(platform-generated templates through the code tool, never model-authored), or Option 3
-(different upstream). **Task 3 gathers the evidence; this decision gates Task 10, not
-Task 4.**
+**D1 — Session model: interactive add-on vs `*_for_cli` background.** The interactive path
+has the full read surface and deferred responses but operates on whatever file is open; the
+CLI path takes an explicit `blend_file` (matching Spec 001) but discards changes unless our
+template saves, and can create a numbered sibling file. This choice drives project isolation,
+lock scope, crash recovery and how a project is opened. **Task 3 steps 2, 7, 11 and 15
+gather the evidence.**
 
-**D2 — Blender session model.** Interactive long-lived session with the add-on versus
-Spec 001's headless subprocess-per-operation. Affects project isolation, lock scope,
-crash recovery and how a project file is opened. Task 3 spike item.
+**D2 — Does `inspect_scene` need a read template?** Depends on whether
+`get_objects_summary` + `get_object_detail_summary` supply scene units and world-space
+dimensions. Task 3 step 6.
 
-**D3 — Which real provider** (Astra, Codex, or another `AgentProvider`-compatible
-implementation) and **D4 — the structured-output mechanism**. Unchanged from before;
-deferred to Task 9.
+**D3 — Snapshot read cost.** If a snapshot requires `get_object_detail_summary` per object, a
+large scene costs N+1 round trips. Measure in Task 3; decide caching and summarisation in
+Task 5.
 
-**D5 — Snapshot read cost.** If `inspect_scene` requires `get_object_info` per object,
-a large scene costs N+1 MCP round trips. Measure in Task 3; decide caching and
-summarisation in Task 5.
+**D4 — Which real provider** (Astra, Codex, or another `AgentProvider`-compatible
+implementation) and **D5 — the structured-output mechanism**. Deferred to Task 9.
 
-**D6 — File and reference ingestion in Spec 002 or Spec 003** (Requirement 16.4).
-Task 12 decides explicitly.
+**D6 — File and reference ingestion in Spec 002 or Spec 003** (Requirement 17.6). Task 12
+decides explicitly.
 
-**D7 — Preview ownership.** Spec 001's deterministic offscreen Workbench preview versus
-the upstream's GUI-dependent `get_viewport_screenshot`. Current intent: keep ours, treat
-theirs as an extra capability.
+**D7 — Preview ownership.** Spec 001's deterministic offscreen Workbench preview versus the
+official `render_*_to_path` / screenshot tools. Current intent: keep ours as the product
+preview, treat theirs as extra capabilities.
+
+**D8 — Canonical pin identity.** The design was verified against the GitHub mirror commit
+`4309a396…`; the canonical `projects.blender.org` identity and the `.mcpb` release version
+must be reconciled and recorded in Task 3 step 1.

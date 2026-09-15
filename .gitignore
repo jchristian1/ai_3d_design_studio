@@ -31,12 +31,16 @@ next-env.d.ts
 *.blend2
 
 # Runtime data
-runtime/
-data/
-storage/
-renders/
-previews/
-logs/
+#
+# Anchored to the repository root on purpose: these names are root-level runtime
+# directories, and an unanchored pattern would also swallow legitimate source
+# packages such as services/api/studio_api/storage.
+/runtime/
+/data/
+/storage/
+/renders/
+/previews/
+/logs/
 
 # OS
 .DS_Store
