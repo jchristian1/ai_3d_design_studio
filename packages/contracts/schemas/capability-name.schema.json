@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capability-name.schema.json",
+  "title": "CapabilityName",
+  "description": "The platform capability vocabulary the agent reasons about. These names are independent of any Blender backend: no MCP tool name and no Blender Python appears above the capability boundary. 'execute_blender_python' is the model-authored code path and is classified before execution.",
+  "type": "string",
+  "enum": [
+    "inspect_scene",
+    "inspect_object",
+    "move_object",
+    "rotate_object",
+    "scale_object",
+    "set_object_dimensions",
+    "create_object",
+    "duplicate_object",
+    "delete_object",
+    "set_material_color",
+    "create_wall",
+    "create_floor",
+    "create_ceiling",
+    "create_opening",
+    "create_door_placeholder",
+    "create_window_placeholder",
+    "render_preview",
+    "export_glb",
+    "execute_blender_python"
+  ]
+}

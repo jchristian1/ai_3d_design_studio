@@ -171,6 +171,8 @@ export const SCHEMA_FILES = {
   Scale3: "scale3.schema.json",
   Job: "job.schema.json",
   JobType: "job-type.schema.json",
+  CapabilityName: "capability-name.schema.json",
+  AgentResponse: "agent-response.schema.json",
   JobClaim: "job-claim.schema.json",
   RequestOrigin: "request-origin.schema.json",
   MoveObjectPlan: "move-object-plan.schema.json",

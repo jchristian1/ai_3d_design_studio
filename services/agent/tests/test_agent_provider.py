@@ -423,22 +423,129 @@ def _imported_modules(path: Path) -> set[str]:
     return modules
 
 
-@pytest.mark.parametrize(
-    "forbidden",
-    ["bpy", "blender_worker", "blender_mcp", "subprocess", "shutil", "fcntl", "os"],
-)
-def test_13_agent_package_has_no_execution_dependencies(forbidden):
-    """The agent interprets language; it must not be able to execute anything."""
+#: Modules permitted to reach the operating system, with the reason.
+#:
+#: Spec 001 asserted that NO module in the agent package could import subprocess, os,
+#: shutil or pathlib. That was an airtight proxy for the property that actually matters —
+#: "interpreting language must never become executing something" — for as long as the
+#: agent made no external calls at all.
+#:
+#: Reaching GPT-6 Astra through the locally installed Codex CLI makes the literal form of
+#: that rule impossible: running a child process IS the integration. Rather than delete
+#: the invariant, it is narrowed to the two modules whose entire job is to invoke one
+#: fixed binary, and the real property is asserted directly below instead.
+OS_ACCESS_ALLOWED = {
+    "codex.py": "runs the fixed `codex` binary; the prompt goes on stdin, never in argv",
+    "codex_astra.py": "passes platform-chosen image paths to the Codex client",
+    "agent_input.py": (
+        "types ReferenceImage.path, a platform-chosen location the provider attaches "
+        "bytes from; it imports pathlib for the annotation and performs no I/O"
+    ),
+}
+
+#: Forbidden everywhere, without exception. The agent still cannot touch Blender.
+ALWAYS_FORBIDDEN = ["bpy", "blender_worker", "blender_mcp", "fcntl"]
+
+#: Forbidden except in the allow-listed modules above.
+OS_MODULES = ["subprocess", "shutil", "os", "pathlib"]
+
+
+@pytest.mark.parametrize("forbidden", ALWAYS_FORBIDDEN)
+def test_13_agent_package_never_reaches_blender_or_locks(forbidden):
+    """The agent interprets language; it must never touch Blender or a lock."""
     for source in sorted(AGENT_PACKAGE.rglob("*.py")):
         assert forbidden not in _imported_modules(source), (
             f"{source.name} imports {forbidden}"
         )
 
 
-def test_13_agent_does_not_touch_the_filesystem_or_paths():
+@pytest.mark.parametrize("forbidden", OS_MODULES)
+def test_13_only_the_codex_bridge_may_reach_the_operating_system(forbidden):
+    """Every other agent module stays pure, so language cannot become execution."""
     for source in sorted(AGENT_PACKAGE.rglob("*.py")):
-        modules = _imported_modules(source)
-        assert "pathlib" not in modules, f"{source.name} handles paths"
+        if source.name in OS_ACCESS_ALLOWED:
+            continue
+        assert forbidden not in _imported_modules(source), (
+            f"{source.name} imports {forbidden}; if that is deliberate, add it to "
+            "OS_ACCESS_ALLOWED with a reason"
+        )
+
+
+def test_13_the_allowances_are_still_needed():
+    """An allowance that stops being used must be removed, not left open."""
+    for name in OS_ACCESS_ALLOWED:
+        matches = list(AGENT_PACKAGE.rglob(name))
+        assert matches, f"{name} is allow-listed but no longer exists"
+
+
+def test_13_the_input_carrier_performs_no_io():
+    """`agent_input.py` is allow-listed for a type annotation only; hold it to that."""
+    source = AGENT_PACKAGE / "agent_input.py"
+    tree = ast.parse(source.read_text("utf-8"))
+    io_methods = {
+        "open",
+        "read_text",
+        "read_bytes",
+        "write_text",
+        "write_bytes",
+        "unlink",
+        "mkdir",
+        "rglob",
+        "glob",
+        "exists",
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            callee = node.func
+            name = getattr(callee, "attr", None) or getattr(callee, "id", None)
+            assert name not in io_methods, f"agent_input.py performs I/O via {name}()"
+
+
+def test_13_only_one_module_may_start_a_process():
+    """Process invocation is concentrated in a single reviewable place."""
+    importers = [
+        source.name
+        for source in sorted(AGENT_PACKAGE.rglob("*.py"))
+        if "subprocess" in _imported_modules(source)
+    ]
+    assert importers == ["codex.py"], (
+        f"exactly one module may start a process, found {importers}"
+    )
+
+
+def test_13_the_prompt_is_never_built_into_a_command_line():
+    """The property the old blanket rule was protecting, asserted directly.
+
+    Untrusted text reaches Codex on stdin. If it were ever interpolated into argv it
+    could influence how the process is invoked, so the command list must contain no
+    f-string and no concatenation.
+    """
+    source = AGENT_PACKAGE / "codex.py"
+    tree = ast.parse(source.read_text("utf-8"))
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        is_run = (
+            isinstance(callee, ast.Attribute)
+            and callee.attr == "run"
+            and isinstance(callee.value, ast.Name)
+            and callee.value.id == "subprocess"
+        )
+        if not is_run:
+            continue
+        keywords = {keyword.arg for keyword in node.keywords}
+        assert "input" in keywords, "the prompt must be passed via input=, not argv"
+        assert "shell" not in keywords, "a shell must never be used"
+
+    # The argument list is assembled from literals and configuration only.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.List):
+            for element in node.elts:
+                assert not isinstance(element, ast.JoinedStr), (
+                    "a command element must not be an f-string"
+                )
 
 
 def test_13_agent_does_not_execute_mcp_tools():
