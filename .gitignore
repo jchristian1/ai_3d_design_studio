@@ -34,3 +34,8 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated Blender test fixtures.
+# The generator script and seed_project.spec.json are the committed source of
+# truth; regenerate with:  python3 -m studio_fixtures.regenerate
+tests/fixtures/blender/build/

@@ -1,0 +1,44 @@
+{
+  "fixture_version": "1.0.0",
+  "description": "Deterministic seed Blender project for Spec 001. Contains exactly one object, a Cube at the world origin, so every integration and E2E run starts from a known state (Cube X = 0). Generated from scratch by generate_seed_project.py; never hand-edited.",
+  "spec_001_scenario": "Move Cube 50 cm to the right -> Cube X = 0.50 m",
+  "blend_filename": "seed_project.blend",
+  "object_id_property": "studio_object_id",
+  "scene": {
+    "name": "Scene",
+    "start_empty": true,
+    "unit_system": "METRIC",
+    "length_unit": "METERS",
+    "scale_length": 1.0,
+    "expected_object_names": ["Cube"]
+  },
+  "objects": [
+    {
+      "name": "Cube",
+      "object_id": "obj_cube001",
+      "type": "MESH",
+      "primitive": "cube",
+      "size_meters": 2.0,
+      "expected_dimensions_meters": { "x": 2.0, "y": 2.0, "z": 2.0 },
+      "location_meters": { "x": 0.0, "y": 0.0, "z": 0.0 },
+      "rotation_euler_radians": { "x": 0.0, "y": 0.0, "z": 0.0 },
+      "scale": { "x": 1.0, "y": 1.0, "z": 1.0 },
+      "resolvable_by": ["name", "object_id"]
+    }
+  ],
+  "determinism": {
+    "note": "Blender embeds its version and file paths in the .blend container, so the binary is not byte-for-byte reproducible and no attempt is made to force that. What is guaranteed reproducible is the SCENE STATE relevant to Spec 001: the object list, each object's name, stable object_id, world position, rotation, scale, dimensions, and the scene unit configuration. verify_scene_digest() compares exactly those.",
+    "digest_fields": [
+      "scene.unit_system",
+      "scene.length_unit",
+      "scene.scale_length",
+      "objects[].name",
+      "objects[].object_id",
+      "objects[].type",
+      "objects[].world_position_meters",
+      "objects[].rotation_euler_radians",
+      "objects[].scale",
+      "objects[].dimensions_meters"
+    ]
+  }
+}

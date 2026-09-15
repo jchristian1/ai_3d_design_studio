@@ -45,9 +45,13 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - No `execute_python`, no network listener, no MCP SDK dependency; bpy isolated to one module (all AST-verified).
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
-- [ ] 5. Seed test Blender project
-  - Create a headless-generatable `.blend` (or generation script) with `Cube` at X=0.
-  - Provide a helper to read `Cube.location` for assertions.
+- [x] 5. Seed test Blender project
+  - Machine-readable `seed_project.spec.json` is the source of truth; `generate_seed_project.py` builds the scene from it inside Blender (factory startup, empty scene, explicit meter units).
+  - Scene contains exactly one `Cube` at world origin with stable id `obj_cube001` in the adapter's `studio_object_id` custom property, resolvable by name and by object_id.
+  - Generated `.blend` lives in git-ignored `tests/fixtures/blender/build/`; the generator and spec are committed instead of the binary.
+  - `working_copy()` hands tests an isolated temp copy so the canonical fixture is never mutated; verified by SHA-256 before/after.
+  - Determinism is asserted on the spec-relevant scene state (`scene_state_digest`), not on the non-reproducible `.blend` binary.
+  - `python3 -m studio_fixtures.regenerate` generates / verifies / inspects; Blender located via the Task 4 runtime helper.
   - _Requirements: 8.1_
 
 - [ ] 6. Blender worker execution workflow
