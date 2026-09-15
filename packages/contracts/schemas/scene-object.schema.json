@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scene-object.schema.json",
+  "title": "SceneObject",
+  "description": "One object as the platform is willing to DESCRIBE it to a language model. Authoritative and read-only: it is produced from a real Blender scene and is never model-authored. Every quantity carries its unit in the field name or in its own schema — position and dimensions in canonical METERS, rotation in canonical RADIANS, scale unitless — so a value cannot be misread. NOTE WHAT IS ABSENT, and note that `additionalProperties: false` makes the absence structural rather than a convention: there is no .blend path, no filepath, no filename, no directory, no hostname, no worker id, no token, no environment, no Blender pointer or memory address, no data-block reference, no Python/script/expression field, and no free-form metadata bag. A prompt-injection attempt therefore has nothing to aim at: the snapshot cannot carry a path for a model to echo back, and the model cannot smuggle one in, because the same closed schema is validated in both directions. `studio_object_id` is absent for an object that has not been given a stable id; a resolver may still resolve it by name, but the platform prefers the stable id (see .kiro/steering/blender.md).",
+  "type": "object",
+  "properties": {
+    "studio_object_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Stable machine-readable identifier, e.g. obj_cube001, stored on the Blender object as a custom property. Absent when the object has none."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Blender object name, e.g. Cube. Unique within a .blend, which is why it is a usable total-order fallback when sorting for the digest."
+    },
+    "object_type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "Blender object type, e.g. MESH, LIGHT, CAMERA. A constrained string rather than a closed enum on purpose: this vocabulary is OBSERVED from Blender rather than authored by the platform, and Blender has renamed members across releases (GPENCIL -> GREASEPENCIL), so a closed list would reject a project we can legitimately read while adding no safety — an unexpected type only describes, it cannot act. Which types the platform is willing to OPERATE on is enforced by the operation catalogue, not here."
+    },
+    "world_position_meters": {
+      "$ref": "vec3.schema.json",
+      "description": "World-space origin of the object, in canonical meters."
+    },
+    "dimensions_meters": {
+      "$ref": "vec3.schema.json",
+      "description": "World-space bounding-box size, in canonical meters. This is PHYSICAL SIZE, and is what user-facing resize language targets."
+    },
+    "rotation_euler_radians": {
+      "$ref": "euler-radians.schema.json",
+      "description": "XYZ Euler rotation in canonical radians."
+    },
+    "scale": {
+      "$ref": "scale3.schema.json",
+      "description": "Unitless transform scale. Distinct from dimensions_meters: scale and dimensions interact through mesh bounds."
+    },
+    "visible": {
+      "type": "boolean",
+      "description": "Whether the object is visible in the scene. Part of semantic state: hiding an object changes what the agent should reason about, so it participates in the scene-version digest."
+    },
+    "material": {
+      "$ref": "material-summary.schema.json",
+      "description": "Basic summary of the object's first material. Absent when the object has no material."
+    }
+  },
+  "required": [
+    "name",
+    "object_type",
+    "world_position_meters",
+    "dimensions_meters",
+    "rotation_euler_radians",
+    "scale",
+    "visible"
+  ],
+  "additionalProperties": false
+}

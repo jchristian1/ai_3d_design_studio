@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "error-code.schema.json",
   "title": "ErrorCode",
-  "description": "Structured, machine-readable error codes surfaced across every service boundary. This enum is the single canonical list; TypeScript and Python constants are verified against it by conformance tests. The codes are distinct because callers must react differently: PRECONDITION_MISMATCH means the scene moved under us and a human decision is needed; MUTATION_FAILED means the write itself failed and may be retried; VERIFY_FAILED means the write appeared to succeed but the scene disagrees and must be rolled back; OBJECT_NOT_MOVABLE means the target is locked or linked and no retry will help. UNSUPPORTED_INSTRUCTION means the agent understood the request was a command but cannot interpret it \u2014 the user should rephrase, which is different from a malformed request. PROVIDER_UNAVAILABLE means an AI provider is not configured or reachable, which is an operator problem rather than a user error.",
+  "description": "Structured, machine-readable error codes surfaced across every service boundary. This enum is the single canonical list; TypeScript and Python constants are verified against it by conformance tests. The codes are distinct because callers must react differently: PRECONDITION_MISMATCH means the TARGET OBJECT moved under us and a human decision is needed; SCENE_VERSION_MISMATCH means the SCENE AS A WHOLE changed since the plan was reasoned against it, so the plan may be wrong even though its target is untouched (a relational instruction such as \"move the chair closer to the table\" is invalidated by the table moving, which no per-object check can see) \u2014 nothing was mutated, the snapshot must be refreshed, and the request must be re-resolved and re-planned; MUTATION_FAILED means the write itself failed and may be retried; VERIFY_FAILED means the write appeared to succeed but the scene disagrees and must be rolled back; OBJECT_NOT_MOVABLE means the target is locked or linked and no retry will help. UNSUPPORTED_INSTRUCTION means the agent understood the request was a command but cannot interpret it \u2014 the user should rephrase, which is different from a malformed request. PROVIDER_UNAVAILABLE means an AI provider is not configured or reachable, which is an operator problem rather than a user error.",
   "type": "string",
   "enum": [
     "VALIDATION_ERROR",
@@ -11,6 +11,7 @@
     "OBJECT_NOT_MOVABLE",
     "INVALID_UNITS",
     "PRECONDITION_MISMATCH",
+    "SCENE_VERSION_MISMATCH",
     "LOCK_CONFLICT",
     "PROVIDER_UNAVAILABLE",
     "BLENDER_UNAVAILABLE",

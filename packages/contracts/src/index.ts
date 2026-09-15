@@ -55,6 +55,28 @@ export {
   toJobWire,
   validateJob,
 } from "./jobs.ts";
+export {
+  DIGEST_DECIMALS,
+  DIGEST_QUANTUM,
+  FORBIDDEN_SCENE_FIELDS,
+  SCENE_DIGEST_VERSION,
+  SCENE_MESSAGES,
+  SCENE_OBJECT_DIGEST_FIELDS,
+  SCENE_OBJECT_INFORMATIONAL_FIELDS,
+  SCENE_SNAPSHOT_DIGEST_FIELDS,
+  SCENE_SNAPSHOT_INFORMATIONAL_FIELDS,
+  SCENE_UNITS_DIGEST_FIELDS,
+  SceneDigestError,
+  canonicalDigestJson,
+  computeSceneVersion,
+  formatDigestNumber,
+  objectSortKey,
+  sceneDigestProjection,
+  sceneVersionsMatch,
+  validateSceneSnapshot,
+} from "./scene.ts";
+export type { SceneValidationResult } from "./scene.ts";
+
 export type {
   CreateJobResult,
   CreateMoveObjectJobInput,
@@ -94,6 +116,7 @@ export type ErrorCode =
   | "OBJECT_NOT_MOVABLE"
   | "INVALID_UNITS"
   | "PRECONDITION_MISMATCH"
+  | "SCENE_VERSION_MISMATCH"
   | "LOCK_CONFLICT"
   | "PROVIDER_UNAVAILABLE"
   | "BLENDER_UNAVAILABLE"
@@ -129,6 +152,7 @@ export const ERROR_CODES: readonly ErrorCode[] = [
   "OBJECT_NOT_MOVABLE",
   "INVALID_UNITS",
   "PRECONDITION_MISMATCH",
+  "SCENE_VERSION_MISMATCH",
   "LOCK_CONFLICT",
   "PROVIDER_UNAVAILABLE",
   "BLENDER_UNAVAILABLE",
@@ -143,6 +167,8 @@ export const ERROR_CODES: readonly ErrorCode[] = [
  */
 export const SCHEMA_FILES = {
   Vec3: "vec3.schema.json",
+  EulerRadians: "euler-radians.schema.json",
+  Scale3: "scale3.schema.json",
   Job: "job.schema.json",
   JobType: "job-type.schema.json",
   JobClaim: "job-claim.schema.json",
@@ -155,6 +181,13 @@ export const SCHEMA_FILES = {
   WorkerCapabilities: "worker-capabilities.schema.json",
   ObjectRef: "object-ref.schema.json",
   MoveObjectPayload: "move-object-payload.schema.json",
+  InspectScenePayload: "inspect-scene-payload.schema.json",
+  SceneSnapshot: "scene-snapshot.schema.json",
+  SceneObject: "scene-object.schema.json",
+  SceneUnits: "scene-units.schema.json",
+  SceneVersion: "scene-version.schema.json",
+  MaterialSummary: "material-summary.schema.json",
+  MaterialColor: "material-color.schema.json",
   ChatRequest: "chat-request.schema.json",
   ChatResponse: "chat-response.schema.json",
   ErrorResponse: "error-response.schema.json",

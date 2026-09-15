@@ -70,6 +70,13 @@
       }
     },
     {
+      "description": "inspect_scene is a READ job: its payload is empty and closed, because the project is already trusted job identity and there is nothing else to select.",
+      "if": { "properties": { "job_type": { "const": "inspect_scene" } }, "required": ["job_type"] },
+      "then": {
+        "properties": { "payload": { "$ref": "inspect-scene-payload.schema.json" } }
+      }
+    },
+    {
       "description": "A failed job MUST carry a structured error; any other state MUST NOT.",
       "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
       "then": { "required": ["error"] },

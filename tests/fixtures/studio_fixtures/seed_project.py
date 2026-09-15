@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Iterator, Optional
 
 from blender_mcp.blender_runtime import find_blender_executable, run_blender_script
+from studio_contracts.scene import compute_scene_version
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -216,9 +217,66 @@ def scene_state_digest(inspection: dict[str, Any]) -> str:
 
     Used for the determinism check: two independent generations must produce the
     same value even though their .blend binaries differ.
+
+    EVOLVED IN SPEC 002, TASK 1. This used to hash the inspection dictionary
+    directly. It now projects that dictionary into the canonical scene shape and
+    delegates to ``studio_contracts.scene.compute_scene_version``, so the
+    repository has exactly ONE definition of "scene state digest". Two subtly
+    different definitions would mean two answers to "did the scene change?", which
+    is the question the Spec 002 execution precondition depends on.
+
+    What the delegation changes, stated plainly:
+      - the value is now prefixed (``sha256:...``) and quantised to the documented
+        1e-6 digest quantum instead of the previous 9-decimal rounding;
+      - ``scene.name`` no longer participates, because it is not part of the
+        canonical projection. Nothing is lost: the Blender fixture tests assert the
+        scene name directly and compare the whole inspection dictionaries, which is
+        a stronger and clearer check than folding it into a hash.
+
+    The properties Spec 001 relied on are unchanged: identical scene state hashes
+    identically, key order is irrelevant, and any change to a position, rotation,
+    scale, dimension, unit configuration, object identity or object membership
+    changes the value.
     """
-    canonical = json.dumps(inspection["digest"], sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return compute_scene_version(scene_body_from_inspection(inspection))
+
+
+def scene_body_from_inspection(inspection: dict[str, Any]) -> dict[str, Any]:
+    """Project a Task 5 inspection dictionary into the canonical scene shape.
+
+    An ADAPTER, deliberately living in test tooling rather than in the contract
+    layer: ``inspect_blend`` predates the SceneSnapshot contract and reports a
+    fixture-shaped dictionary. Spec 002 Task 3 replaces it with a real
+    ``inspect_scene`` operation that produces a canonical SceneSnapshot directly,
+    at which point this adapter disappears.
+
+    Two fields the old inspection does not report are supplied here, and the
+    substitution is deliberate rather than incidental:
+      - ``visible``: assumed True. The fixture scene has no hidden objects, and the
+        old digest did not cover visibility either, so no coverage is lost.
+      - ``material``: omitted. Same reasoning.
+    """
+    scene = inspection["digest"]["scene"]
+    return {
+        "units": {
+            "unit_system": scene["unit_system"],
+            "length_unit": scene["length_unit"],
+            "scale_length": scene["scale_length"],
+        },
+        "objects": [
+            {
+                "studio_object_id": entry.get("object_id"),
+                "name": entry["name"],
+                "object_type": entry["type"],
+                "world_position_meters": entry["world_position_meters"],
+                "dimensions_meters": entry["dimensions_meters"],
+                "rotation_euler_radians": entry["rotation_euler_radians"],
+                "scale": entry["scale"],
+                "visible": True,
+            }
+            for entry in inspection["digest"]["objects"]
+        ],
+    }
 
 
 def spec_mismatches(digest: dict[str, Any]) -> list[str]:

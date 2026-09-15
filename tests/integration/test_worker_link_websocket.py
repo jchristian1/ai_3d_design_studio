@@ -436,8 +436,12 @@ def test_redelivering_the_same_job_over_the_socket_does_not_move_twice(blender_s
         blender_stack["server"].queue_offer(WORKER_ID, job)
         assert handle_until(client, protocol.JOB_OFFER, deadline_seconds=120.0)
 
-        results = _await(blender_stack["manager"].results, attempts=200)
-        assert len(results) == 2
+        # _await returns as soon as the collection is NON-EMPTY, and it already
+        # holds the first result — so waiting for a COUNT is the only way to wait
+        # for the redelivery's own result. Using _await here made the assertion
+        # below a race that happened to pass when the machine was idle.
+        results = blender_stack["manager"].results
+        assert _await_count(results, 2, deadline_seconds=30.0) == 2
         assert results[1]["job_status"] == "duplicate"
         assert coordinates_equal(
             saved_cube_x(blender_stack["project_path"]), 0.5

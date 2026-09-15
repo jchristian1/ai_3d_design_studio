@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "euler-radians.schema.json",
+  "title": "EulerRadians",
+  "description": "An XYZ Euler rotation in canonical RADIANS. Deliberately a separate contract from vec3.schema.json, whose components are canonical METERS: reusing the meters vector for an angle would make the schema state a unit it does not mean, and Spec 002 Requirement 7 makes one canonical unit per quantity a contract rule rather than a convention. Radians are canonical because Blender's rotation_euler is radians, so there is zero conversion at the Blender boundary; degrees are a language-edge unit converted exactly once in packages/spatial. JSON cannot encode NaN/Infinity, so the finite rule is additionally enforced by the validation layer.",
+  "type": "object",
+  "properties": {
+    "x": { "type": "number", "description": "radians about world X" },
+    "y": { "type": "number", "description": "radians about world Y" },
+    "z": { "type": "number", "description": "radians about world Z" }
+  },
+  "required": ["x", "y", "z"],
+  "additionalProperties": false
+}

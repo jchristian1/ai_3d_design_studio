@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scene-version.schema.json",
+  "title": "SceneVersion",
+  "description": "A content digest identifying one semantic scene STATE. Computed as SHA-256 over an explicitly enumerated, versioned projection of scene state (digest_version 'studio-scene-v1'; see studio_contracts.scene / packages/contracts/src/scene.ts and .kiro/specs/002-intelligent-scene-agent/design.md section 2.3). It is deliberately NOT a hash of a SceneSnapshot document: capture and transport metadata such as captured_at and scene_version itself are excluded, so two reads of an unchanged scene produce an identical value. Purpose: cache validity, a record of which scene a plan was reasoned against, and an enforced execution precondition. It is NOT an access credential and NOT an authorization scope — knowing a scene version grants nothing, and authorization is always project scope. The algorithm is prefixed so a future digest migration is unambiguous.",
+  "type": "string",
+  "pattern": "^sha256:[0-9a-f]{64}$"
+}

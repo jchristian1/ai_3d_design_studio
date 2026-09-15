@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scale3.schema.json",
+  "title": "Scale3",
+  "description": "A per-axis UNITLESS scale factor triple. Separate from vec3.schema.json (meters) and euler-radians.schema.json (radians) so no contract can silently mix quantities. This is the object's transform scale, not its physical size: physical size is dimensions_meters. Spec 002 keeps the two distinct because 'make it 20% smaller' is design-space SIZE intent (set_object_dimensions, absolute meters) while 'set its scale to 0.8' is explicit TRANSFORM-SCALE intent (scale_object). Negative values are representable because Blender permits mirrored scale; zero is degenerate and rejected by the validation layer rather than by JSON Schema.",
+  "type": "object",
+  "properties": {
+    "x": { "type": "number", "description": "unitless factor on local X" },
+    "y": { "type": "number", "description": "unitless factor on local Y" },
+    "z": { "type": "number", "description": "unitless factor on local Z" }
+  },
+  "required": ["x", "y", "z"],
+  "additionalProperties": false
+}

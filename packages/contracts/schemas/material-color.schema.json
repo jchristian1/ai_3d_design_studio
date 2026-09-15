@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "material-color.schema.json",
+  "title": "MaterialColor",
+  "description": "A canonical colour: linear sRGB with straight alpha, each channel a float in [0, 1]. Linear sRGB is chosen because it is what Blender's Principled BSDF `base_color` expects, so no colour-space conversion happens at the Blender boundary — the same reasoning that makes METERS and RADIANS canonical. A colour NAME ('warm beige') is never representable here: names are interpreted above the worker and arrive as explicit validated numbers. JSON cannot encode NaN/Infinity, so the finite rule is additionally enforced by the validation layer.",
+  "type": "object",
+  "properties": {
+    "r": { "type": "number", "minimum": 0, "maximum": 1, "description": "Linear sRGB red." },
+    "g": { "type": "number", "minimum": 0, "maximum": 1, "description": "Linear sRGB green." },
+    "b": { "type": "number", "minimum": 0, "maximum": 1, "description": "Linear sRGB blue." },
+    "a": { "type": "number", "minimum": 0, "maximum": 1, "description": "Straight alpha; 1 is fully opaque." }
+  },
+  "required": ["r", "g", "b", "a"],
+  "additionalProperties": false
+}

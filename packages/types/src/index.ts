@@ -38,13 +38,17 @@ export type JobStatus = "queued" | "claimed" | "running" | "succeeded" | "failed
  * The operation a Job carries. This is the discriminator of the job union:
  * each job_type binds to exactly one payload type.
  *
+ * Each type also carries a CLASSIFICATION (see MUTATING_JOB_TYPES /
+ * READ_JOB_TYPES): `move_object` mutates, `inspect_scene` only reads.
+ *
  * Reserved for future milestones (each needs a payload schema + a conditional in
- * job.schema.json before being added): resize_object, set_material, create_wall,
- * create_opening, set_light, create_camera, render_preview, save_version.
+ * job.schema.json before being added): rotate_object, scale_object,
+ * set_object_dimensions, set_material_color, create_wall, create_opening,
+ * set_light, create_camera, render_preview, save_version.
  *
  * Canonical schema: job-type.schema.json
  */
-export type JobType = "move_object";
+export type JobType = "move_object" | "inspect_scene";
 
 /**
  * A reference to a scene object. At least one of object_id or name is present.
@@ -65,9 +69,21 @@ export interface MoveObjectPayload {
   delta_meters: Vec3;
 }
 
+/**
+ * The payload of an `inspect_scene` read job: deliberately EMPTY.
+ *
+ * Everything the read needs is already trusted job identity — the project is
+ * `job.project_id`, which the worker resolves to a location through its own
+ * registry. There is no selector, no filter, and no field a model could populate.
+ *
+ * Canonical schema: inspect-scene-payload.schema.json
+ */
+export type InspectScenePayload = Record<string, never>;
+
 /** Maps each job_type to its payload type. Extend alongside JobType. */
 export interface JobPayloadByType {
   move_object: MoveObjectPayload;
+  inspect_scene: InspectScenePayload;
 }
 
 /**
@@ -134,9 +150,10 @@ export interface JobOf<T extends JobType> {
 }
 
 export type MoveObjectJob = JobOf<"move_object">;
+export type InspectSceneJob = JobOf<"inspect_scene">;
 
 /** The discriminated union over every supported job type. */
-export type Job = MoveObjectJob;
+export type Job = MoveObjectJob | InspectSceneJob;
 
 export const JOB_STATUSES: readonly JobStatus[] = [
   "queued",
@@ -146,7 +163,30 @@ export const JOB_STATUSES: readonly JobStatus[] = [
   "failed",
 ] as const;
 
-export const JOB_TYPES: readonly JobType[] = ["move_object"] as const;
+export const JOB_TYPES: readonly JobType[] = [
+  "move_object",
+  "inspect_scene",
+] as const;
+
+/**
+ * Job types that CHANGE the project. These take an exclusive project lock, write
+ * a recovery point, persist their plan before mutating, verify from the saved
+ * file, save durably, generate a preview, and carry a derived mutation identity.
+ */
+export const MUTATING_JOB_TYPES: readonly JobType[] = ["move_object"] as const;
+
+/**
+ * Job types that only READ the project. No write lock, no recovery point, no
+ * save, no preview; naturally idempotent and therefore cacheable. A read that
+ * took a write lock and rendered a preview would be both slow and wrong, which is
+ * why the classification is contract vocabulary rather than a worker detail.
+ */
+export const READ_JOB_TYPES: readonly JobType[] = ["inspect_scene"] as const;
+
+/** True when executing this job type changes the project. */
+export function isMutatingJobType(jobType: string): boolean {
+  return (MUTATING_JOB_TYPES as readonly string[]).includes(jobType);
+}
 
 /** Statuses in which a worker owns the job. */
 export const OWNED_JOB_STATUSES: readonly JobStatus[] = [
@@ -282,3 +322,149 @@ export const DIRECTIONS: readonly Direction[] = [
 ] as const;
 
 export const AXIS_SIGNS: readonly AxisSign[] = [-1, 1] as const;
+
+
+// ---------------------------------------------------------------------------
+// Scene description (Spec 002, Task 1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Blender's scene unit system. A closed set: Blender's RNA enum for it is static
+ * and complete. (`length_unit` deliberately is NOT closed — see SceneUnits.)
+ *
+ * Canonical schema: scene-units.schema.json
+ */
+export type UnitSystem = "NONE" | "METRIC" | "IMPERIAL";
+
+export const UNIT_SYSTEMS: readonly UnitSystem[] = [
+  "NONE",
+  "METRIC",
+  "IMPERIAL",
+] as const;
+
+/**
+ * An XYZ Euler rotation in canonical RADIANS.
+ *
+ * A separate type from `Vec3` (canonical meters) on purpose: reusing the meters
+ * vector for an angle would state a unit it does not mean. Radians are canonical
+ * because Blender's `rotation_euler` is radians, so nothing is converted at the
+ * Blender boundary; degrees are a language-edge unit converted exactly once in
+ * packages/spatial.
+ *
+ * Canonical schema: euler-radians.schema.json
+ */
+export interface EulerRadians {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * A per-axis UNITLESS transform scale. Distinct from `dimensions_meters`, which
+ * is physical size: "make it 20% smaller" is size intent, "set its scale to 0.8"
+ * is transform-scale intent.
+ *
+ * Canonical schema: scale3.schema.json
+ */
+export interface Scale3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * A canonical colour: linear sRGB with straight alpha, channels in [0, 1].
+ *
+ * Linear sRGB because that is what Blender's `base_color` expects, so there is no
+ * colour-space conversion at the Blender boundary. A colour NAME is never
+ * representable: names are interpreted above the worker and arrive as numbers.
+ *
+ * Canonical schema: material-color.schema.json
+ */
+export interface MaterialColor {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+/**
+ * A BASIC description of an object's first material — enough to answer "what
+ * colour is it?" and to plan a colour change, and no more. Spec 002 is limited to
+ * base colour, so no node tree, no texture path and no image reference is
+ * representable.
+ *
+ * `base_color` is absent when the material exposes no summarisable colour (a
+ * procedural or node-driven material). That is NOT the same as black.
+ *
+ * Canonical schema: material-summary.schema.json
+ */
+export interface MaterialSummary {
+  name: string;
+  base_color?: MaterialColor;
+}
+
+/**
+ * The OBSERVED unit configuration of a Blender scene.
+ *
+ * Note the deliberate difference from `LengthUnit`, which is the input-boundary
+ * vocabulary ("m", "cm") user language is converted from. This is Blender's own
+ * scene setting ("METERS"): a different concept that shares a word.
+ *
+ * `length_unit` is a plain string rather than a closed union because Blender's RNA
+ * enum for it is DYNAMIC — its members depend on the selected system and
+ * introspection reports only a placeholder — so a hard-coded list would reject a
+ * project we can legitimately read.
+ *
+ * Canonical schema: scene-units.schema.json
+ */
+export interface SceneUnits {
+  unit_system: string;
+  length_unit: string;
+  scale_length: number;
+}
+
+/**
+ * One object as the platform is willing to DESCRIBE it to a language model.
+ * Authoritative and read-only: produced from a real Blender scene, never
+ * model-authored.
+ *
+ * NOTE WHAT IS ABSENT: no .blend path, no filepath, no filename, no hostname, no
+ * worker id, no token, no Blender pointer, no data-block reference, no
+ * script/expression field, and no free-form metadata bag. The canonical schema
+ * declares `additionalProperties: false`, so the absence is structural.
+ *
+ * Canonical schema: scene-object.schema.json
+ */
+export interface SceneObject {
+  name: string;
+  object_type: string;
+  world_position_meters: Vec3;
+  dimensions_meters: Vec3;
+  rotation_euler_radians: EulerRadians;
+  scale: Scale3;
+  visible: boolean;
+  /** Stable machine-readable identifier; absent when the object has none. */
+  studio_object_id?: string;
+  /** Basic summary of the first material; absent when there is none. */
+  material?: MaterialSummary;
+}
+
+/**
+ * An authoritative, read-only, SAFE description of a project's scene.
+ *
+ * `captured_at` is INFORMATIONAL and is deliberately excluded from
+ * `scene_version`: two reads of an unchanged scene must produce an identical
+ * version. `scene_version` is likewise excluded from its own input. The digest
+ * input is an explicit versioned allow-list projection, not "this document minus a
+ * deny-list" — see packages/contracts/src/scene.ts.
+ *
+ * Canonical schema: scene-snapshot.schema.json
+ */
+export interface SceneSnapshot {
+  project_id: string;
+  scene_version: string;
+  units: SceneUnits;
+  objects: SceneObject[];
+  captured_at: string;
+}

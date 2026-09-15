@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scene-snapshot.schema.json",
+  "title": "SceneSnapshot",
+  "description": "An authoritative, read-only, SAFE description of one project's current scene. Produced from the saved Blender project by a read operation; never model-authored, never assembled from a database summary, and never inferred from model memory. It crosses several boundaries (worker -> control plane -> agent provider -> browser), which is why it earns a canonical schema while internal-only shapes such as AgentPlan deliberately do not. NOTE WHAT IS ABSENT, structurally, via additionalProperties: false at every level: no .blend path, no filesystem path or filename, no hostname, no worker id, no token, no session or request id, no preview or transport metadata, and no free-form metadata bag. `captured_at` is INFORMATIONAL: it records when the read happened and is deliberately EXCLUDED from the scene-version digest, because two reads of an unchanged scene must produce an identical scene_version. `scene_version` is likewise excluded from its own input. The digest input is an explicit versioned allow-list projection (see scene-version.schema.json), not 'this document minus a deny-list', so adding an informational field here can never silently change concurrency semantics.",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Owning project. Every snapshot is explicitly project-scoped; a snapshot for one project is never used to reason about another. Deliberately NOT part of the scene-version digest: the digest answers 'is this the same scene state?', not 'whose scene is this?'. Domain separation comes from the digest_version string inside the hashed payload, and authorization is always project scope."
+    },
+    "scene_version": {
+      "$ref": "scene-version.schema.json",
+      "description": "Digest of this scene's semantic state. Excluded from its own computation."
+    },
+    "units": {
+      "$ref": "scene-units.schema.json",
+      "description": "Observed Blender unit configuration. Part of the digest: metre values can only be read in light of it."
+    },
+    "objects": {
+      "type": "array",
+      "items": { "$ref": "scene-object.schema.json" },
+      "description": "Every object in the scene. Order is NOT significant: the digest sorts objects by a documented total order, so Blender's enumeration order cannot change the version. An empty scene is representable — an empty array is a fact, not an error."
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "When this read happened. INFORMATIONAL ONLY and excluded from the scene-version digest."
+    }
+  },
+  "required": ["project_id", "scene_version", "units", "objects", "captured_at"],
+  "additionalProperties": false
+}

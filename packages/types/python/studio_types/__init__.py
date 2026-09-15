@@ -11,11 +11,19 @@ Direction of truth::
 
 Canonical schemas:
     Vec3              -> vec3.schema.json
+    EulerRadians      -> euler-radians.schema.json
+    Scale3            -> scale3.schema.json
     Job               -> job.schema.json
     JobType           -> job-type.schema.json
     JobClaim          -> job-claim.schema.json
     ObjectRef         -> object-ref.schema.json
     MoveObjectPayload -> move-object-payload.schema.json
+    InspectScenePayload -> inspect-scene-payload.schema.json
+    SceneSnapshot     -> scene-snapshot.schema.json
+    SceneObject       -> scene-object.schema.json
+    SceneUnits        -> scene-units.schema.json
+    MaterialSummary   -> material-summary.schema.json
+    MaterialColor     -> material-color.schema.json
     LengthUnit        -> length-unit.schema.json
     Measurement       -> measurement.schema.json
     Axis              -> axis.schema.json
@@ -34,12 +42,16 @@ JobStatus = Literal["queued", "claimed", "running", "succeeded", "failed"]
 #: The operation a Job carries. This is the discriminator of the job union:
 #: each job_type binds to exactly one payload type.
 #:
+#: Each type also carries a CLASSIFICATION (see MUTATING_JOB_TYPES /
+#: READ_JOB_TYPES): ``move_object`` mutates, ``inspect_scene`` only reads.
+#:
 #: Reserved for future milestones (each needs a payload schema + a conditional in
-#: job.schema.json before being added): resize_object, set_material, create_wall,
-#: create_opening, set_light, create_camera, render_preview, save_version.
+#: job.schema.json before being added): rotate_object, scale_object,
+#: set_object_dimensions, set_material_color, create_wall, create_opening,
+#: set_light, create_camera, render_preview, save_version.
 #:
 #: Canonical schema: job-type.schema.json
-JobType = Literal["move_object"]
+JobType = Literal["move_object", "inspect_scene"]
 
 JOB_STATUSES: tuple[JobStatus, ...] = (
     "queued",
@@ -48,7 +60,23 @@ JOB_STATUSES: tuple[JobStatus, ...] = (
     "succeeded",
     "failed",
 )
-JOB_TYPES: tuple[JobType, ...] = ("move_object",)
+JOB_TYPES: tuple[JobType, ...] = ("move_object", "inspect_scene")
+
+#: Job types that CHANGE the project. These take an exclusive project lock, write
+#: a recovery point, persist their plan before mutating, verify from the saved
+#: file, save durably, generate a preview, and carry a derived mutation identity.
+MUTATING_JOB_TYPES: tuple[JobType, ...] = ("move_object",)
+
+#: Job types that only READ the project. No write lock, no recovery point, no
+#: save, no preview; naturally idempotent and therefore cacheable. A read that
+#: took a write lock and rendered a preview would be both slow and wrong, which
+#: is why the classification is contract vocabulary rather than a worker detail.
+READ_JOB_TYPES: tuple[JobType, ...] = ("inspect_scene",)
+
+
+def is_mutating_job_type(job_type: str) -> bool:
+    """True when executing this job type changes the project."""
+    return job_type in MUTATING_JOB_TYPES
 
 #: Statuses in which a worker owns the job.
 OWNED_JOB_STATUSES: tuple[JobStatus, ...] = ("claimed", "running")
@@ -163,8 +191,24 @@ class Job:
     result: Optional[Any] = None
 
 
+@dataclass(frozen=True)
+class InspectScenePayload:
+    """The payload of an ``inspect_scene`` read job: deliberately empty.
+
+    Everything the read needs is already trusted job identity — the project is
+    ``job.project_id``, which the worker resolves to a location through its own
+    registry. There is no selector, no filter, and no field a model could
+    populate.
+
+    Canonical schema: ``inspect-scene-payload.schema.json``
+    """
+
+
 #: Maps each job_type to its payload dataclass. Extend alongside JobType.
-JOB_PAYLOAD_BY_TYPE: dict[str, type] = {"move_object": MoveObjectPayload}
+JOB_PAYLOAD_BY_TYPE: dict[str, type] = {
+    "move_object": MoveObjectPayload,
+    "inspect_scene": InspectScenePayload,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -328,3 +372,153 @@ class AxisDirection:
 
     axis: Axis
     sign: AxisSign
+
+
+# ---------------------------------------------------------------------------
+# Scene description (Spec 002, Task 1)
+# ---------------------------------------------------------------------------
+
+#: Blender's scene unit system. A closed set: Blender's RNA enum for it is static
+#: and complete. (``length_unit`` deliberately is NOT closed — see SceneUnits.)
+#:
+#: Canonical schema: scene-units.schema.json
+UnitSystem = Literal["NONE", "METRIC", "IMPERIAL"]
+
+UNIT_SYSTEMS: tuple[UnitSystem, ...] = ("NONE", "METRIC", "IMPERIAL")
+
+
+@dataclass(frozen=True)
+class EulerRadians:
+    """An XYZ Euler rotation in canonical RADIANS.
+
+    A separate type from :class:`Vec3` (canonical meters) on purpose: reusing the
+    meters vector for an angle would state a unit it does not mean. Radians are
+    canonical because Blender's ``rotation_euler`` is radians, so nothing is
+    converted at the Blender boundary; degrees are a language-edge unit converted
+    exactly once in ``packages/spatial``.
+
+    Canonical schema: ``euler-radians.schema.json``
+    """
+
+    x: float
+    y: float
+    z: float
+
+
+@dataclass(frozen=True)
+class Scale3:
+    """A per-axis UNITLESS transform scale.
+
+    Distinct from ``dimensions_meters``, which is physical size. "Make it 20%
+    smaller" is size intent; "set its scale to 0.8" is transform-scale intent.
+
+    Canonical schema: ``scale3.schema.json``
+    """
+
+    x: float
+    y: float
+    z: float
+
+
+@dataclass(frozen=True)
+class MaterialColor:
+    """A canonical colour: linear sRGB with straight alpha, channels in [0, 1].
+
+    Linear sRGB because that is what Blender's ``base_color`` expects, so there is
+    no colour-space conversion at the Blender boundary. A colour NAME is never
+    representable: names are interpreted above the worker and arrive as numbers.
+
+    Canonical schema: ``material-color.schema.json``
+    """
+
+    r: float
+    g: float
+    b: float
+    a: float
+
+
+@dataclass(frozen=True)
+class MaterialSummary:
+    """A BASIC description of an object's first material.
+
+    Enough to answer "what colour is it?" and to plan a colour change, and no
+    more: Spec 002 is limited to base colour, so no node tree, no texture path and
+    no image reference is representable.
+
+    ``base_color`` is absent when the material exposes no summarisable colour (a
+    procedural or node-driven material). That is NOT the same as black.
+
+    Canonical schema: ``material-summary.schema.json``
+    """
+
+    name: str
+    base_color: Optional[MaterialColor] = None
+
+
+@dataclass(frozen=True)
+class SceneUnits:
+    """The OBSERVED unit configuration of a Blender scene.
+
+    Note the deliberate difference from :data:`LengthUnit`, which is the
+    input-boundary vocabulary ("m", "cm") user language is converted from. This is
+    Blender's own scene setting ("METERS"): a different concept that shares a word.
+
+    ``length_unit`` is a plain string rather than a closed enum because Blender's
+    RNA enum for it is DYNAMIC — its members depend on the selected system and
+    introspection reports only a placeholder — so a hard-coded list would reject a
+    project we can legitimately read.
+
+    Canonical schema: ``scene-units.schema.json``
+    """
+
+    unit_system: str
+    length_unit: str
+    scale_length: float
+
+
+@dataclass(frozen=True)
+class SceneObject:
+    """One object as the platform is willing to DESCRIBE it to a language model.
+
+    Authoritative and read-only: produced from a real Blender scene, never
+    model-authored.
+
+    NOTE WHAT IS ABSENT: no .blend path, no filepath, no filename, no hostname, no
+    worker id, no token, no Blender pointer, no data-block reference, no
+    script/expression field, and no free-form metadata bag. The canonical schema
+    declares ``additionalProperties: false``, so the absence is structural.
+
+    Canonical schema: ``scene-object.schema.json``
+    """
+
+    name: str
+    object_type: str
+    world_position_meters: Vec3
+    dimensions_meters: Vec3
+    rotation_euler_radians: EulerRadians
+    scale: Scale3
+    visible: bool
+    #: Stable machine-readable identifier; absent when the object has none.
+    studio_object_id: Optional[str] = None
+    #: Basic summary of the first material; absent when there is none.
+    material: Optional[MaterialSummary] = None
+
+
+@dataclass(frozen=True)
+class SceneSnapshot:
+    """An authoritative, read-only, SAFE description of a project's scene.
+
+    ``captured_at`` is INFORMATIONAL and is deliberately excluded from
+    ``scene_version``: two reads of an unchanged scene must produce an identical
+    version. ``scene_version`` is likewise excluded from its own input. The digest
+    input is an explicit versioned allow-list projection, not "this document minus
+    a deny-list" — see ``studio_contracts.scene``.
+
+    Canonical schema: ``scene-snapshot.schema.json``
+    """
+
+    project_id: str
+    scene_version: str
+    units: SceneUnits
+    objects: tuple[SceneObject, ...]
+    captured_at: str

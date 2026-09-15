@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scene-units.schema.json",
+  "title": "SceneUnits",
+  "description": "The unit configuration of a Blender scene, as OBSERVED (never chosen by a model). This is part of the scene-version digest projection: a project whose unit configuration changed is not the same scene state, because every metre value in the snapshot must be read in light of it. Note the deliberate difference from length-unit.schema.json, which is the INPUT-boundary unit vocabulary ('m', 'cm') the user's language is converted from. This schema describes Blender's own scene setting ('METERS'), which is a different concept that happens to share a word. `unit_system` is a closed enum because Blender's RNA enum for it is static and complete. `length_unit` is a constrained string, NOT an enum, because Blender's RNA enum for it is DYNAMIC — its members depend on the selected system, and RNA introspection reports only a placeholder ('DEFAULT'), so any hard-coded list risks rejecting a project we can legitimately read. The pattern still forbids anything path-like, host-like or token-like. `scale_length` must be strictly positive; JSON Schema's `minimum` cannot express exclusivity in the supported keyword subset, so positivity is enforced by the validation layer (the same split used for the finite-meters rule).",
+  "type": "object",
+  "properties": {
+    "unit_system": {
+      "type": "string",
+      "enum": ["NONE", "METRIC", "IMPERIAL"],
+      "description": "Blender's scene unit system. METRIC is expected for studio projects."
+    },
+    "length_unit": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[A-Z][A-Z_]*$",
+      "description": "Blender's scene length unit identifier, e.g. METERS. Upper-case identifier only."
+    },
+    "scale_length": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Blender unit scale. 1.0 means one Blender unit is one metre. Must be strictly positive (validation layer)."
+    }
+  },
+  "required": ["unit_system", "length_unit", "scale_length"],
+  "additionalProperties": false
+}

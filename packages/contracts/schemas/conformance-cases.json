@@ -98,6 +98,10 @@
         {
           "name": "provider unavailable",
           "data": "PROVIDER_UNAVAILABLE"
+        },
+        {
+          "name": "scene version mismatch",
+          "data": "SCENE_VERSION_MISMATCH"
         }
       ],
       "invalid": [
@@ -588,6 +592,10 @@
         {
           "name": "move_object",
           "data": "move_object"
+        },
+        {
+          "name": "inspect_scene (read classification)",
+          "data": "inspect_scene"
         }
       ],
       "invalid": [
@@ -991,6 +999,24 @@
               "request_id": "req_abc123",
               "operation_index": 0
             }
+          }
+        },
+        {
+          "name": "queued inspect_scene read job with an empty payload",
+          "data": {
+            "job_id": "job_inspect_1",
+            "job_type": "inspect_scene",
+            "project_id": "proj_seed",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {},
+            "origin": {
+              "request_id": "req_read_1",
+              "operation_index": 0
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_read_1"
           }
         }
       ],
@@ -1460,6 +1486,72 @@
             "status": "queued",
             "created_at": "2026-09-15T04:00:00+00:00",
             "idempotency_key": "idem_abc123"
+          }
+        },
+        {
+          "name": "inspect_scene payload cannot carry a selector",
+          "data": {
+            "job_id": "job_inspect_1",
+            "job_type": "inspect_scene",
+            "project_id": "proj_seed",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              }
+            },
+            "origin": {
+              "request_id": "req_read_1",
+              "operation_index": 0
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_read_1"
+          }
+        },
+        {
+          "name": "inspect_scene payload cannot carry a path",
+          "data": {
+            "job_id": "job_inspect_1",
+            "job_type": "inspect_scene",
+            "project_id": "proj_seed",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "blend_path": "/srv/projects/a.blend"
+            },
+            "origin": {
+              "request_id": "req_read_1",
+              "operation_index": 0
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_read_1"
+          }
+        },
+        {
+          "name": "inspect_scene payload cannot carry a move delta",
+          "data": {
+            "job_id": "job_inspect_1",
+            "job_type": "inspect_scene",
+            "project_id": "proj_seed",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "origin": {
+              "request_id": "req_read_1",
+              "operation_index": 0
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_read_1"
           }
         }
       ]
@@ -2576,6 +2668,2215 @@
         {
           "name": "null",
           "data": null
+        }
+      ]
+    },
+    {
+      "schema": "euler-radians.schema.json",
+      "valid": [
+        {
+          "name": "unrotated",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "quarter turn about z",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "z": 1.5707963267948966
+          }
+        },
+        {
+          "name": "negative radians",
+          "data": {
+            "x": -0.7853981633974483,
+            "y": 0,
+            "z": 0
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing z",
+          "data": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "name": "degrees as a string",
+          "data": {
+            "x": "45deg",
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "extra unit property",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "unit": "deg"
+          }
+        },
+        {
+          "name": "not an object",
+          "data": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "schema": "scale3.schema.json",
+      "valid": [
+        {
+          "name": "identity",
+          "data": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "name": "twenty percent smaller",
+          "data": {
+            "x": 0.8,
+            "y": 0.8,
+            "z": 0.8
+          }
+        },
+        {
+          "name": "mirrored on x",
+          "data": {
+            "x": -1,
+            "y": 1,
+            "z": 1
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing y",
+          "data": {
+            "x": 1,
+            "z": 1
+          }
+        },
+        {
+          "name": "percentage string",
+          "data": {
+            "x": "80%",
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "name": "extra property",
+          "data": {
+            "x": 1,
+            "y": 1,
+            "z": 1,
+            "percent": 80
+          }
+        }
+      ]
+    },
+    {
+      "schema": "material-color.schema.json",
+      "valid": [
+        {
+          "name": "opaque white",
+          "data": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          }
+        },
+        {
+          "name": "black",
+          "data": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        },
+        {
+          "name": "warm beige",
+          "data": {
+            "r": 0.76,
+            "g": 0.66,
+            "b": 0.5,
+            "a": 1
+          }
+        },
+        {
+          "name": "translucent",
+          "data": {
+            "r": 0.2,
+            "g": 0.4,
+            "b": 0.6,
+            "a": 0.5
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing alpha",
+          "data": {
+            "r": 1,
+            "g": 1,
+            "b": 1
+          }
+        },
+        {
+          "name": "channel above one",
+          "data": {
+            "r": 1.5,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          }
+        },
+        {
+          "name": "negative channel",
+          "data": {
+            "r": -0.1,
+            "g": 1,
+            "b": 1,
+            "a": 1
+          }
+        },
+        {
+          "name": "colour name instead of numbers",
+          "data": "warm beige"
+        },
+        {
+          "name": "byte range instead of unit range",
+          "data": {
+            "r": 194,
+            "g": 168,
+            "b": 128,
+            "a": 255
+          }
+        },
+        {
+          "name": "extra property",
+          "data": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 1,
+            "space": "srgb"
+          }
+        },
+        {
+          "name": "array form",
+          "data": [
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "schema": "material-summary.schema.json",
+      "valid": [
+        {
+          "name": "named material with a base colour",
+          "data": {
+            "name": "Oak",
+            "base_color": {
+              "r": 0.55,
+              "g": 0.38,
+              "b": 0.2,
+              "a": 1
+            }
+          }
+        },
+        {
+          "name": "material without a summarisable colour",
+          "data": {
+            "name": "ProceduralMarble"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing name",
+          "data": {
+            "base_color": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            }
+          }
+        },
+        {
+          "name": "blank name",
+          "data": {
+            "name": "   "
+          }
+        },
+        {
+          "name": "colour name as base_color",
+          "data": {
+            "name": "Oak",
+            "base_color": "brown"
+          }
+        },
+        {
+          "name": "texture path is not representable",
+          "data": {
+            "name": "Oak",
+            "texture_path": "/tmp/oak.png"
+          }
+        },
+        {
+          "name": "node tree is not representable",
+          "data": {
+            "name": "Oak",
+            "node_tree": {
+              "nodes": []
+            }
+          }
+        },
+        {
+          "name": "not an object",
+          "data": "Oak"
+        }
+      ]
+    },
+    {
+      "schema": "scene-units.schema.json",
+      "valid": [
+        {
+          "name": "metric meters",
+          "data": {
+            "unit_system": "METRIC",
+            "length_unit": "METERS",
+            "scale_length": 1.0
+          }
+        },
+        {
+          "name": "imperial feet",
+          "data": {
+            "unit_system": "IMPERIAL",
+            "length_unit": "FEET",
+            "scale_length": 0.3048
+          }
+        },
+        {
+          "name": "no unit system",
+          "data": {
+            "unit_system": "NONE",
+            "length_unit": "ADAPTIVE",
+            "scale_length": 1.0
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "unknown unit system",
+          "data": {
+            "unit_system": "GALACTIC",
+            "length_unit": "METERS",
+            "scale_length": 1.0
+          }
+        },
+        {
+          "name": "lowercase unit system",
+          "data": {
+            "unit_system": "metric",
+            "length_unit": "METERS",
+            "scale_length": 1.0
+          }
+        },
+        {
+          "name": "lowercase length unit",
+          "data": {
+            "unit_system": "METRIC",
+            "length_unit": "meters",
+            "scale_length": 1.0
+          }
+        },
+        {
+          "name": "input-boundary unit vocabulary is a different concept",
+          "data": {
+            "unit_system": "METRIC",
+            "length_unit": "m",
+            "scale_length": 1.0
+          }
+        },
+        {
+          "name": "negative scale length",
+          "data": {
+            "unit_system": "METRIC",
+            "length_unit": "METERS",
+            "scale_length": -1.0
+          }
+        },
+        {
+          "name": "missing scale length",
+          "data": {
+            "unit_system": "METRIC",
+            "length_unit": "METERS"
+          }
+        },
+        {
+          "name": "extra property",
+          "data": {
+            "unit_system": "METRIC",
+            "length_unit": "METERS",
+            "scale_length": 1.0,
+            "separate_units": false
+          }
+        }
+      ]
+    },
+    {
+      "schema": "scene-version.schema.json",
+      "valid": [
+        {
+          "name": "sha256 digest",
+          "data": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "name": "real looking digest",
+          "data": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }
+      ],
+      "invalid": [
+        {
+          "name": "no algorithm prefix",
+          "data": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "name": "unknown algorithm",
+          "data": "md5:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "name": "uppercase hex",
+          "data": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        },
+        {
+          "name": "truncated digest",
+          "data": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "name": "not a string",
+          "data": 42
+        }
+      ]
+    },
+    {
+      "schema": "inspect-scene-payload.schema.json",
+      "valid": [
+        {
+          "name": "empty payload",
+          "data": {}
+        }
+      ],
+      "invalid": [
+        {
+          "name": "object selector",
+          "data": {
+            "target": {
+              "name": "Cube"
+            }
+          }
+        },
+        {
+          "name": "path",
+          "data": {
+            "blend_path": "/srv/projects/a.blend"
+          }
+        },
+        {
+          "name": "filter",
+          "data": {
+            "object_type": "MESH"
+          }
+        },
+        {
+          "name": "python expression",
+          "data": {
+            "python": "import os"
+          }
+        },
+        {
+          "name": "not an object",
+          "data": []
+        }
+      ]
+    },
+    {
+      "schema": "scene-object.schema.json",
+      "valid": [
+        {
+          "name": "cube with a stable id",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "object without the optional stable id",
+          "data": {
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "rotated, scaled, hidden object with a material",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 1.6,
+              "y": 1.6,
+              "z": 1.6
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0.7853981633974483
+            },
+            "scale": {
+              "x": 0.8,
+              "y": 0.8,
+              "z": 0.8
+            },
+            "visible": false,
+            "material": {
+              "name": "Beige",
+              "base_color": {
+                "r": 0.76,
+                "g": 0.66,
+                "b": 0.5,
+                "a": 1
+              }
+            }
+          }
+        },
+        {
+          "name": "non-mesh object",
+          "data": {
+            "name": "Light",
+            "object_type": "LIGHT",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing name",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "blank name",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "  ",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "missing visible",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          }
+        },
+        {
+          "name": "visible as a string",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": "true"
+          }
+        },
+        {
+          "name": "missing rotation",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "lowercase object type",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "mesh",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "blank stable id",
+          "data": {
+            "studio_object_id": " ",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "malformed position vector",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "position as an array",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": [
+              0,
+              0,
+              0
+            ],
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "rotation carries a unit token",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "unit": "deg"
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true
+          }
+        },
+        {
+          "name": "blend_path is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "blend_path": "/srv/projects/seed.blend"
+          }
+        },
+        {
+          "name": "path is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "path": "/srv/projects"
+          }
+        },
+        {
+          "name": "filepath is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "filepath": "/srv/projects/seed.blend"
+          }
+        },
+        {
+          "name": "filename is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "filename": "seed.blend"
+          }
+        },
+        {
+          "name": "hostname is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "hostname": "legion-t7"
+          }
+        },
+        {
+          "name": "worker_id is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "worker_id": "worker_1"
+          }
+        },
+        {
+          "name": "worker_token is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "worker_token": "s3cr3t"
+          }
+        },
+        {
+          "name": "environment is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "environment": {
+              "STUDIO_WORKER_TOKEN": "s3cr3t"
+            }
+          }
+        },
+        {
+          "name": "python is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "python": "import bpy"
+          }
+        },
+        {
+          "name": "script is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "script": "bpy.ops.wm.save_mainfile()"
+          }
+        },
+        {
+          "name": "arbitrary metadata bag is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "metadata": {
+              "anything": "goes"
+            }
+          }
+        },
+        {
+          "name": "blender pointer is not representable",
+          "data": {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "dimensions_meters": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "rotation_euler_radians": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "visible": true,
+            "pointer": "0x7f9c1c0a2b40"
+          }
+        },
+        {
+          "name": "not an object",
+          "data": "Cube"
+        }
+      ]
+    },
+    {
+      "schema": "scene-snapshot.schema.json",
+      "valid": [
+        {
+          "name": "complete single-object snapshot",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "empty scene is a fact, not an error",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [],
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "multiple objects",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              },
+              {
+                "name": "Table",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 1.6,
+                  "y": 0.9,
+                  "z": 0.75
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true,
+                "material": {
+                  "name": "Oak",
+                  "base_color": {
+                    "r": 0.55,
+                    "g": 0.38,
+                    "b": 0.2,
+                    "a": 1
+                  }
+                }
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing project_id",
+          "data": {
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "blank project_id",
+          "data": {
+            "project_id": " ",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "missing scene_version",
+          "data": {
+            "project_id": "proj_seed",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "unprefixed scene_version",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "missing units",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "missing objects",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "objects as an object",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": {
+              "Cube": {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            },
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "missing captured_at",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "captured_at not a date-time",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "yesterday"
+          }
+        },
+        {
+          "name": "invalid nested object",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "blend_path is not representable",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "blend_path": "/srv/projects/seed.blend"
+          }
+        },
+        {
+          "name": "path is not representable",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "path": "/srv/projects"
+          }
+        },
+        {
+          "name": "hostname is not representable",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "hostname": "legion-t7"
+          }
+        },
+        {
+          "name": "worker_id is not representable",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "worker_id": "worker_1"
+          }
+        },
+        {
+          "name": "worker_token is not representable",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "worker_token": "s3cr3t"
+          }
+        },
+        {
+          "name": "session_id is not representable",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "session_id": "sess_1"
+          }
+        },
+        {
+          "name": "environment is not representable",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "environment": {
+              "HOME": "/home/christian"
+            }
+          }
+        },
+        {
+          "name": "arbitrary metadata bag is not representable",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "metadata": {
+              "anything": "goes"
+            }
+          }
+        },
+        {
+          "name": "preview metadata is not representable",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "preview_url": "/api/projects/proj_seed/artifacts/preview_x"
+          }
+        },
+        {
+          "name": "digest_version is not part of the document",
+          "data": {
+            "project_id": "proj_seed",
+            "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "units": {
+              "unit_system": "METRIC",
+              "length_unit": "METERS",
+              "scale_length": 1.0
+            },
+            "objects": [
+              {
+                "studio_object_id": "obj_cube001",
+                "name": "Cube",
+                "object_type": "MESH",
+                "world_position_meters": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "dimensions_meters": {
+                  "x": 2,
+                  "y": 2,
+                  "z": 2
+                },
+                "rotation_euler_radians": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                },
+                "visible": true
+              }
+            ],
+            "captured_at": "2026-09-15T04:00:00Z",
+            "digest_version": "studio-scene-v1"
+          }
+        },
+        {
+          "name": "not an object",
+          "data": [
+            {
+              "project_id": "proj_seed",
+              "scene_version": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "units": {
+                "unit_system": "METRIC",
+                "length_unit": "METERS",
+                "scale_length": 1.0
+              },
+              "objects": [
+                {
+                  "studio_object_id": "obj_cube001",
+                  "name": "Cube",
+                  "object_type": "MESH",
+                  "world_position_meters": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                  },
+                  "dimensions_meters": {
+                    "x": 2,
+                    "y": 2,
+                    "z": 2
+                  },
+                  "rotation_euler_radians": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                  },
+                  "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                  },
+                  "visible": true
+                }
+              ],
+              "captured_at": "2026-09-15T04:00:00Z"
+            }
+          ]
         }
       ]
     }

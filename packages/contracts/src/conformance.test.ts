@@ -59,6 +59,13 @@ test("canonical schema directory contains the expected schemas", () => {
   }
 });
 
+test("every canonical schema file has a representation entry", () => {
+  // Both directions. The test above catches a SCHEMA_FILES entry with no schema;
+  // this catches a schema file that no representation references, which would be
+  // a contract nothing conforms to.
+  assert.deepEqual(Object.values(SCHEMA_FILES).sort(), listSchemaNames());
+});
+
 for (const suite of corpus.suites) {
   for (const c of suite.valid) {
     test(`[corpus] ${suite.schema} accepts: ${c.name}`, () => {

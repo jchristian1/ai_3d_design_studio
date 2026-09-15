@@ -33,6 +33,7 @@ from studio_types import (
     JOB_STATUSES,
     JOB_TYPES,
     TERMINAL_JOB_STATUSES,
+    InspectScenePayload,
     Job,
     JobClaim,
     JobStatus,
@@ -527,7 +528,11 @@ def job_from_wire(wire: Mapping[str, Any]) -> Job:
             target=ObjectRef(**payload_wire["target"]),
             delta_meters=Vec3(**payload_wire["delta_meters"]),
         )
-    else:  # pragma: no cover - unreachable while move_object is the only type
+    elif job_type == "inspect_scene":
+        # A READ job. Its payload is empty and closed by contract, so there is
+        # nothing to rebuild; the schema has already refused any smuggled field.
+        payload = InspectScenePayload()
+    else:  # pragma: no cover - unreachable while the enum is exhausted above
         raise ValueError(JOB_MESSAGES["UNSUPPORTED_JOB_TYPE"])
 
     claim_wire = wire.get("claim")

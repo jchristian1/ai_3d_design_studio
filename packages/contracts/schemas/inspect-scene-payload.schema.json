@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "inspect-scene-payload.schema.json",
+  "title": "InspectScenePayload",
+  "description": "The payload of an inspect_scene job: deliberately EMPTY and closed. Everything the read needs is already trusted job identity — the project is job.project_id, resolved to a filesystem location by the worker's own registry, so a path is not representable here any more than it is in a mutation payload. There is no object selector, no filter, no query, and no field a model could populate: inspect_scene reads the whole scene or fails. Keeping the payload empty rather than omitting it preserves job.schema.json's invariant that every job_type binds to exactly one payload schema, so a Job is never an untyped dictionary. inspect_scene is the only READ job type in the canonical job-type enum (see job-type.schema.json for the read/mutating classification).",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

@@ -1,0 +1,293 @@
+{
+  "description": "Shared, language-neutral vectors for the AUTHORITATIVE scene-version digest (studio-scene-v1). Both languages compute canonical_json and scene_version for every scene below; tests/contracts/test_scene_digest_cross_language_parity.py asserts the two implementations produce byte-identical canonical JSON and identical hex digests. Cases are grouped by the property they pin: numeric formatting, ordering, exclusion, and sensitivity.",
+  "numbers": {
+    "description": "Fixed-decimal quantisation, round-half-to-even, negative-zero normalisation. Expected strings are asserted directly so a formatting change cannot pass silently in either language.",
+    "cases": [
+      { "name": "zero", "value": 0, "expected": "0.000000" },
+      { "name": "negative zero", "value": -0.0, "expected": "0.000000" },
+      { "name": "half meter", "value": 0.5, "expected": "0.500000" },
+      { "name": "one", "value": 1, "expected": "1.000000" },
+      { "name": "two meters", "value": 2.0, "expected": "2.000000" },
+      { "name": "eighty percent of two", "value": 1.6, "expected": "1.600000" },
+      { "name": "negative", "value": -0.25, "expected": "-0.250000" },
+      { "name": "quarter pi radians", "value": 0.7853981633974483, "expected": "0.785398" },
+      { "name": "half pi radians", "value": 1.5707963267948966, "expected": "1.570796" },
+      { "name": "below the quantum vanishes", "value": 1e-9, "expected": "0.000000" },
+      { "name": "tiny negative normalises to positive zero", "value": -1e-9, "expected": "0.000000" },
+      { "name": "large coordinate", "value": 1234.567891, "expected": "1234.567891" },
+      { "name": "colour channel", "value": 0.8000000119, "expected": "0.800000" }
+    ],
+    "rejected": [
+      { "name": "not a number", "value": "0.5" },
+      { "name": "null", "value": null },
+      { "name": "boolean", "value": true }
+    ]
+  },
+  "scenes": [
+    {
+      "name": "spec 001 seed scene",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "seed scene after the spec 001 move",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0.5, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty scene",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": []
+      }
+    },
+    {
+      "name": "two chairs and a table with materials",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "studio_object_id": "obj_table001",
+            "name": "Table",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0, "y": 0, "z": 0.375 },
+            "dimensions_meters": { "x": 1.6, "y": 0.9, "z": 0.75 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true,
+            "material": {
+              "name": "Oak",
+              "base_color": { "r": 0.55, "g": 0.38, "b": 0.2, "a": 1 }
+            }
+          },
+          {
+            "studio_object_id": "obj_chair001",
+            "name": "Chair",
+            "object_type": "MESH",
+            "world_position_meters": { "x": -0.8, "y": 0, "z": 0.45 },
+            "dimensions_meters": { "x": 0.45, "y": 0.45, "z": 0.9 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 1.5707963267948966 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true,
+            "material": { "name": "Fabric" }
+          },
+          {
+            "studio_object_id": "obj_chair002",
+            "name": "Chair.001",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0.8, "y": 0, "z": 0.45 },
+            "dimensions_meters": { "x": 0.45, "y": 0.45, "z": 0.9 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": -1.5707963267948966 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": false,
+            "material": { "name": "Fabric" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "object without a stable id, non-ascii name",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "name": "Küche",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 1.25, "y": -2.5, "z": 0 },
+            "dimensions_meters": { "x": 3, "y": 0.6, "z": 0.9 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0.7853981633974483 },
+            "scale": { "x": 1, "y": 1, "z": 1.5 },
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "mixed identified and unidentified objects",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "name": "Zeta",
+            "object_type": "EMPTY",
+            "world_position_meters": { "x": 0, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 0, "y": 0, "z": 0 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          },
+          {
+            "studio_object_id": "obj_light001",
+            "name": "Alpha",
+            "object_type": "LIGHT",
+            "world_position_meters": { "x": 0, "y": 0, "z": 3 },
+            "dimensions_meters": { "x": 0, "y": 0, "z": 0 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "non-metric scene",
+      "scene": {
+        "units": { "unit_system": "IMPERIAL", "length_unit": "FEET", "scale_length": 0.3048 },
+        "objects": [
+          {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          }
+        ]
+      }
+    }
+  ],
+  "rejected_scenes": [
+    {
+      "name": "duplicate stable id is ambiguous",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          },
+          {
+            "studio_object_id": "obj_cube001",
+            "name": "Cube.001",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 1, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate name without stable ids is ambiguous",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          },
+          {
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 1, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "missing units",
+      "scene": { "objects": [] }
+    },
+    {
+      "name": "missing objects",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 }
+      }
+    },
+    {
+      "name": "object missing a required vector component",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0, "y": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "object missing visible",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "name": "Cube",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 }
+          }
+        ]
+      }
+    },
+    {
+      "name": "blank name cannot be ordered",
+      "scene": {
+        "units": { "unit_system": "METRIC", "length_unit": "METERS", "scale_length": 1.0 },
+        "objects": [
+          {
+            "name": "   ",
+            "object_type": "MESH",
+            "world_position_meters": { "x": 0, "y": 0, "z": 0 },
+            "dimensions_meters": { "x": 2, "y": 2, "z": 2 },
+            "rotation_euler_radians": { "x": 0, "y": 0, "z": 0 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "visible": true
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -77,6 +77,16 @@ def test_canonical_schema_directory_contains_expected_schemas():
         assert file in names, f"missing canonical schema: {file}"
 
 
+def test_every_canonical_schema_file_has_a_representation_entry():
+    """Both directions, not just one.
+
+    The test above catches a SCHEMA_FILES entry with no schema. This catches the
+    opposite drift: a schema file added to the canonical directory that no
+    representation references, which would be a contract nothing conforms to.
+    """
+    assert sorted(SCHEMA_FILES.values()) == list_schema_names()
+
+
 @pytest.mark.parametrize("schema,data", _cases("valid"))
 def test_corpus_valid_cases_accepted(schema, data):
     result = validate_against_schema(schema, data)

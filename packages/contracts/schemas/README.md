@@ -44,6 +44,54 @@ tests then fail until both representations are realigned.
 | `axis-direction.schema.json` | `AxisDirection` | Resolved axis + sign (`right` → `{x, +1}`) |
 | `conformance-cases.json` | Shared test corpus | Language-neutral valid/invalid cases |
 
+## Spec 002 additions — scene description (Task 1)
+
+| Schema file | Contract | Notes |
+|---|---|---|
+| `scene-snapshot.schema.json` | `SceneSnapshot` | Authoritative read-only scene description. `captured_at` is informational and **excluded** from `scene_version` |
+| `scene-object.schema.json` | `SceneObject` | One object as described to a model. No path, host, token, pointer, script or metadata bag is representable |
+| `scene-units.schema.json` | `SceneUnits` | Blender's **observed** unit configuration. A different concept from `length-unit.schema.json`, which is the input-boundary vocabulary (`m`, `cm`) |
+| `scene-version.schema.json` | `SceneVersion` | `sha256:<64 hex>` digest of an explicit versioned projection — not a hash of the snapshot |
+| `euler-radians.schema.json` | `EulerRadians` | Rotation in canonical **radians**. Separate from `vec3` so a contract cannot state metres and mean radians |
+| `scale3.schema.json` | `Scale3` | **Unitless** transform scale. Separate from physical size (`dimensions_meters`) |
+| `material-summary.schema.json` | `MaterialSummary` | Basic material description. No node tree, no texture path |
+| `material-color.schema.json` | `MaterialColor` | Linear sRGB RGBA in `[0, 1]` — what Blender's `base_color` expects |
+| `inspect-scene-payload.schema.json` | `InspectScenePayload` | Deliberately **empty** and closed: the project is already trusted job identity |
+| `scene-cases.json` (in `packages/contracts/`) | Shared digest vectors | Numeric formatting, ordering, exclusion and sensitivity vectors for the scene-version digest |
+
+### The scene-version digest is a projection, not a document hash
+
+`scene_version` is SHA-256 over an explicitly enumerated, versioned **allow-list**
+projection of scene state, identified by `digest_version: "studio-scene-v1"` inside the
+hashed payload. It is implemented once per language
+(`python/studio_contracts/scene.py`, `src/scene.ts`) and nowhere else.
+
+Two failure modes drove that choice:
+
+1. hashing the snapshot document would include `captured_at`, so two reads of an
+   unchanged scene would disagree and every plan would be refused;
+2. a deny-list ("hash everything except `captured_at`") would make concurrency
+   semantics change *silently* — a future informational field would invalidate every
+   in-flight plan for no design reason.
+
+Consequences, all test-enforced:
+
+- excluded: `captured_at`, `scene_version` itself, and `project_id` (the digest answers
+  "is this the same scene state?", not "whose scene is this?");
+- object order is normalised by a documented total order — `studio_object_id` when
+  present, else `name`; a duplicate sort key is **refused**, never ordered arbitrarily;
+- numbers are quantised to 1e-6, rounded half-to-even, and serialised as
+  **fixed-decimal strings** rather than JSON numbers, because Python renders `1.0` as
+  `"1.0"` and JavaScript as `"1"`;
+- non-finite values raise instead of being serialised;
+- adding a `SceneSnapshot` field requires classifying it as informational (outside the
+  digest) or planning-relevant (inside it, requiring `studio-scene-v2`), and a
+  projection-completeness test fails if it is left unclassified.
+
+`tests/contracts/test_scene_digest_cross_language_parity.py` asserts the two
+implementations produce byte-identical canonical JSON and identical digests for every
+vector in `scene-cases.json`.
+
 `chat-response.schema.json` encodes two contract rules that would otherwise live only in
 prose:
 

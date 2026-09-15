@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "material-summary.schema.json",
+  "title": "MaterialSummary",
+  "description": "A BASIC description of an object's first material — enough for the agent to answer 'what colour is it?' and to plan a colour change, and nothing more. Spec 002 is deliberately limited to base colour: full shader/node-graph authoring is out of scope, so no node tree, no image reference, and no file reference is representable here. `base_color` is absent when the material's colour cannot be summarised (a procedural or node-driven material), which is different from 'the colour is black' and must not be conflated with it. NOTE WHAT IS ABSENT: no texture path, no image filename, no library or .blend reference, no node data.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Blender material name, e.g. 'Material'. A display label, not an identifier the platform resolves against."
+    },
+    "base_color": {
+      "$ref": "material-color.schema.json",
+      "description": "Canonical linear sRGB base colour, when the material exposes a summarisable one."
+    }
+  },
+  "required": ["name"],
+  "additionalProperties": false
+}
