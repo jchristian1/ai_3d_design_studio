@@ -88,6 +88,10 @@ class JobRecord:
     worker_id: Optional[str] = None
     #: Internal worker execution phase, for observability only. Never a contract.
     execution_phase: Optional[str] = None
+    #: Step progress inside a multi-step plan: {"step_index", "step_count", "label"}.
+    #: The label is written for a person, so this one IS shown to the user -- it is
+    #: what lets one reply say "Creating walls 3 of 9" instead of going quiet.
+    progress: Optional[dict[str, Any]] = None
     result: Optional[dict[str, Any]] = None
     error: Optional[dict[str, Any]] = None
     #: PreviewArtifact wire document reported by the worker (Task 10). Present only
@@ -127,6 +131,7 @@ class JobRecord:
             "job_status": self.job_status,
             "worker_id": self.worker_id,
             "execution_phase": self.execution_phase,
+            "progress": self.progress,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "result": self.result,

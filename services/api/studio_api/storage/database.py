@@ -197,6 +197,14 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             """,
         ),
     ),
+    (
+        4,
+        (
+            # Step progress inside a plan, so a reload mid-reconstruction still shows
+            # where it had got to.
+            "ALTER TABLE job_records ADD COLUMN progress TEXT",
+        ),
+    ),
 )
 
 LATEST_VERSION = MIGRATIONS[-1][0]

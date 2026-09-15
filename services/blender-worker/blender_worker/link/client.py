@@ -267,9 +267,15 @@ class WorkerLinkClient:
 
         previous_state = self.state
         self.state = BUSY
+        # Step progress is reported as it happens, so ONE browser reply can update in
+        # place instead of going quiet through a long reconstruction. Scoped to this
+        # job and cleared afterwards, so a stale closure can never report against the
+        # wrong job.
+        self._attach_progress_sink(job_id, project_id)
         try:
             outcome = self.executor.execute(job)
         finally:
+            self._detach_progress_sink()
             self.state = previous_state if previous_state == BUSY else READY
 
         self._deliver_result(outcome)
@@ -300,6 +306,31 @@ class WorkerLinkClient:
         if self.state == BUSY:
             return ("LOCK_CONFLICT", "worker is busy with another job")
         return None
+
+    def _attach_progress_sink(self, job_id: str, project_id: str) -> None:
+        """Point the executor's progress callback at this job, if it has one."""
+        accept = getattr(self.executor, "set_progress_sink", None)
+        if not callable(accept):
+            return
+
+        def sink(progress: Any) -> None:
+            snapshot = progress.snapshot() if hasattr(progress, "snapshot") else dict(progress)
+            self._safe_send(
+                protocol.job_progress(
+                    self.identity.worker_id,
+                    job_id,
+                    project_id,
+                    phases.EXECUTING,
+                    progress=snapshot,
+                )
+            )
+
+        accept(sink)
+
+    def _detach_progress_sink(self) -> None:
+        accept = getattr(self.executor, "set_progress_sink", None)
+        if callable(accept):
+            accept(None)
 
     # -- result delivery and reconciliation --------------------------------
 

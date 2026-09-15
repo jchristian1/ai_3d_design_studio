@@ -82,7 +82,10 @@ class JobReconciler:
             self._apply_status(message, "claimed")
         elif kind == protocol.JOB_PROGRESS:
             self._apply_status(
-                message, "running", execution_phase=message.get("execution_phase")
+                message,
+                "running",
+                execution_phase=message.get("execution_phase"),
+                progress=message.get("progress"),
             )
         elif kind == protocol.JOB_REJECTED:
             self._apply_rejection(message)
@@ -105,6 +108,7 @@ class JobReconciler:
         message: Mapping[str, Any],
         status: str,
         execution_phase: Optional[str] = None,
+        progress: Optional[Mapping[str, Any]] = None,
     ) -> None:
         record = self._locate(message)
         if record is None:
@@ -118,6 +122,8 @@ class JobReconciler:
         record.worker_id = message.get("worker_id") or record.worker_id
         if execution_phase:
             record.execution_phase = execution_phase
+        if isinstance(progress, Mapping):
+            record.progress = dict(progress)
         record.touch()
         self.store.save(record)
 

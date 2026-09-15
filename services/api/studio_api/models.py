@@ -145,6 +145,7 @@ class JobStatusModel(BaseModel):
     worker_id: Optional[str] = None
     #: Internal worker execution phase. Observability only, never a contract.
     execution_phase: Optional[str] = None
+    progress: Optional[dict[str, Any]] = None
     #: True when the terminal state arrived as a worker resend of a result the
     #: control plane had not received.
     reconciled: bool = False

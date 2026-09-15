@@ -42,6 +42,15 @@ class DispatchingExecutor:
 
         return (*SUPPORTED_JOB_TYPES, CAPABILITY_JOB_TYPE)
 
+    def set_progress_sink(self, sink: Optional[Any]) -> None:
+        """Point step progress at a transport, or detach it.
+
+        The link client sets this for the duration of one job. Keeping it here rather
+        than inside the capability executor means the executor stays free of transport
+        concerns and remains testable without a link.
+        """
+        self.capabilities.on_progress = sink
+
     def execute(self, job: Any) -> Any:
         job_type = _job_type_of(job)
         if job_type == CAPABILITY_JOB_TYPE:
