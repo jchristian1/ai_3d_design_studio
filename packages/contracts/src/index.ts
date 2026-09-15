@@ -89,11 +89,13 @@ export interface ChatRequest {
 /** Structured, machine-readable error codes surfaced across boundaries. */
 export type ErrorCode =
   | "VALIDATION_ERROR"
+  | "UNSUPPORTED_INSTRUCTION"
   | "OBJECT_NOT_FOUND"
   | "OBJECT_NOT_MOVABLE"
   | "INVALID_UNITS"
   | "PRECONDITION_MISMATCH"
   | "LOCK_CONFLICT"
+  | "PROVIDER_UNAVAILABLE"
   | "BLENDER_UNAVAILABLE"
   | "MUTATION_FAILED"
   | "VERIFY_FAILED"
@@ -122,11 +124,13 @@ export interface ChatResponse {
 
 export const ERROR_CODES: readonly ErrorCode[] = [
   "VALIDATION_ERROR",
+  "UNSUPPORTED_INSTRUCTION",
   "OBJECT_NOT_FOUND",
   "OBJECT_NOT_MOVABLE",
   "INVALID_UNITS",
   "PRECONDITION_MISMATCH",
   "LOCK_CONFLICT",
+  "PROVIDER_UNAVAILABLE",
   "BLENDER_UNAVAILABLE",
   "MUTATION_FAILED",
   "VERIFY_FAILED",

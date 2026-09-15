@@ -90,6 +90,14 @@
         {
           "name": "object not movable",
           "data": "OBJECT_NOT_MOVABLE"
+        },
+        {
+          "name": "unsupported instruction",
+          "data": "UNSUPPORTED_INSTRUCTION"
+        },
+        {
+          "name": "provider unavailable",
+          "data": "PROVIDER_UNAVAILABLE"
         }
       ],
       "invalid": [

@@ -66,12 +66,15 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - No Redis, no PostgreSQL, no queue consumption, no agent, no web.
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
 
-- [ ] 7. AgentProvider abstraction and context builder
-  - Define `AgentProvider` protocol, `AgentContext`, `AgentResult` in `services/agent`.
-  - Implement `ContextBuilder` assembling context in the `agent-context.md` order.
-  - Implement a deterministic `RuleBasedProvider` mapping the phrase to `move_object(delta_x=0.50)`; stub `AstraProvider` behind the same interface.
-  - Structured error when object cannot be resolved.
-  - Agent tests: phrase → correct tool call; unresolved object → structured error.
+- [x] 7. AgentProvider abstraction and deterministic RuleBasedProvider
+  - `AgentProvider` Protocol + `AgentContext` (trusted identity) + provider-neutral `AgentPlan`/`AgentResult` in `services/agent/studio_agent`.
+  - `RuleBasedProvider` interprets the narrow documented grammar and delegates ALL conversion to `packages/spatial` (no duplicated unit or axis math).
+  - `AstraProvider`/`CodexProvider` boundaries exist and fail with `PROVIDER_UNAVAILABLE`; they never fabricate a plan.
+  - `JobFactory` maps AgentPlan → canonical Job via the Task 3 builder, preserving `request_id`/`operation_index` idempotency without reimplementing hashing.
+  - AgentPlan carries no identity and no unresolved language; `operations` is ordered so one request can represent multiple operations later.
+  - Added error codes `UNSUPPORTED_INSTRUCTION` and `PROVIDER_UNAVAILABLE`.
+  - `AgentPlan` kept as an internal Python boundary (no canonical schema) with the rationale documented.
+  - Layering enforced by AST tests: no bpy, worker, MCP, subprocess or filesystem access anywhere in the agent package.
   - _Requirements: 3.1, 3.4, 3.5_
 
 - [ ] 8. Worker ↔ control-plane secure connection

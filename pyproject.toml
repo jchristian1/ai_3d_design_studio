@@ -5,6 +5,7 @@ pythonpath = [
     "packages/contracts/python",
     "packages/validation/python",
     "packages/spatial/python",
+    "services/agent",
     "services/blender-mcp",
     "services/blender-worker",
     "tests/fixtures",
