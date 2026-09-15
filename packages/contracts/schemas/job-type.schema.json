@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "job-type.schema.json",
+  "title": "JobType",
+  "description": "The operation a Job carries. This is the DISCRIMINATOR of the job union: job.schema.json binds each job_type to exactly one payload schema, so a Job is never an untyped dictionary. Only operations with an implemented payload schema appear here on purpose — listing a type without a payload contract would let unvalidated payloads through. Reserved for future milestones (each needs its own payload schema plus one conditional in job.schema.json before being added): resize_object, set_material, create_wall, create_opening, set_light, create_camera, render_preview, save_version.",
+  "type": "string",
+  "enum": ["move_object"]
+}

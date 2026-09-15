@@ -27,8 +27,13 @@ tests then fail until both representations are realigned.
 | Schema file | Contract | Notes |
 |---|---|---|
 | `vec3.schema.json` | `Vec3` | All components in canonical **meters** |
-| `job.schema.json` | `Job` | `project_id` mandatory — project isolation |
-| `chat-request.schema.json` | `ChatRequest` | `project_id` required, `additionalProperties: false` |
+| `job.schema.json` | `Job` | `project_id` mandatory — project isolation. Typed discriminated union on `job_type` |
+| `job-type.schema.json` | `JobType` enum | The job/operation discriminator. Only types with a payload schema are listed |
+| `object-ref.schema.json` | `ObjectRef` | Requires at least one of `object_id` / `name` |
+| `move-object-payload.schema.json` | `MoveObjectPayload` | Resolved meters only — no unit or direction field exists |
+| `job-claim.schema.json` | `JobClaim` | Worker ownership + lease shape |
+| `request-origin.schema.json` | `RequestOrigin` | `request_id` + `operation_index`; the source of mutation identity |
+| `chat-request.schema.json` | `ChatRequest` | `request_id` + `project_id` required, `additionalProperties: false` |
 | `chat-response.schema.json` | `ChatResponse` | Conditional rules bind `status` to `error` |
 | `error-response.schema.json` | Structured error payload | `code` + human-readable `message` |
 | `error-code.schema.json` | `ErrorCode` enum | The one canonical error-code list |

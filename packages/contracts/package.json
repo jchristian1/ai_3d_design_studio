@@ -10,5 +10,8 @@
   },
   "dependencies": {
     "@studio/types": "*"
+  },
+  "devDependencies": {
+    "@studio/spatial": "*"
   }
 }

@@ -75,6 +75,7 @@ def is_finite_vec3(value: Any) -> bool:
 CHAT_REQUEST_FIELDS: tuple[str, ...] = (
     "message",
     "project_id",
+    "request_id",
     "selected_object_id",
     "session_id",
 )
@@ -83,9 +84,10 @@ CHAT_REQUEST_FIELDS: tuple[str, ...] = (
 def validate_chat_request(input: Any) -> ValidationResult:
     """Validate an inbound chat request against the canonical contract.
 
-    Enforces Requirement 2.3: missing project_id is rejected. Rejects unknown
-    properties to match the canonical schema. Accepts either a mapping (raw JSON
-    body) or an object with the expected attributes.
+    Enforces Requirement 2.3: missing project_id is rejected. Also requires
+    request_id (the stable submission identity that makes retry semantics
+    possible). Rejects unknown properties to match the canonical schema. Accepts
+    either a mapping (raw JSON body) or an object with the expected attributes.
     """
     if isinstance(input, Mapping):
         get = input.get
@@ -98,6 +100,8 @@ def validate_chat_request(input: Any) -> ValidationResult:
 
     errors: list[ValidationError] = []
 
+    if not is_non_empty_string(get("request_id")):
+        errors.append(ValidationError("request_id", "request_id is required"))
     if not is_non_empty_string(get("project_id")):
         errors.append(ValidationError("project_id", "project_id is required"))
     if not is_non_empty_string(get("session_id")):

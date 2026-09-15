@@ -53,8 +53,16 @@ for (const suite of corpus.suites) {
   }
 }
 
-verdicts.sort((a, b) =>
-  `${a.schema}::${a.case}`.localeCompare(`${b.schema}::${b.case}`),
-);
+/**
+ * Deterministic codepoint ordering.
+ *
+ * `localeCompare` is locale-sensitive (it orders "base" before "C:") and would
+ * disagree with Python's default string sort, producing false parity failures.
+ */
+function byKey(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+verdicts.sort((a, b) => byKey(`${a.schema}::${a.case}`, `${b.schema}::${b.case}`));
 
 process.stdout.write(JSON.stringify(verdicts, null, 2));

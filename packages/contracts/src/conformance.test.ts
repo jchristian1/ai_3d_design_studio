@@ -90,8 +90,15 @@ test("JOB_STATUSES equals canonical job.status enum", () => {
   assert.deepEqual([...JOB_STATUSES], schemaEnum(SCHEMA_FILES.Job, ["status"]));
 });
 
-test("JOB_TYPES equals canonical job.type enum", () => {
-  assert.deepEqual([...JOB_TYPES], schemaEnum(SCHEMA_FILES.Job, ["type"]));
+test("JOB_TYPES equals canonical job-type enum", () => {
+  assert.deepEqual([...JOB_TYPES], schemaEnum(SCHEMA_FILES.JobType));
+});
+
+test("job.job_type resolves to the canonical job-type enum", () => {
+  assert.deepEqual(
+    schemaEnum(SCHEMA_FILES.Job, ["job_type"]),
+    schemaEnum(SCHEMA_FILES.JobType),
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -106,6 +113,7 @@ test("JOB_TYPES equals canonical job.type enum", () => {
  */
 test("ChatRequest field set matches canonical schema", () => {
   const maximal: Required<ChatRequest> = {
+    request_id: "req_abc123",
     project_id: "proj_1",
     session_id: "sess_1",
     message: "Move Cube 50 cm to the right",
@@ -116,7 +124,7 @@ test("ChatRequest field set matches canonical schema", () => {
     schemaProperties(SCHEMA_FILES.ChatRequest),
   );
   assert.deepEqual(
-    ["message", "project_id", "session_id"],
+    ["message", "project_id", "request_id", "session_id"],
     schemaRequired(SCHEMA_FILES.ChatRequest),
   );
 });
@@ -138,17 +146,42 @@ test("ChatResponse field set matches canonical schema", () => {
 
 test("Job field set matches canonical schema", () => {
   const maximal: Required<Job> = {
-    id: "job_1",
+    job_id: "job_1",
+    job_type: "move_object",
     project_id: "proj_1",
     session_id: "sess_1",
-    type: "chat",
+    user_id: "user_1",
+    payload: {
+      target: { name: "Cube" },
+      delta_meters: { x: 0.5, y: 0, z: 0 },
+    },
+    origin: { request_id: "req_abc123", operation_index: 0 },
     status: "queued",
     created_at: "2026-09-15T04:00:00Z",
+    idempotency_key: "idem_abc",
+    content_fingerprint: "fp_abc",
+    claim: {
+      worker_id: "worker_1",
+      claimed_at: "2026-09-15T04:00:01Z",
+      lease_expires_at: "2026-09-15T04:05:01Z",
+    },
+    error: { code: "INTERNAL_ERROR", message: "x" },
     result: null,
   };
   assert.deepEqual(Object.keys(maximal).sort(), schemaProperties(SCHEMA_FILES.Job));
   assert.deepEqual(
-    ["created_at", "id", "project_id", "session_id", "status", "type"],
+    [
+      "created_at",
+      "idempotency_key",
+      "job_id",
+      "job_type",
+      "origin",
+      "payload",
+      "project_id",
+      "session_id",
+      "status",
+      "user_id",
+    ],
     schemaRequired(SCHEMA_FILES.Job),
   );
 });
@@ -164,6 +197,7 @@ test("Vec3 field set matches canonical schema", () => {
 
 test("TS-built ChatRequest serializes to a schema-valid document", () => {
   const req: ChatRequest = {
+    request_id: "req_abc123",
     project_id: "proj_1",
     session_id: "sess_1",
     message: "Move Cube 50 cm to the right",
@@ -195,12 +229,19 @@ test("TS-built error ChatResponse serializes to a schema-valid document", () => 
 
 test("TS-built Job serializes to a schema-valid document", () => {
   const job: Job = {
-    id: "job_1",
+    job_id: "job_1",
+    job_type: "move_object",
     project_id: "proj_1",
     session_id: "sess_1",
-    type: "chat",
+    user_id: "user_1",
+    payload: {
+      target: { name: "Cube" },
+      delta_meters: { x: 0.5, y: 0, z: 0 },
+    },
+    origin: { request_id: "req_abc123", operation_index: 0 },
     status: "queued",
     created_at: new Date().toISOString(),
+    idempotency_key: "idem_abc",
   };
   const r = validateAgainstSchema(SCHEMA_FILES.Job, toWire(job));
   assert.equal(r.valid, true, JSON.stringify(r.violations));

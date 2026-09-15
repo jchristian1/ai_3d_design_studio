@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "job-claim.schema.json",
+  "title": "JobClaim",
+  "description": "Worker ownership metadata, set when a worker claims a job. The lease exists so an abandoned claim can be reclaimed after expiry; the reclaim mechanism itself belongs to the worker/queue task, not here. This schema only fixes the shape the control plane and worker exchange.",
+  "type": "object",
+  "properties": {
+    "worker_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "claimed_at": { "type": "string", "format": "date-time" },
+    "lease_expires_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["worker_id", "claimed_at", "lease_expires_at"],
+  "additionalProperties": false
+}

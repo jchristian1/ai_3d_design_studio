@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "move-object-payload.schema.json",
+  "title": "MoveObjectPayload",
+  "description": "A FULLY RESOLVED translation. delta_meters is an explicit world-space offset in canonical meters; there is no unit field and no direction field, so unresolved language such as '50 cm', 'right', or 'toward the window' is structurally unrepresentable here. Semantic resolution happens earlier (packages/spatial, then the agent) and must be complete before a job exists. additionalProperties:false is what enforces the absence of leftover language fields.",
+  "type": "object",
+  "properties": {
+    "target": { "$ref": "object-ref.schema.json" },
+    "delta_meters": { "$ref": "vec3.schema.json" }
+  },
+  "required": ["target", "delta_meters"],
+  "additionalProperties": false
+}

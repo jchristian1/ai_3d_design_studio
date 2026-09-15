@@ -11,6 +11,7 @@ import {
 
 test("valid ChatRequest passes", () => {
   const r = validateChatRequest({
+    request_id: "req_abc123",
     project_id: "proj_1",
     session_id: "sess_1",
     message: "Move Cube 50 cm to the right",

@@ -13,6 +13,7 @@ from studio_validation import (
 def test_valid_chat_request_passes():
     r = validate_chat_request(
         {
+            "request_id": "req_abc123",
             "project_id": "proj_1",
             "session_id": "sess_1",
             "message": "Move Cube 50 cm to the right",
@@ -58,7 +59,7 @@ def test_accepts_object_with_attributes():
     from studio_contracts import ChatRequest
 
     r = validate_chat_request(
-        ChatRequest(project_id="p", session_id="s", message="m")
+        ChatRequest(request_id="r", project_id="p", session_id="s", message="m")
     )
     assert r.valid is True
 

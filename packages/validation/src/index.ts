@@ -67,6 +67,7 @@ export function isFiniteVec3(value: unknown): value is Vec3 {
 export const CHAT_REQUEST_FIELDS: readonly string[] = [
   "message",
   "project_id",
+  "request_id",
   "selected_object_id",
   "session_id",
 ] as const;
@@ -75,7 +76,8 @@ export const CHAT_REQUEST_FIELDS: readonly string[] = [
  * Validate an inbound ChatRequest against the canonical contract.
  *
  * Enforces Requirement 2.3: a request missing project_id is rejected.
- * Also requires session_id and a non-empty message, and rejects unknown
+ * Also requires request_id (the stable submission identity that makes retry
+ * semantics possible), session_id, and a non-empty message, and rejects unknown
  * properties to match the canonical schema.
  */
 export function validateChatRequest(input: unknown): ValidationResult {
@@ -85,6 +87,9 @@ export function validateChatRequest(input: unknown): ValidationResult {
   const req = input as Partial<ChatRequest>;
   const errors: ValidationError[] = [];
 
+  if (!isNonEmptyString(req.request_id)) {
+    errors.push({ field: "request_id", message: "request_id is required" });
+  }
   if (!isNonEmptyString(req.project_id)) {
     errors.push({ field: "project_id", message: "project_id is required" });
   }

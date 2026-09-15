@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "object-ref.schema.json",
+  "title": "ObjectRef",
+  "description": "A reference to a scene object. At least one of object_id or name must be present. Prefer the stable machine-readable object_id (see .kiro/steering/blender.md: object_id 'obj_8d83f', display_name 'Kitchen Island', Blender name 'KitchenIsland_obj_8d83f'); name is accepted for simple seed scenes such as the Spec 001 'Cube'. Identifiers must be non-blank, hence the \\S pattern alongside minLength.",
+  "type": "object",
+  "properties": {
+    "object_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Stable machine-readable identifier, e.g. obj_8d83f."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Blender object name, e.g. Cube."
+    }
+  },
+  "additionalProperties": false,
+  "anyOf": [{ "required": ["object_id"] }, { "required": ["name"] }]
+}

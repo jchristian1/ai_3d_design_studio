@@ -65,6 +65,11 @@ ChatStatus = Literal["success", "error"]
 SCHEMA_FILES: dict[str, str] = {
     "Vec3": "vec3.schema.json",
     "Job": "job.schema.json",
+    "JobType": "job-type.schema.json",
+    "JobClaim": "job-claim.schema.json",
+    "RequestOrigin": "request-origin.schema.json",
+    "ObjectRef": "object-ref.schema.json",
+    "MoveObjectPayload": "move-object-payload.schema.json",
     "ChatRequest": "chat-request.schema.json",
     "ChatResponse": "chat-response.schema.json",
     "ErrorResponse": "error-response.schema.json",
@@ -84,9 +89,13 @@ class ChatRequest:
     ``project_id`` is REQUIRED: every request is explicitly project-scoped
     (see .kiro/steering/security.md project isolation).
 
+    ``request_id`` is REQUIRED and is the stable identity of this submission:
+    reused verbatim on retry, regenerated for a new intentional command.
+
     Canonical schema: ``chat-request.schema.json``
     """
 
+    request_id: str
     project_id: str
     session_id: str
     message: str

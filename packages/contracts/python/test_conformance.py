@@ -32,7 +32,15 @@ from studio_contracts import (
     to_wire,
     validate_against_schema,
 )
-from studio_types import JOB_STATUSES, JOB_TYPES, Job, Vec3
+from studio_types import (
+    JOB_STATUSES,
+    JOB_TYPES,
+    Job,
+    MoveObjectPayload,
+    ObjectRef,
+    RequestOrigin,
+    Vec3,
+)
 from studio_validation import CHAT_REQUEST_FIELDS, validate_chat_request
 
 with (SCHEMA_DIR / "conformance-cases.json").open("r", encoding="utf-8") as fh:
@@ -87,7 +95,13 @@ def test_job_statuses_equal_canonical_enum():
 
 
 def test_job_types_equal_canonical_enum():
-    assert list(JOB_TYPES) == schema_enum(SCHEMA_FILES["Job"], ["type"])
+    assert list(JOB_TYPES) == schema_enum(SCHEMA_FILES["JobType"])
+
+
+def test_job_job_type_resolves_to_canonical_enum():
+    assert schema_enum(SCHEMA_FILES["Job"], ["job_type"]) == schema_enum(
+        SCHEMA_FILES["JobType"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -116,10 +130,24 @@ def test_dataclass_fields_match_canonical_properties(cls, schema_key):
 @pytest.mark.parametrize(
     "schema_key,expected_required",
     [
-        ("ChatRequest", ["message", "project_id", "session_id"]),
+        ("ChatRequest", ["message", "project_id", "request_id", "session_id"]),
         ("ChatResponse", ["status", "summary"]),
         ("ErrorResponse", ["code", "message"]),
-        ("Job", ["created_at", "id", "project_id", "session_id", "status", "type"]),
+        (
+            "Job",
+            [
+                "created_at",
+                "idempotency_key",
+                "job_id",
+                "job_type",
+                "origin",
+                "payload",
+                "project_id",
+                "session_id",
+                "status",
+                "user_id",
+            ],
+        ),
         ("Vec3", ["x", "y", "z"]),
     ],
 )
@@ -146,6 +174,7 @@ def test_python_required_fields_have_no_defaults():
 
 def test_python_chat_request_is_schema_valid():
     req = ChatRequest(
+        request_id="req_abc123",
         project_id="proj_1",
         session_id="sess_1",
         message="Move Cube 50 cm to the right",
@@ -175,28 +204,31 @@ def test_python_error_chat_response_is_schema_valid():
     assert result.valid, result.violations
 
 
-def test_python_job_is_schema_valid():
-    job = Job(
-        id="job_1",
+def _sample_job() -> Job:
+    return Job(
+        job_id="job_1",
+        job_type="move_object",
         project_id="proj_1",
         session_id="sess_1",
-        type="chat",
+        user_id="user_1",
+        payload=MoveObjectPayload(
+            target=ObjectRef(name="Cube"),
+            delta_meters=Vec3(0.5, 0.0, 0.0),
+        ),
+        origin=RequestOrigin(request_id="req_abc123", operation_index=0),
         status="queued",
+        idempotency_key="idem_abc",
     )
-    result = validate_against_schema(SCHEMA_FILES["Job"], to_wire(job))
+
+
+def test_python_job_is_schema_valid():
+    result = validate_against_schema(SCHEMA_FILES["Job"], to_wire(_sample_job()))
     assert result.valid, result.violations
 
 
 def test_python_default_created_at_matches_canonical_date_time_format():
     """The auto-generated created_at must satisfy the canonical date-time format."""
-    job = Job(
-        id="job_1",
-        project_id="proj_1",
-        session_id="sess_1",
-        type="chat",
-        status="queued",
-    )
-    result = validate_against_schema(SCHEMA_FILES["Job"], to_wire(job))
+    result = validate_against_schema(SCHEMA_FILES["Job"], to_wire(_sample_job()))
     assert result.valid, result.violations
 
 

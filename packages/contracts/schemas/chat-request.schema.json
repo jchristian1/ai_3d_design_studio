@@ -2,9 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "chat-request.schema.json",
   "title": "ChatRequest",
-  "description": "A natural-language design request from the browser. project_id is REQUIRED: every request is explicitly project-scoped (see .kiro/steering/security.md project isolation). String identifiers must be non-blank: `minLength` alone would admit whitespace-only values, so a `\\S` pattern is required alongside it.",
+  "description": "A natural-language design request from the browser. project_id is REQUIRED: every request is explicitly project-scoped (see .kiro/steering/security.md project isolation). request_id is REQUIRED and is the stable identity of this submission: the client assigns it once and reuses it verbatim when retrying, so a retry executes the mutation once while a genuinely new submission of the same instruction executes again. String identifiers must be non-blank: `minLength` alone would admit whitespace-only values, so a `\\S` pattern is required alongside it.",
   "type": "object",
   "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Stable submission identity. Reused verbatim on retry; regenerated for a new intentional command."
+    },
     "project_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "session_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "message": { "type": "string", "minLength": 1, "pattern": "\\S" },
@@ -15,6 +21,6 @@
       "description": "Optional browser-selected object the user is referring to."
     }
   },
-  "required": ["project_id", "session_id", "message"],
+  "required": ["request_id", "project_id", "session_id", "message"],
   "additionalProperties": false
 }

@@ -2,30 +2,101 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "job.schema.json",
   "title": "Job",
-  "description": "A unit of work explicitly bound to a project. project_id is mandatory: a worker must never modify another project's Blender file (see .kiro/steering/security.md). Identifiers must be non-blank, hence the `\\S` pattern alongside minLength.",
+  "description": "The durable unit of work that carries a FULLY RESOLVED semantic operation from the control plane toward the Blender Worker. project_id is mandatory: a worker must never modify another project's Blender file (see .kiro/steering/security.md), so a job is not representable without it. job_type is the discriminator: each type binds to exactly one payload schema via the conditionals below, which keeps Job typed rather than an untyped dictionary. Two identities are distinguished: job_id is the stable identity of THIS job record (and the execution identity a worker deduplicates deliveries on), while idempotency_key is the MUTATION identity derived from the originating request. By the time a Job exists, units and directions are already resolved into canonical meters and explicit coordinates.",
   "type": "object",
   "properties": {
-    "id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "job_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Stable identifier for this job attempt."
+    },
+    "job_type": { "$ref": "job-type.schema.json" },
     "project_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "session_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
-    "type": {
-      "type": "string",
-      "enum": ["chat"],
-      "description": "Job types supported by the platform. Extend as new operations land."
+    "user_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "payload": {
+      "type": "object",
+      "description": "Operation-specific data. Constrained by job_type in the conditionals below."
     },
+    "origin": { "$ref": "request-origin.schema.json" },
     "status": {
       "type": "string",
-      "enum": ["queued", "running", "succeeded", "failed"]
+      "enum": ["queued", "claimed", "running", "succeeded", "failed"],
+      "description": "Lifecycle state. queued -> claimed -> running -> succeeded | failed."
     },
     "created_at": {
       "type": "string",
       "format": "date-time",
-      "description": "ISO-8601 timestamp"
+      "description": "ISO-8601 timestamp."
     },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Deterministic MUTATION IDENTITY, derived from (project_id, origin.request_id, origin.operation_index) — never from the payload contents. Two intentional submissions of the same instruction differ here and both execute; a retry of one submission matches an existing job and executes once. Uniqueness is scoped per project."
+    },
+    "content_fingerprint": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "DIAGNOSTIC ONLY. A canonical hash of (job_type, payload), useful for spotting repeated or accidental duplicate operations in logs and tests. It is deliberately NOT the mutation identity: identical content from two distinct requests is legitimate and must execute twice."
+    },
+    "claim": { "$ref": "job-claim.schema.json" },
+    "error": { "$ref": "error-response.schema.json" },
     "result": {
-      "description": "Operation-specific result payload. Unconstrained at the contract level."
+      "description": "Operation result, present only on success. Unconstrained at the contract level."
     }
   },
-  "required": ["id", "project_id", "session_id", "type", "status", "created_at"],
-  "additionalProperties": false
+  "required": [
+    "job_id",
+    "job_type",
+    "project_id",
+    "session_id",
+    "user_id",
+    "payload",
+    "origin",
+    "status",
+    "created_at",
+    "idempotency_key"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "job_type discriminates the payload. Adding an operation means adding a payload schema and one conditional here.",
+      "if": { "properties": { "job_type": { "const": "move_object" } }, "required": ["job_type"] },
+      "then": {
+        "properties": { "payload": { "$ref": "move-object-payload.schema.json" } }
+      }
+    },
+    {
+      "description": "A failed job MUST carry a structured error; any other state MUST NOT.",
+      "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
+      "then": { "required": ["error"] },
+      "else": { "not": { "required": ["error"] } }
+    },
+    {
+      "description": "A claimed or running job MUST carry worker ownership metadata.",
+      "if": {
+        "properties": { "status": { "enum": ["claimed", "running"] } },
+        "required": ["status"]
+      },
+      "then": { "required": ["claim"] }
+    },
+    {
+      "description": "A queued job MUST NOT be owned by a worker yet.",
+      "if": { "properties": { "status": { "const": "queued" } }, "required": ["status"] },
+      "then": { "not": { "required": ["claim"] } }
+    },
+    {
+      "description": "Only a succeeded job may carry a result.",
+      "if": {
+        "properties": {
+          "status": { "enum": ["queued", "claimed", "running", "failed"] }
+        },
+        "required": ["status"]
+      },
+      "then": { "not": { "required": ["result"] } }
+    }
+  ]
 }

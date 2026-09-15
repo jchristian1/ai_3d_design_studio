@@ -34,6 +34,38 @@ export {
 } from "./schema.ts";
 export type { JsonSchema, SchemaViolation } from "./schema.ts";
 
+export {
+  ALLOWED_TRANSITIONS,
+  CONTENT_FINGERPRINT_VERSION,
+  IDEMPOTENCY_VERSION,
+  JOB_MESSAGES,
+  UNRESOLVED_PAYLOAD_KEYS,
+  canTransition,
+  canonicalize,
+  classifyDelivery,
+  createMoveObjectJob,
+  deriveContentFingerprint,
+  deriveIdempotencyKey,
+  encodeFloat64,
+  isDuplicateDelivery,
+  isTerminal,
+  isValidObjectRef,
+  parseJob,
+  serializeJob,
+  toJobWire,
+  validateJob,
+} from "./jobs.ts";
+export type {
+  CreateJobResult,
+  CreateMoveObjectJobInput,
+  DeliveryDecision,
+  IdempotencyInput,
+  JobClaimer,
+  JobStore,
+  JobValidationResult,
+  ParseJobResult,
+} from "./jobs.ts";
+
 /**
  * A natural-language design request from the browser.
  *
@@ -41,6 +73,12 @@ export type { JsonSchema, SchemaViolation } from "./schema.ts";
  * project (see .kiro/steering/security.md project isolation).
  */
 export interface ChatRequest {
+  /**
+   * Stable identity of this submission. Assigned once by the client and reused
+   * verbatim when retrying, so a retry executes the mutation once while a
+   * genuinely new command executes again.
+   */
+  request_id: string;
   project_id: string;
   session_id: string;
   message: string;
@@ -96,6 +134,11 @@ export const ERROR_CODES: readonly ErrorCode[] = [
 export const SCHEMA_FILES = {
   Vec3: "vec3.schema.json",
   Job: "job.schema.json",
+  JobType: "job-type.schema.json",
+  JobClaim: "job-claim.schema.json",
+  RequestOrigin: "request-origin.schema.json",
+  ObjectRef: "object-ref.schema.json",
+  MoveObjectPayload: "move-object-payload.schema.json",
   ChatRequest: "chat-request.schema.json",
   ChatResponse: "chat-response.schema.json",
   ErrorResponse: "error-response.schema.json",

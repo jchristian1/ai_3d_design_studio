@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "request-origin.schema.json",
+  "title": "RequestOrigin",
+  "description": "The originating user/API submission a job came from. This is the SOURCE OF MUTATION IDENTITY: a job's idempotency identity is derived from (project_id, request_id, operation_index), never from the operation contents. Two intentional submissions of the same instruction carry different request_ids and therefore both execute; a retry of one submission reuses its request_id and therefore executes once. operation_index distinguishes multiple operations produced by a single request.",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Stable identifier of the originating submission. Assigned once by the client (or by the API when it first accepts the submission) and reused verbatim on retries."
+    },
+    "operation_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-based position of this operation within the originating request. A request that yields one job uses 0."
+    }
+  },
+  "required": ["request_id", "operation_index"],
+  "additionalProperties": false
+}

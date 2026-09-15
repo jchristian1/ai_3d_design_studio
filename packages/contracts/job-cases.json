@@ -1,0 +1,172 @@
+{
+  "description": "Language-neutral behaviour corpus for the Spec 001 Task 3 job layer. Both packages/contracts/src/jobs.ts and studio_contracts.jobs execute these exact cases and must agree, including derived idempotency keys and canonical encodings.",
+  "canonicalize": {
+    "description": "Deterministic canonical encoding. `expected` must match byte-for-byte in both languages.",
+    "cases": [
+      { "name": "null", "value": null, "expected": "n" },
+      { "name": "true", "value": true, "expected": "b:1" },
+      { "name": "false", "value": false, "expected": "b:0" },
+      { "name": "empty string", "value": "", "expected": "s:0:" },
+      { "name": "simple string", "value": "Cube", "expected": "s:4:Cube" },
+      {
+        "name": "string containing delimiters cannot forge structure",
+        "value": "a,b=c}",
+        "expected": "s:6:a,b=c}"
+      },
+      { "name": "zero", "value": 0, "expected": "f:0000000000000000" },
+      { "name": "negative zero normalizes", "value": -0.0, "expected": "f:0000000000000000" },
+      { "name": "half meter", "value": 0.5, "expected": "f:3fe0000000000000" },
+      { "name": "one", "value": 1, "expected": "f:3ff0000000000000" },
+      { "name": "negative quarter", "value": -0.25, "expected": "f:bfd0000000000000" },
+      { "name": "empty array", "value": [], "expected": "a:[]" },
+      { "name": "empty object", "value": {}, "expected": "o:{}" },
+      {
+        "name": "object keys are sorted",
+        "value": { "z": 1, "a": 0 },
+        "expected": "o:{s:1:a=f:0000000000000000,s:1:z=f:3ff0000000000000}"
+      },
+      {
+        "name": "nested vec3",
+        "value": { "x": 0.5, "y": 0, "z": 0 },
+        "expected": "o:{s:1:x=f:3fe0000000000000,s:1:y=f:0000000000000000,s:1:z=f:0000000000000000}"
+      }
+    ],
+    "rejected": [
+      { "name": "NaN", "value": "__NAN__" },
+      { "name": "positive infinity", "value": "__INF__" },
+      { "name": "negative infinity", "value": "__NEG_INF__" }
+    ]
+  },
+  "idempotency": {
+    "description": "MUTATION IDENTITY, derived from (project_id, request_id, operation_index) — never from the payload. A retry of the same submission resolves to the same key and executes once; a new submission executes again even with a byte-identical payload.",
+    "base": {
+      "project_id": "proj_1",
+      "request_id": "req_abc123",
+      "operation_index": 0
+    },
+    "expected_key": "idem_bc9a18dfbb4b75c08960f8185b95afaf0a698619fef890b5a634acf238273ccc",
+    "same_key_variants": [
+      {
+        "name": "A: same request_id + same operation_index + same project",
+        "override": {}
+      },
+      {
+        "name": "B: retry of the same submission",
+        "override": {},
+        "note": "a retry reuses request_id verbatim, so the key is unchanged"
+      }
+    ],
+    "different_key_variants": [
+      {
+        "name": "C: different request_id (new intentional command)",
+        "field": "request_id",
+        "value": "req_xyz789"
+      },
+      {
+        "name": "D: same request_id, operation_index 1",
+        "field": "operation_index",
+        "value": 1
+      },
+      {
+        "name": "E: same request_id in a different project",
+        "field": "project_id",
+        "value": "proj_2"
+      }
+    ],
+    "rejected": [
+      { "name": "negative operation_index", "field": "operation_index", "value": -1 },
+      { "name": "fractional operation_index", "field": "operation_index", "value": 0.5 }
+    ]
+  },
+  "content_fingerprint": {
+    "description": "DIAGNOSTIC ONLY. Derived from (job_type, payload). Two distinct requests with identical payloads share a fingerprint but must NOT share an idempotency key — that is precisely the property that lets a user repeat a command.",
+    "job_type": "move_object",
+    "payload": {
+      "target": { "name": "Cube" },
+      "delta_meters": { "x": 0.5, "y": 0, "z": 0 }
+    },
+    "expected_fingerprint": "fp_c9c437ddb297bb29095b9a1c1c5279cab7431f105e283f7b3e60fdba0befbbd6",
+    "different_payloads": [
+      {
+        "name": "different distance",
+        "payload": {
+          "target": { "name": "Cube" },
+          "delta_meters": { "x": 0.25, "y": 0, "z": 0 }
+        }
+      },
+      {
+        "name": "opposite direction",
+        "payload": {
+          "target": { "name": "Cube" },
+          "delta_meters": { "x": -0.5, "y": 0, "z": 0 }
+        }
+      },
+      {
+        "name": "different axis",
+        "payload": {
+          "target": { "name": "Cube" },
+          "delta_meters": { "x": 0, "y": 0.5, "z": 0 }
+        }
+      },
+      {
+        "name": "different target name",
+        "payload": {
+          "target": { "name": "Sphere" },
+          "delta_meters": { "x": 0.5, "y": 0, "z": 0 }
+        }
+      },
+      {
+        "name": "target by id instead of name",
+        "payload": {
+          "target": { "object_id": "obj_8d83f" },
+          "delta_meters": { "x": 0.5, "y": 0, "z": 0 }
+        }
+      }
+    ],
+    "equivalent_payloads": [
+      {
+        "name": "negative zero is equivalent to positive zero",
+        "payload": {
+          "target": { "name": "Cube" },
+          "delta_meters": { "x": 0.5, "y": -0.0, "z": 0 }
+        }
+      }
+    ]
+  },
+  "delivery": {
+    "description": "Duplicate queue delivery of the same job_id. The worker decides from the recorded status, so a redelivery never mutates Blender twice.",
+    "cases": [
+      { "name": "never recorded", "recorded_status": null, "decision": "execute" },
+      { "name": "still queued", "recorded_status": "queued", "decision": "execute" },
+      { "name": "already claimed", "recorded_status": "claimed", "decision": "already_owned" },
+      { "name": "already running", "recorded_status": "running", "decision": "already_owned" },
+      { "name": "already succeeded", "recorded_status": "succeeded", "decision": "reuse_result" },
+      { "name": "already failed", "recorded_status": "failed", "decision": "reuse_result" }
+    ]
+  },
+  "transitions": {
+    "description": "Allowed job lifecycle transitions.",
+    "allowed": [
+      { "from": "queued", "to": "claimed" },
+      { "from": "queued", "to": "failed" },
+      { "from": "claimed", "to": "running" },
+      { "from": "claimed", "to": "failed" },
+      { "from": "running", "to": "succeeded" },
+      { "from": "running", "to": "failed" }
+    ],
+    "rejected": [
+      { "from": "queued", "to": "running" },
+      { "from": "queued", "to": "succeeded" },
+      { "from": "queued", "to": "queued" },
+      { "from": "claimed", "to": "queued" },
+      { "from": "claimed", "to": "succeeded" },
+      { "from": "running", "to": "claimed" },
+      { "from": "running", "to": "queued" },
+      { "from": "succeeded", "to": "failed" },
+      { "from": "succeeded", "to": "running" },
+      { "from": "failed", "to": "queued" },
+      { "from": "failed", "to": "running" },
+      { "from": "failed", "to": "succeeded" }
+    ]
+  }
+}

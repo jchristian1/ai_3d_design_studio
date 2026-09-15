@@ -4,28 +4,95 @@
     {
       "schema": "vec3.schema.json",
       "valid": [
-        { "name": "origin", "data": { "x": 0, "y": 0, "z": 0 } },
-        { "name": "half meter on x", "data": { "x": 0.5, "y": 0, "z": 0 } },
-        { "name": "negative components", "data": { "x": -1.25, "y": 2.4, "z": -0.05 } }
+        {
+          "name": "origin",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "half meter on x",
+          "data": {
+            "x": 0.5,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "negative components",
+          "data": {
+            "x": -1.25,
+            "y": 2.4,
+            "z": -0.05
+          }
+        }
       ],
       "invalid": [
-        { "name": "missing z", "data": { "x": 0, "y": 0 } },
-        { "name": "string component", "data": { "x": "0.5", "y": 0, "z": 0 } },
-        { "name": "extra property", "data": { "x": 0, "y": 0, "z": 0, "w": 1 } },
-        { "name": "not an object", "data": [0, 0, 0] }
+        {
+          "name": "missing z",
+          "data": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "name": "string component",
+          "data": {
+            "x": "0.5",
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "extra property",
+          "data": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          }
+        },
+        {
+          "name": "not an object",
+          "data": [
+            0,
+            0,
+            0
+          ]
+        }
       ]
     },
     {
       "schema": "error-code.schema.json",
       "valid": [
-        { "name": "object not found", "data": "OBJECT_NOT_FOUND" },
-        { "name": "lock conflict", "data": "LOCK_CONFLICT" },
-        { "name": "verify failed", "data": "VERIFY_FAILED" }
+        {
+          "name": "object not found",
+          "data": "OBJECT_NOT_FOUND"
+        },
+        {
+          "name": "lock conflict",
+          "data": "LOCK_CONFLICT"
+        },
+        {
+          "name": "verify failed",
+          "data": "VERIFY_FAILED"
+        }
       ],
       "invalid": [
-        { "name": "unknown code", "data": "SOMETHING_ELSE" },
-        { "name": "lowercase", "data": "object_not_found" },
-        { "name": "not a string", "data": 42 }
+        {
+          "name": "unknown code",
+          "data": "SOMETHING_ELSE"
+        },
+        {
+          "name": "lowercase",
+          "data": "object_not_found"
+        },
+        {
+          "name": "not a string",
+          "data": 42
+        }
       ]
     },
     {
@@ -33,13 +100,33 @@
       "valid": [
         {
           "name": "object not found with message",
-          "data": { "code": "OBJECT_NOT_FOUND", "message": "no object named 'Cube'" }
+          "data": {
+            "code": "OBJECT_NOT_FOUND",
+            "message": "no object named 'Cube'"
+          }
         }
       ],
       "invalid": [
-        { "name": "missing message", "data": { "code": "INVALID_UNITS" } },
-        { "name": "empty message", "data": { "code": "INVALID_UNITS", "message": "" } },
-        { "name": "unknown code", "data": { "code": "NOPE", "message": "bad" } }
+        {
+          "name": "missing message",
+          "data": {
+            "code": "INVALID_UNITS"
+          }
+        },
+        {
+          "name": "empty message",
+          "data": {
+            "code": "INVALID_UNITS",
+            "message": ""
+          }
+        },
+        {
+          "name": "unknown code",
+          "data": {
+            "code": "NOPE",
+            "message": "bad"
+          }
+        }
       ]
     },
     {
@@ -48,6 +135,7 @@
         {
           "name": "move cube request",
           "data": {
+            "request_id": "req_abc123",
             "project_id": "proj_1",
             "session_id": "sess_1",
             "message": "Move Cube 50 cm to the right"
@@ -56,6 +144,7 @@
         {
           "name": "with selected object",
           "data": {
+            "request_id": "req_abc123",
             "project_id": "proj_1",
             "session_id": "sess_1",
             "message": "Move it right",
@@ -66,19 +155,37 @@
       "invalid": [
         {
           "name": "missing project_id",
-          "data": { "session_id": "sess_1", "message": "Move Cube" }
+          "data": {
+            "session_id": "sess_1",
+            "message": "Move Cube",
+            "request_id": "req_abc123"
+          }
         },
         {
           "name": "blank project_id",
-          "data": { "project_id": "   ", "session_id": "sess_1", "message": "Move Cube" }
+          "data": {
+            "project_id": "   ",
+            "session_id": "sess_1",
+            "message": "Move Cube",
+            "request_id": "req_abc123"
+          }
         },
         {
           "name": "missing session_id",
-          "data": { "project_id": "proj_1", "message": "Move Cube" }
+          "data": {
+            "project_id": "proj_1",
+            "message": "Move Cube",
+            "request_id": "req_abc123"
+          }
         },
         {
           "name": "empty message",
-          "data": { "project_id": "proj_1", "session_id": "sess_1", "message": "" }
+          "data": {
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "message": "",
+            "request_id": "req_abc123"
+          }
         },
         {
           "name": "empty selected_object_id",
@@ -86,17 +193,39 @@
             "project_id": "proj_1",
             "session_id": "sess_1",
             "message": "Move Cube",
-            "selected_object_id": ""
+            "selected_object_id": "",
+            "request_id": "req_abc123"
           }
         },
-        { "name": "not an object", "data": "Move Cube 50 cm to the right" },
+        {
+          "name": "not an object",
+          "data": "Move Cube 50 cm to the right"
+        },
         {
           "name": "unknown property",
           "data": {
             "project_id": "proj_1",
             "session_id": "sess_1",
             "message": "Move Cube",
-            "delta_x": 0.5
+            "delta_x": 0.5,
+            "request_id": "req_abc123"
+          }
+        },
+        {
+          "name": "missing request_id",
+          "data": {
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "message": "Move Cube"
+          }
+        },
+        {
+          "name": "blank request_id",
+          "data": {
+            "request_id": "  ",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "message": "Move Cube"
           }
         }
       ]
@@ -109,133 +238,574 @@
           "data": {
             "status": "success",
             "summary": "Moved Cube 0.50 m on +X",
-            "object_position": { "x": 0.5, "y": 0, "z": 0 },
+            "object_position": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
             "preview_url": "s3://previews/p.png"
           }
         },
         {
           "name": "minimal success",
-          "data": { "status": "success", "summary": "Done" }
+          "data": {
+            "status": "success",
+            "summary": "Done"
+          }
         },
         {
           "name": "error with structured code",
           "data": {
             "status": "error",
             "summary": "Object not found",
-            "error": { "code": "OBJECT_NOT_FOUND", "message": "no object named 'Cube'" }
+            "error": {
+              "code": "OBJECT_NOT_FOUND",
+              "message": "no object named 'Cube'"
+            }
           }
         }
       ],
       "invalid": [
         {
           "name": "error status without error payload",
-          "data": { "status": "error", "summary": "It broke" }
+          "data": {
+            "status": "error",
+            "summary": "It broke"
+          }
         },
         {
           "name": "success status carrying an error payload",
           "data": {
             "status": "success",
             "summary": "Moved Cube",
-            "error": { "code": "VERIFY_FAILED", "message": "mismatch" }
+            "error": {
+              "code": "VERIFY_FAILED",
+              "message": "mismatch"
+            }
           }
         },
         {
           "name": "unknown status",
-          "data": { "status": "partial", "summary": "Half done" }
+          "data": {
+            "status": "partial",
+            "summary": "Half done"
+          }
         },
         {
           "name": "position with non-numeric component",
           "data": {
             "status": "success",
             "summary": "Moved Cube",
-            "object_position": { "x": "0.5", "y": 0, "z": 0 }
+            "object_position": {
+              "x": "0.5",
+              "y": 0,
+              "z": 0
+            }
           }
         },
         {
           "name": "missing summary",
-          "data": { "status": "success" }
+          "data": {
+            "status": "success"
+          }
         }
       ]
     },
     {
       "schema": "length-unit.schema.json",
       "valid": [
-        { "name": "meters", "data": "m" },
-        { "name": "centimeters", "data": "cm" }
+        {
+          "name": "meters",
+          "data": "m"
+        },
+        {
+          "name": "centimeters",
+          "data": "cm"
+        }
       ],
       "invalid": [
-        { "name": "millimeters not supported in this milestone", "data": "mm" },
-        { "name": "spelled out", "data": "meters" },
-        { "name": "uppercase", "data": "M" },
-        { "name": "not a string", "data": 1 }
+        {
+          "name": "millimeters not supported in this milestone",
+          "data": "mm"
+        },
+        {
+          "name": "spelled out",
+          "data": "meters"
+        },
+        {
+          "name": "uppercase",
+          "data": "M"
+        },
+        {
+          "name": "not a string",
+          "data": 1
+        }
       ]
     },
     {
       "schema": "measurement.schema.json",
       "valid": [
-        { "name": "50 cm", "data": { "value": 50, "unit": "cm" } },
-        { "name": "0.5 m", "data": { "value": 0.5, "unit": "m" } },
-        { "name": "negative 25 cm", "data": { "value": -25, "unit": "cm" } },
-        { "name": "zero", "data": { "value": 0, "unit": "m" } }
+        {
+          "name": "50 cm",
+          "data": {
+            "value": 50,
+            "unit": "cm"
+          }
+        },
+        {
+          "name": "0.5 m",
+          "data": {
+            "value": 0.5,
+            "unit": "m"
+          }
+        },
+        {
+          "name": "negative 25 cm",
+          "data": {
+            "value": -25,
+            "unit": "cm"
+          }
+        },
+        {
+          "name": "zero",
+          "data": {
+            "value": 0,
+            "unit": "m"
+          }
+        }
       ],
       "invalid": [
-        { "name": "missing unit", "data": { "value": 50 } },
-        { "name": "missing value", "data": { "unit": "cm" } },
-        { "name": "unknown unit", "data": { "value": 50, "unit": "mm" } },
-        { "name": "string value", "data": { "value": "50", "unit": "cm" } },
+        {
+          "name": "missing unit",
+          "data": {
+            "value": 50
+          }
+        },
+        {
+          "name": "missing value",
+          "data": {
+            "unit": "cm"
+          }
+        },
+        {
+          "name": "unknown unit",
+          "data": {
+            "value": 50,
+            "unit": "mm"
+          }
+        },
+        {
+          "name": "string value",
+          "data": {
+            "value": "50",
+            "unit": "cm"
+          }
+        },
         {
           "name": "extra property",
-          "data": { "value": 50, "unit": "cm", "axis": "x" }
+          "data": {
+            "value": 50,
+            "unit": "cm",
+            "axis": "x"
+          }
         },
-        { "name": "not an object", "data": 50 }
+        {
+          "name": "not an object",
+          "data": 50
+        }
       ]
     },
     {
       "schema": "axis.schema.json",
       "valid": [
-        { "name": "x", "data": "x" },
-        { "name": "y", "data": "y" },
-        { "name": "z", "data": "z" }
+        {
+          "name": "x",
+          "data": "x"
+        },
+        {
+          "name": "y",
+          "data": "y"
+        },
+        {
+          "name": "z",
+          "data": "z"
+        }
       ],
       "invalid": [
-        { "name": "uppercase", "data": "X" },
-        { "name": "unknown axis", "data": "w" },
-        { "name": "not a string", "data": 0 }
+        {
+          "name": "uppercase",
+          "data": "X"
+        },
+        {
+          "name": "unknown axis",
+          "data": "w"
+        },
+        {
+          "name": "not a string",
+          "data": 0
+        }
       ]
     },
     {
       "schema": "direction.schema.json",
       "valid": [
-        { "name": "right", "data": "right" },
-        { "name": "left", "data": "left" },
-        { "name": "forward", "data": "forward" },
-        { "name": "back", "data": "back" },
-        { "name": "up", "data": "up" },
-        { "name": "down", "data": "down" }
+        {
+          "name": "right",
+          "data": "right"
+        },
+        {
+          "name": "left",
+          "data": "left"
+        },
+        {
+          "name": "forward",
+          "data": "forward"
+        },
+        {
+          "name": "back",
+          "data": "back"
+        },
+        {
+          "name": "up",
+          "data": "up"
+        },
+        {
+          "name": "down",
+          "data": "down"
+        }
       ],
       "invalid": [
-        { "name": "uppercase", "data": "Right" },
-        { "name": "camera-relative wording is not supported", "data": "toward camera" },
-        { "name": "unknown direction", "data": "sideways" },
-        { "name": "not a string", "data": 1 }
+        {
+          "name": "uppercase",
+          "data": "Right"
+        },
+        {
+          "name": "camera-relative wording is not supported",
+          "data": "toward camera"
+        },
+        {
+          "name": "unknown direction",
+          "data": "sideways"
+        },
+        {
+          "name": "not a string",
+          "data": 1
+        }
       ]
     },
     {
       "schema": "axis-direction.schema.json",
       "valid": [
-        { "name": "positive x", "data": { "axis": "x", "sign": 1 } },
-        { "name": "negative x", "data": { "axis": "x", "sign": -1 } },
-        { "name": "positive z", "data": { "axis": "z", "sign": 1 } }
+        {
+          "name": "positive x",
+          "data": {
+            "axis": "x",
+            "sign": 1
+          }
+        },
+        {
+          "name": "negative x",
+          "data": {
+            "axis": "x",
+            "sign": -1
+          }
+        },
+        {
+          "name": "positive z",
+          "data": {
+            "axis": "z",
+            "sign": 1
+          }
+        }
       ],
       "invalid": [
-        { "name": "zero sign", "data": { "axis": "x", "sign": 0 } },
-        { "name": "fractional sign", "data": { "axis": "x", "sign": 0.5 } },
-        { "name": "missing sign", "data": { "axis": "x" } },
-        { "name": "missing axis", "data": { "sign": 1 } },
-        { "name": "unknown axis", "data": { "axis": "w", "sign": 1 } },
+        {
+          "name": "zero sign",
+          "data": {
+            "axis": "x",
+            "sign": 0
+          }
+        },
+        {
+          "name": "fractional sign",
+          "data": {
+            "axis": "x",
+            "sign": 0.5
+          }
+        },
+        {
+          "name": "missing sign",
+          "data": {
+            "axis": "x"
+          }
+        },
+        {
+          "name": "missing axis",
+          "data": {
+            "sign": 1
+          }
+        },
+        {
+          "name": "unknown axis",
+          "data": {
+            "axis": "w",
+            "sign": 1
+          }
+        },
         {
           "name": "extra property",
-          "data": { "axis": "x", "sign": 1, "meters": 0.5 }
+          "data": {
+            "axis": "x",
+            "sign": 1,
+            "meters": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "schema": "job-type.schema.json",
+      "valid": [
+        {
+          "name": "move_object",
+          "data": "move_object"
+        }
+      ],
+      "invalid": [
+        {
+          "name": "chat is not a Blender operation",
+          "data": "chat"
+        },
+        {
+          "name": "reserved but not yet implemented",
+          "data": "resize_object"
+        },
+        {
+          "name": "unknown operation",
+          "data": "teleport_object"
+        },
+        {
+          "name": "not a string",
+          "data": 1
+        }
+      ]
+    },
+    {
+      "schema": "object-ref.schema.json",
+      "valid": [
+        {
+          "name": "by name",
+          "data": {
+            "name": "Cube"
+          }
+        },
+        {
+          "name": "by stable id",
+          "data": {
+            "object_id": "obj_8d83f"
+          }
+        },
+        {
+          "name": "by both",
+          "data": {
+            "object_id": "obj_8d83f",
+            "name": "KitchenIsland_obj_8d83f"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "empty object provides no identifier",
+          "data": {}
+        },
+        {
+          "name": "blank name",
+          "data": {
+            "name": "   "
+          }
+        },
+        {
+          "name": "blank object_id",
+          "data": {
+            "object_id": ""
+          }
+        },
+        {
+          "name": "extra property",
+          "data": {
+            "name": "Cube",
+            "display_name": "Cube"
+          }
+        },
+        {
+          "name": "not an object",
+          "data": "Cube"
+        }
+      ]
+    },
+    {
+      "schema": "move-object-payload.schema.json",
+      "valid": [
+        {
+          "name": "spec example: Cube +0.50 m on X",
+          "data": {
+            "target": {
+              "name": "Cube"
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "zero delta",
+          "data": {
+            "target": {
+              "object_id": "obj_8d83f"
+            },
+            "delta_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing target",
+          "data": {
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "missing delta",
+          "data": {
+            "target": {
+              "name": "Cube"
+            }
+          }
+        },
+        {
+          "name": "unresolved unit string instead of meters",
+          "data": {
+            "target": {
+              "name": "Cube"
+            },
+            "delta_meters": {
+              "x": "50 cm",
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "unresolved unit field leaks into payload",
+          "data": {
+            "target": {
+              "name": "Cube"
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "unit": "cm"
+          }
+        },
+        {
+          "name": "unresolved direction field leaks into payload",
+          "data": {
+            "target": {
+              "name": "Cube"
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "direction": "right"
+          }
+        },
+        {
+          "name": "unresolved distance field leaks into payload",
+          "data": {
+            "target": {
+              "name": "Cube"
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "distance": 50
+          }
+        },
+        {
+          "name": "incomplete delta",
+          "data": {
+            "target": {
+              "name": "Cube"
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0
+            }
+          }
+        },
+        {
+          "name": "invalid target",
+          "data": {
+            "target": {},
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "schema": "job-claim.schema.json",
+      "valid": [
+        {
+          "name": "claimed with lease",
+          "data": {
+            "worker_id": "worker_1",
+            "claimed_at": "2026-09-15T04:00:00Z",
+            "lease_expires_at": "2026-09-15T04:05:00Z"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing lease",
+          "data": {
+            "worker_id": "worker_1",
+            "claimed_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "blank worker_id",
+          "data": {
+            "worker_id": "  ",
+            "claimed_at": "2026-09-15T04:00:00Z",
+            "lease_expires_at": "2026-09-15T04:05:00Z"
+          }
+        },
+        {
+          "name": "claimed_at not a timestamp",
+          "data": {
+            "worker_id": "worker_1",
+            "claimed_at": "just now",
+            "lease_expires_at": "2026-09-15T04:05:00Z"
+          }
         }
       ]
     },
@@ -243,72 +813,700 @@
       "schema": "job.schema.json",
       "valid": [
         {
-          "name": "queued chat job",
+          "name": "spec example: queued move of Cube +0.50 m on X",
           "data": {
-            "id": "job_1",
+            "job_id": "job_1",
+            "job_type": "move_object",
             "project_id": "proj_1",
             "session_id": "sess_1",
-            "type": "chat",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
             "status": "queued",
-            "created_at": "2026-09-15T04:00:00+00:00"
+            "created_at": "2026-09-15T04:00:00+00:00",
+            "idempotency_key": "idem_abc123",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
           }
         },
         {
-          "name": "succeeded job with result",
+          "name": "claimed job carries worker ownership",
           "data": {
-            "id": "job_2",
+            "job_id": "job_2",
+            "job_type": "move_object",
             "project_id": "proj_1",
             "session_id": "sess_1",
-            "type": "chat",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "object_id": "obj_8d83f"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "claimed",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc124",
+            "claim": {
+              "worker_id": "worker_1",
+              "claimed_at": "2026-09-15T04:00:01Z",
+              "lease_expires_at": "2026-09-15T04:05:01Z"
+            },
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "running job carries worker ownership",
+          "data": {
+            "job_id": "job_3",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "running",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc125",
+            "claim": {
+              "worker_id": "worker_1",
+              "claimed_at": "2026-09-15T04:00:01Z",
+              "lease_expires_at": "2026-09-15T04:05:01Z"
+            },
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "succeeded job may carry a result",
+          "data": {
+            "job_id": "job_4",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
             "status": "succeeded",
-            "created_at": "2026-09-15T04:05:00Z",
-            "result": { "object_position": { "x": 0.5, "y": 0, "z": 0 } }
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc126",
+            "claim": {
+              "worker_id": "worker_1",
+              "claimed_at": "2026-09-15T04:00:01Z",
+              "lease_expires_at": "2026-09-15T04:05:01Z"
+            },
+            "result": {
+              "position_m": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "failed job carries a structured error",
+          "data": {
+            "job_id": "job_5",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "failed",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc127",
+            "error": {
+              "code": "LOCK_CONFLICT",
+              "message": "project is locked"
+            },
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
           }
         }
       ],
       "invalid": [
         {
-          "name": "missing project_id",
+          "name": "missing project_id makes the job unexecutable",
           "data": {
-            "id": "job_3",
+            "job_id": "job_6",
+            "job_type": "move_object",
             "session_id": "sess_1",
-            "type": "chat",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
             "status": "queued",
-            "created_at": "2026-09-15T04:00:00Z"
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc128",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
           }
         },
         {
-          "name": "unknown status",
+          "name": "blank project_id",
           "data": {
-            "id": "job_4",
+            "job_id": "job_7",
+            "job_type": "move_object",
+            "project_id": "   ",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc129",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "missing user_id",
+          "data": {
+            "job_id": "job_8",
+            "job_type": "move_object",
             "project_id": "proj_1",
             "session_id": "sess_1",
-            "type": "chat",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc130",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "missing idempotency_key",
+          "data": {
+            "job_id": "job_9",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "unsupported job_type",
+          "data": {
+            "job_id": "job_10",
+            "job_type": "resize_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "scale": 2
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc131",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "invalid status",
+          "data": {
+            "job_id": "job_11",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
             "status": "pending",
-            "created_at": "2026-09-15T04:00:00Z"
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc132",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
           }
         },
         {
-          "name": "unknown job type",
+          "name": "malformed payload for job_type",
           "data": {
-            "id": "job_5",
+            "job_id": "job_12",
+            "job_type": "move_object",
             "project_id": "proj_1",
             "session_id": "sess_1",
-            "type": "render",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              }
+            },
             "status": "queued",
-            "created_at": "2026-09-15T04:00:00Z"
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc133",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "payload retains unresolved unit field",
+          "data": {
+            "job_id": "job_13",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              },
+              "unit": "cm"
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc134",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "payload retains unresolved direction field",
+          "data": {
+            "job_id": "job_14",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              },
+              "direction": "right"
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc135",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "failed job without an error payload",
+          "data": {
+            "job_id": "job_15",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "failed",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc136",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "queued job carrying an error payload",
+          "data": {
+            "job_id": "job_16",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc137",
+            "error": {
+              "code": "INTERNAL_ERROR",
+              "message": "nope"
+            },
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "queued job already owned by a worker",
+          "data": {
+            "job_id": "job_17",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc138",
+            "claim": {
+              "worker_id": "worker_1",
+              "claimed_at": "2026-09-15T04:00:01Z",
+              "lease_expires_at": "2026-09-15T04:05:01Z"
+            },
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "running job without worker ownership",
+          "data": {
+            "job_id": "job_18",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "running",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc139",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "running job carrying a result",
+          "data": {
+            "job_id": "job_19",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "running",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc140",
+            "claim": {
+              "worker_id": "worker_1",
+              "claimed_at": "2026-09-15T04:00:01Z",
+              "lease_expires_at": "2026-09-15T04:05:01Z"
+            },
+            "result": {
+              "position_m": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
           }
         },
         {
           "name": "created_at not a timestamp",
           "data": {
-            "id": "job_6",
+            "job_id": "job_20",
+            "job_type": "move_object",
             "project_id": "proj_1",
             "session_id": "sess_1",
-            "type": "chat",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
             "status": "queued",
-            "created_at": "yesterday"
+            "created_at": "yesterday",
+            "idempotency_key": "idem_abc141",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
           }
+        },
+        {
+          "name": "extra top-level property",
+          "data": {
+            "job_id": "job_21",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z",
+            "idempotency_key": "idem_abc142",
+            "raw_user_message": "Move Cube 50 cm to the right",
+            "origin": {
+              "request_id": "req_abc123",
+              "operation_index": 0
+            }
+          }
+        },
+        {
+          "name": "missing origin",
+          "data": {
+            "job_id": "job_no_origin",
+            "job_type": "move_object",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "user_id": "user_1",
+            "payload": {
+              "target": {
+                "name": "Cube"
+              },
+              "delta_meters": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00+00:00",
+            "idempotency_key": "idem_abc123"
+          }
+        }
+      ]
+    },
+    {
+      "schema": "request-origin.schema.json",
+      "valid": [
+        {
+          "name": "first operation",
+          "data": {
+            "request_id": "req_abc123",
+            "operation_index": 0
+          }
+        },
+        {
+          "name": "second operation",
+          "data": {
+            "request_id": "req_abc123",
+            "operation_index": 1
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing request_id",
+          "data": {
+            "operation_index": 0
+          }
+        },
+        {
+          "name": "missing operation_index",
+          "data": {
+            "request_id": "req_abc123"
+          }
+        },
+        {
+          "name": "blank request_id",
+          "data": {
+            "request_id": "  ",
+            "operation_index": 0
+          }
+        },
+        {
+          "name": "negative operation_index",
+          "data": {
+            "request_id": "req_abc123",
+            "operation_index": -1
+          }
+        },
+        {
+          "name": "fractional operation_index",
+          "data": {
+            "request_id": "req_abc123",
+            "operation_index": 0.5
+          }
+        },
+        {
+          "name": "extra property",
+          "data": {
+            "request_id": "req_abc123",
+            "operation_index": 0,
+            "attempt": 2
+          }
+        },
+        {
+          "name": "not an object",
+          "data": "req_abc123"
         }
       ]
     }

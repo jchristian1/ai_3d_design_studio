@@ -8,6 +8,7 @@ import type { Job, Vec3 } from "@studio/types";
 
 test("ChatRequest requires project_id/session_id/message shape", () => {
   const req: ChatRequest = {
+    request_id: "req_abc123",
     project_id: "proj_1",
     session_id: "sess_1",
     message: "Move Cube 50 cm to the right",
@@ -39,14 +40,21 @@ test("ChatResponse error uses structured code", () => {
 
 test("Job is project-scoped with valid status/type", () => {
   const job: Job = {
-    id: "job_1",
+    job_id: "job_1",
+    job_type: "move_object",
     project_id: "proj_1",
     session_id: "sess_1",
-    type: "chat",
+    user_id: "user_1",
+    payload: {
+      target: { name: "Cube" },
+      delta_meters: { x: 0.5, y: 0, z: 0 },
+    },
+    origin: { request_id: "req_abc123", operation_index: 0 },
     status: "queued",
     created_at: new Date().toISOString(),
+    idempotency_key: "idem_abc",
   };
   assert.ok(JOB_STATUSES.includes(job.status));
-  assert.ok(JOB_TYPES.includes(job.type));
+  assert.ok(JOB_TYPES.includes(job.job_type));
   assert.equal(typeof job.project_id, "string");
 });
