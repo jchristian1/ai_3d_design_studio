@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# Blender backups
+*.blend1
+*.blend2
+
+# Runtime data
+data/
+storage/
+renders/
+previews/
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
