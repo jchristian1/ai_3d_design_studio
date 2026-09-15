@@ -40,6 +40,8 @@ def response_body(
     question: str = "",
     missing_information: Sequence[str] = (),
     operations: Sequence[Mapping[str, Any]] = (),
+    design_facts: Sequence[Mapping[str, str]] = (),
+    assumptions: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Build a schema-shaped response body, so tests read like the contract."""
     return {
@@ -48,6 +50,8 @@ def response_body(
         "question": question,
         "missing_information": list(missing_information),
         "operations": [dict(operation) for operation in operations],
+        "design_facts": [dict(fact) for fact in design_facts],
+        "assumptions": list(assumptions),
     }
 
 

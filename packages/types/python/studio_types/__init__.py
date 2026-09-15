@@ -43,7 +43,8 @@ JobStatus = Literal["queued", "claimed", "running", "succeeded", "failed"]
 #: each job_type binds to exactly one payload type.
 #:
 #: Each type also carries a CLASSIFICATION (see MUTATING_JOB_TYPES /
-#: READ_JOB_TYPES): ``move_object`` mutates, ``inspect_scene`` only reads.
+#: READ_JOB_TYPES): ``move_object`` and ``apply_capabilities`` mutate,
+#: ``inspect_scene`` only reads.
 #:
 #: Reserved for future milestones (each needs a payload schema + a conditional in
 #: job.schema.json before being added): rotate_object, scale_object,
@@ -51,7 +52,7 @@ JobStatus = Literal["queued", "claimed", "running", "succeeded", "failed"]
 #: set_light, create_camera, render_preview, save_version.
 #:
 #: Canonical schema: job-type.schema.json
-JobType = Literal["move_object", "inspect_scene"]
+JobType = Literal["move_object", "inspect_scene", "apply_capabilities"]
 
 JOB_STATUSES: tuple[JobStatus, ...] = (
     "queued",
@@ -60,12 +61,12 @@ JOB_STATUSES: tuple[JobStatus, ...] = (
     "succeeded",
     "failed",
 )
-JOB_TYPES: tuple[JobType, ...] = ("move_object", "inspect_scene")
+JOB_TYPES: tuple[JobType, ...] = ("move_object", "inspect_scene", "apply_capabilities")
 
 #: Job types that CHANGE the project. These take an exclusive project lock, write
 #: a recovery point, persist their plan before mutating, verify from the saved
 #: file, save durably, generate a preview, and carry a derived mutation identity.
-MUTATING_JOB_TYPES: tuple[JobType, ...] = ("move_object",)
+MUTATING_JOB_TYPES: tuple[JobType, ...] = ("move_object", "apply_capabilities")
 
 #: Job types that only READ the project. No write lock, no recovery point, no
 #: save, no preview; naturally idempotent and therefore cacheable. A read that
@@ -204,10 +205,37 @@ class InspectScenePayload:
     """
 
 
+@dataclass(frozen=True)
+class CapabilityOperation:
+    """One resolved capability invocation inside a plan.
+
+    ``arguments`` is a mapping rather than a typed payload per capability because the
+    capability vocabulary is open by design: the shape is validated by the agent's
+    declarative argument table and again by the backend, not by this dataclass.
+    """
+
+    operation_index: int
+    capability: str
+    label: str
+    arguments: Mapping[str, Any]
+    #: Present only for model-authored code the user explicitly approved.
+    approval_token: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ApplyCapabilitiesPayload:
+    """An ordered capability plan applied under one project lock."""
+
+    operations: tuple[CapabilityOperation, ...]
+    required_scene_version: Optional[str] = None
+    summary: Optional[str] = None
+
+
 #: Maps each job_type to its payload dataclass. Extend alongside JobType.
 JOB_PAYLOAD_BY_TYPE: dict[str, type] = {
     "move_object": MoveObjectPayload,
     "inspect_scene": InspectScenePayload,
+    "apply_capabilities": ApplyCapabilitiesPayload,
 }
 
 

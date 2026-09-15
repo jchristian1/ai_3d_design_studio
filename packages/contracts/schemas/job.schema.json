@@ -11,18 +11,40 @@
       "pattern": "\\S",
       "description": "Stable identifier for this job attempt."
     },
-    "job_type": { "$ref": "job-type.schema.json" },
-    "project_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
-    "session_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
-    "user_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "job_type": {
+      "$ref": "job-type.schema.json"
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
     "payload": {
       "type": "object",
       "description": "Operation-specific data. Constrained by job_type in the conditionals below."
     },
-    "origin": { "$ref": "request-origin.schema.json" },
+    "origin": {
+      "$ref": "request-origin.schema.json"
+    },
     "status": {
       "type": "string",
-      "enum": ["queued", "claimed", "running", "succeeded", "failed"],
+      "enum": [
+        "queued",
+        "claimed",
+        "running",
+        "succeeded",
+        "failed"
+      ],
       "description": "Lifecycle state. queued -> claimed -> running -> succeeded | failed."
     },
     "created_at": {
@@ -34,7 +56,7 @@
       "type": "string",
       "minLength": 1,
       "pattern": "\\S",
-      "description": "Deterministic MUTATION IDENTITY, derived from (project_id, origin.request_id, origin.operation_index) — never from the payload contents. Two intentional submissions of the same instruction differ here and both execute; a retry of one submission matches an existing job and executes once. Uniqueness is scoped per project."
+      "description": "Deterministic MUTATION IDENTITY, derived from (project_id, origin.request_id, origin.operation_index) \u2014 never from the payload contents. Two intentional submissions of the same instruction differ here and both execute; a retry of one submission matches an existing job and executes once. Uniqueness is scoped per project."
     },
     "content_fingerprint": {
       "type": "string",
@@ -42,8 +64,12 @@
       "pattern": "\\S",
       "description": "DIAGNOSTIC ONLY. A canonical hash of (job_type, payload), useful for spotting repeated or accidental duplicate operations in logs and tests. It is deliberately NOT the mutation identity: identical content from two distinct requests is legitimate and must execute twice."
     },
-    "claim": { "$ref": "job-claim.schema.json" },
-    "error": { "$ref": "error-response.schema.json" },
+    "claim": {
+      "$ref": "job-claim.schema.json"
+    },
+    "error": {
+      "$ref": "error-response.schema.json"
+    },
     "result": {
       "description": "Operation result, present only on success. Unconstrained at the contract level."
     }
@@ -64,46 +90,154 @@
   "allOf": [
     {
       "description": "job_type discriminates the payload. Adding an operation means adding a payload schema and one conditional here.",
-      "if": { "properties": { "job_type": { "const": "move_object" } }, "required": ["job_type"] },
+      "if": {
+        "properties": {
+          "job_type": {
+            "const": "move_object"
+          }
+        },
+        "required": [
+          "job_type"
+        ]
+      },
       "then": {
-        "properties": { "payload": { "$ref": "move-object-payload.schema.json" } }
+        "properties": {
+          "payload": {
+            "$ref": "move-object-payload.schema.json"
+          }
+        }
       }
     },
     {
       "description": "inspect_scene is a READ job: its payload is empty and closed, because the project is already trusted job identity and there is nothing else to select.",
-      "if": { "properties": { "job_type": { "const": "inspect_scene" } }, "required": ["job_type"] },
+      "if": {
+        "properties": {
+          "job_type": {
+            "const": "inspect_scene"
+          }
+        },
+        "required": [
+          "job_type"
+        ]
+      },
       "then": {
-        "properties": { "payload": { "$ref": "inspect-scene-payload.schema.json" } }
+        "properties": {
+          "payload": {
+            "$ref": "inspect-scene-payload.schema.json"
+          }
+        }
       }
     },
     {
       "description": "A failed job MUST carry a structured error; any other state MUST NOT.",
-      "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
-      "then": { "required": ["error"] },
-      "else": { "not": { "required": ["error"] } }
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "error"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "error"
+          ]
+        }
+      }
     },
     {
       "description": "A claimed or running job MUST carry worker ownership metadata.",
       "if": {
-        "properties": { "status": { "enum": ["claimed", "running"] } },
-        "required": ["status"]
+        "properties": {
+          "status": {
+            "enum": [
+              "claimed",
+              "running"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
       },
-      "then": { "required": ["claim"] }
+      "then": {
+        "required": [
+          "claim"
+        ]
+      }
     },
     {
       "description": "A queued job MUST NOT be owned by a worker yet.",
-      "if": { "properties": { "status": { "const": "queued" } }, "required": ["status"] },
-      "then": { "not": { "required": ["claim"] } }
+      "if": {
+        "properties": {
+          "status": {
+            "const": "queued"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "claim"
+          ]
+        }
+      }
     },
     {
       "description": "Only a succeeded job may carry a result.",
       "if": {
         "properties": {
-          "status": { "enum": ["queued", "claimed", "running", "failed"] }
+          "status": {
+            "enum": [
+              "queued",
+              "claimed",
+              "running",
+              "failed"
+            ]
+          }
         },
-        "required": ["status"]
+        "required": [
+          "status"
+        ]
       },
-      "then": { "not": { "required": ["result"] } }
+      "then": {
+        "not": {
+          "required": [
+            "result"
+          ]
+        }
+      }
+    },
+    {
+      "description": "apply_capabilities carries an ordered capability plan.",
+      "if": {
+        "properties": {
+          "job_type": {
+            "const": "apply_capabilities"
+          }
+        },
+        "required": [
+          "job_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "apply-capabilities-payload.schema.json"
+          }
+        }
+      }
     }
   ]
 }

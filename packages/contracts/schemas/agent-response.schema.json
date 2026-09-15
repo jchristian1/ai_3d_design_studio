@@ -2,15 +2,27 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-response.schema.json",
   "title": "AgentResponse",
-  "description": "The structured response an agent provider must produce. This is the ONLY shape the platform accepts from a model. It is deliberately expressible in the strict structured-output subset (every property required, additionalProperties false, no oneOf/anyOf), because that is what a provider can constrain generation against. Unused fields are sent as empty strings or empty arrays rather than omitted. 'arguments_json' is a JSON STRING rather than an open object: strict schemas cannot express an arbitrary object, and the platform validates the parsed arguments per capability anyway.",
+  "description": "The structured response an agent provider must produce. This is the ONLY shape the platform accepts from a model. It is deliberately expressible in the strict structured-output subset (every property required, additionalProperties false, no oneOf/anyOf), because that is what a provider can constrain generation against. Unused fields are sent as empty strings or empty arrays rather than omitted. 'design_facts' is the platform's lightweight project memory: what it records survives restarts and is fed back on later turns, so the same question is never asked twice. 'arguments_json' is a JSON STRING rather than an open object: strict schemas cannot express an arbitrary object, and the platform validates the parsed arguments per capability anyway.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "message", "question", "missing_information", "operations"],
+  "required": [
+    "kind",
+    "message",
+    "question",
+    "missing_information",
+    "operations",
+    "design_facts",
+    "assumptions"
+  ],
   "properties": {
     "kind": {
       "type": "string",
       "description": "answer = a grounded reply with no changes. clarification = required information is missing, so nothing may be modified. plan = an ordered list of operations to apply.",
-      "enum": ["answer", "clarification", "plan"]
+      "enum": [
+        "answer",
+        "clarification",
+        "plan"
+      ]
     },
     "message": {
       "type": "string",
@@ -23,7 +35,9 @@
     "missing_information": {
       "type": "array",
       "description": "Machine-readable names of the facts that are missing, for example ceiling_height_m or plan_scale. Empty unless kind is clarification.",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "operations": {
       "type": "array",
@@ -31,7 +45,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["capability", "label", "arguments_json"],
+        "required": [
+          "capability",
+          "label",
+          "arguments_json"
+        ],
         "properties": {
           "capability": {
             "type": "string",
@@ -65,6 +83,35 @@
             "description": "A JSON object of canonical arguments for this capability, encoded as a string. Distances and dimensions in METRES, angles in RADIANS, colours as linear sRGB {r,g,b,a} in [0,1]. For execute_blender_python the only key is 'code'."
           }
         }
+      }
+    },
+    "design_facts": {
+      "type": "array",
+      "description": "Confirmed, reusable facts about the project to remember, for example ceiling_height_m = 2.4 or plan_scale = 1:50. Record a fact only once the user has stated it or it is unambiguous from a reference. Never record a guess. Empty when there is nothing new to remember.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "snake_case machine-readable name, for example ceiling_height_m"
+          },
+          "value": {
+            "type": "string",
+            "description": "The value as text. Numbers are in canonical units: metres for lengths."
+          }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "description": "Assumptions you made that the user did not confirm, in plain language, so they can correct you. For example 'I assumed interior walls are 0.12 m thick'. Empty when you assumed nothing.",
+      "items": {
+        "type": "string"
       }
     }
   }

@@ -12,6 +12,7 @@ a capability means adding a row and cannot mean forgetting a validation.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Sequence
 
@@ -274,6 +275,52 @@ def validate_arguments(capability: str, raw: Mapping[str, Any]) -> dict[str, Any
 # --------------------------------------------------------------------------
 
 
+#: A single turn may not record an unbounded number of facts.
+MAX_DESIGN_FACTS = 40
+MAX_FACT_KEY_CHARACTERS = 64
+MAX_FACT_VALUE_CHARACTERS = 400
+MAX_ASSUMPTIONS = 20
+MAX_ASSUMPTION_CHARACTERS = 300
+
+_FACT_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+
+def _design_facts(raw: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    """Extract facts worth remembering, ignoring anything malformed.
+
+    A malformed fact is dropped rather than failing the whole turn: the user's
+    modelling request should not be refused because the model mislabelled a memo to
+    itself. The key shape is enforced so project memory stays queryable.
+    """
+    entries = raw.get("design_facts") or ()
+    facts: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            continue
+        key = str(entry.get("key") or "").strip().lower()
+        value = str(entry.get("value") or "").strip()
+        if not key or not value or key in seen:
+            continue
+        if not _FACT_KEY_PATTERN.match(key):
+            continue
+        facts.append((key[:MAX_FACT_KEY_CHARACTERS], value[:MAX_FACT_VALUE_CHARACTERS]))
+        seen.add(key)
+        if len(facts) >= MAX_DESIGN_FACTS:
+            break
+    return tuple(facts)
+
+
+def _assumptions(raw: Mapping[str, Any]) -> tuple[str, ...]:
+    entries = raw.get("assumptions") or ()
+    assumptions = [
+        str(entry).strip()[:MAX_ASSUMPTION_CHARACTERS]
+        for entry in entries
+        if str(entry).strip()
+    ]
+    return tuple(assumptions[:MAX_ASSUMPTIONS])
+
+
 def _error(message: str, metadata: ProviderMetadata) -> AgentError:
     return AgentError(
         error=ChatError(code=VALIDATION_ERROR, message=message), metadata=metadata
@@ -301,11 +348,18 @@ def parse_agent_response(
 
     kind = raw["kind"]
     message = str(raw.get("message") or "").strip()
+    design_facts = _design_facts(raw)
+    assumptions = _assumptions(raw)
 
     if kind == "answer":
         if not message:
             return _error("The assistant returned an empty answer.", metadata)
-        return Answer(text=message, metadata=metadata)
+        return Answer(
+            text=message,
+            metadata=metadata,
+            design_facts=design_facts,
+            assumptions=assumptions,
+        )
 
     if kind == "clarification":
         question = str(raw.get("question") or "").strip() or message
@@ -317,7 +371,11 @@ def parse_agent_response(
             if str(item).strip()
         )
         return Clarification(
-            question=question, metadata=metadata, missing_information=missing
+            question=question,
+            metadata=metadata,
+            missing_information=missing,
+            design_facts=design_facts,
+            assumptions=assumptions,
         )
 
     operations_raw = raw.get("operations") or ()
@@ -373,4 +431,6 @@ def parse_agent_response(
             model=metadata.model,
         ),
         scene_version=scene_version,
+        design_facts=design_facts,
+        assumptions=assumptions,
     )

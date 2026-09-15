@@ -82,6 +82,8 @@ SCHEMA_FILES: dict[str, str] = {
     "JobType": "job-type.schema.json",
     "CapabilityName": "capability-name.schema.json",
     "AgentResponse": "agent-response.schema.json",
+    "CapabilityOperation": "capability-operation.schema.json",
+    "ApplyCapabilitiesPayload": "apply-capabilities-payload.schema.json",
     "JobClaim": "job-claim.schema.json",
     "RequestOrigin": "request-origin.schema.json",
     "MoveObjectPlan": "move-object-plan.schema.json",

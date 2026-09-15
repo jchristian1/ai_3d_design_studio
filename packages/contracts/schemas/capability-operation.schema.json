@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capability-operation.schema.json",
+  "title": "CapabilityOperation",
+  "description": "One fully resolved capability invocation inside an apply_capabilities job. By the time an operation exists here it has passed the agent-side argument validation, so distances are metres, angles are radians and colours are linear sRGB. 'arguments' is deliberately unconstrained at the contract level: each capability has its own argument shape, validated by studio_agent.proposal against a declarative table and again by the backend before any Blender process starts. 'label' is what the browser shows while the step runs, so it must be human-readable and free of internal identifiers. 'approval_token' is present only for a model-authored code step the user explicitly approved; it is a digest of that exact code, so an approval cannot be replayed for different code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operation_index", "capability", "label", "arguments"],
+  "properties": {
+    "operation_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Execution order within the plan, starting at 0. Also the per-step mutation identity component."
+    },
+    "capability": { "$ref": "capability-name.schema.json" },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Progress text shown to the user, for example 'Creating the north wall'."
+    },
+    "arguments": {
+      "type": "object",
+      "description": "Canonical arguments for this capability. Metres, radians, linear sRGB."
+    },
+    "approval_token": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Present only when the user approved this exact model-authored code. Bound to a digest of the code, and re-derived by the backend, so approving one thing and running another is not possible."
+    }
+  }
+}

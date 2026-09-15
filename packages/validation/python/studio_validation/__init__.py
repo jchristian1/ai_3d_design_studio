@@ -144,3 +144,17 @@ def validate_meter_deltas(
                 ValidationError(name, f"{name} must be a finite number of meters")
             )
     return _ok() if not errors else _fail(errors)
+
+# --- model-authored code risk classification -------------------------------
+#
+# Lives here because both the control plane (which asks the user for approval) and the
+# worker (which refuses unapproved code) need it, and neither service may import the
+# other.
+from .code_risk import (  # noqa: E402
+    APPROVAL_REQUIRED,
+    AUTO,
+    REFUSED,
+    RiskAssessment,
+    RiskFinding,
+    classify_python,
+)

@@ -59,6 +59,10 @@ class Answer:
 
     text: str
     metadata: ProviderMetadata
+    #: Facts worth remembering, learned this turn. Persisted as project memory.
+    design_facts: tuple[tuple[str, str], ...] = ()
+    #: Unconfirmed assumptions, surfaced so the user can correct them.
+    assumptions: tuple[str, ...] = ()
 
     kind: str = "answer"
 
@@ -73,6 +77,8 @@ class Clarification:
     missing_information: tuple[str, ...] = ()
     #: Candidate objects, when the ambiguity is "which one".
     options: tuple[str, ...] = ()
+    design_facts: tuple[tuple[str, str], ...] = ()
+    assumptions: tuple[str, ...] = ()
 
     kind: str = "clarification"
 
@@ -104,6 +110,8 @@ class PlanProposal:
     metadata: ProviderMetadata
     #: The scene version the plan was reasoned against, when a scene was available.
     scene_version: Optional[str] = None
+    design_facts: tuple[tuple[str, str], ...] = ()
+    assumptions: tuple[str, ...] = ()
 
     kind: str = "plan"
 

@@ -598,6 +598,53 @@ class ArtifactIndexRepository:
         return tuple(dict(row) for row in rows)
 
 
+class SceneRepository:
+    """The latest authoritative scene per project.
+
+    A CACHE for grounding the agent, never the source of truth. The ``.blend`` remains
+    authoritative, and every mutation re-reads and re-verifies against it, so a stale
+    entry here can make the agent reason about an old scene but can never cause a wrong
+    mutation: the worker's in-lock scene-version check catches that.
+    """
+
+    def __init__(self, database: StudioDatabase) -> None:
+        self._db = database
+
+    def put(self, project_id: str, snapshot: Mapping[str, Any]) -> None:
+        scene_version = str(snapshot.get("scene_version") or "")
+        captured_at = str(snapshot.get("captured_at") or utc_now())
+        self._db.execute(
+            """
+            INSERT INTO project_scenes (project_id, scene_version, snapshot, captured_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(project_id) DO UPDATE SET
+                scene_version = excluded.scene_version,
+                snapshot = excluded.snapshot,
+                captured_at = excluded.captured_at
+            """,
+            (project_id, scene_version, _json(dict(snapshot)), captured_at),
+        )
+
+    def get(self, project_id: str) -> Optional[dict[str, Any]]:
+        row = self._db.query_one(
+            "SELECT snapshot FROM project_scenes WHERE project_id = ?", (project_id,)
+        )
+        if row is None:
+            return None
+        snapshot = _unjson(row["snapshot"], None)
+        return snapshot if isinstance(snapshot, dict) else None
+
+    def version(self, project_id: str) -> Optional[str]:
+        row = self._db.query_one(
+            "SELECT scene_version FROM project_scenes WHERE project_id = ?", (project_id,)
+        )
+        return row["scene_version"] if row else None
+
+    def clear(self, project_id: str) -> None:
+        """Invalidate the cache, for example after a mutation whose result is unknown."""
+        self._db.execute("DELETE FROM project_scenes WHERE project_id = ?", (project_id,))
+
+
 class StudioRepositories:
     """One handle carrying every repository, so wiring stays a single argument."""
 
@@ -611,6 +658,7 @@ class StudioRepositories:
         self.approvals = ApprovalRepository(database)
         self.analyses = AnalysisCacheRepository(database)
         self.artifacts = ArtifactIndexRepository(database)
+        self.scenes = SceneRepository(database)
 
     def close(self) -> None:
         self.database.close()

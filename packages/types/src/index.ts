@@ -48,7 +48,7 @@ export type JobStatus = "queued" | "claimed" | "running" | "succeeded" | "failed
  *
  * Canonical schema: job-type.schema.json
  */
-export type JobType = "move_object" | "inspect_scene";
+export type JobType = "move_object" | "inspect_scene" | "apply_capabilities";
 
 /**
  * A reference to a scene object. At least one of object_id or name is present.
@@ -80,10 +80,28 @@ export interface MoveObjectPayload {
  */
 export type InspectScenePayload = Record<string, never>;
 
+/** One resolved capability invocation inside a plan. */
+export interface CapabilityOperation {
+  operation_index: number;
+  capability: string;
+  label: string;
+  arguments: Record<string, unknown>;
+  /** Present only for model-authored code the user explicitly approved. */
+  approval_token?: string;
+}
+
+/** An ordered capability plan applied under one project lock. */
+export interface ApplyCapabilitiesPayload {
+  operations: CapabilityOperation[];
+  required_scene_version?: string;
+  summary?: string;
+}
+
 /** Maps each job_type to its payload type. Extend alongside JobType. */
 export interface JobPayloadByType {
   move_object: MoveObjectPayload;
   inspect_scene: InspectScenePayload;
+  apply_capabilities: ApplyCapabilitiesPayload;
 }
 
 /**
@@ -166,6 +184,7 @@ export const JOB_STATUSES: readonly JobStatus[] = [
 export const JOB_TYPES: readonly JobType[] = [
   "move_object",
   "inspect_scene",
+  "apply_capabilities",
 ] as const;
 
 /**
@@ -173,7 +192,10 @@ export const JOB_TYPES: readonly JobType[] = [
  * a recovery point, persist their plan before mutating, verify from the saved
  * file, save durably, generate a preview, and carry a derived mutation identity.
  */
-export const MUTATING_JOB_TYPES: readonly JobType[] = ["move_object"] as const;
+export const MUTATING_JOB_TYPES: readonly JobType[] = [
+  "move_object",
+  "apply_capabilities",
+] as const;
 
 /**
  * Job types that only READ the project. No write lock, no recovery point, no

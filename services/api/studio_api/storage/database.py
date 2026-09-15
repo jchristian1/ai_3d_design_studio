@@ -181,6 +181,22 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             """,
         ),
     ),
+    (
+        3,
+        (
+            # The latest authoritative scene, as reported by the worker. This is a
+            # CACHE for grounding the agent, never the source of truth: the .blend
+            # remains authoritative and every mutation re-verifies against it.
+            """
+            CREATE TABLE IF NOT EXISTS project_scenes (
+                project_id    TEXT PRIMARY KEY,
+                scene_version TEXT NOT NULL,
+                snapshot      TEXT NOT NULL,
+                captured_at   TEXT NOT NULL
+            )
+            """,
+        ),
+    ),
 )
 
 LATEST_VERSION = MIGRATIONS[-1][0]

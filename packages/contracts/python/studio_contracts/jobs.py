@@ -27,9 +27,11 @@ import json
 import math
 import struct
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, Optional, Protocol
+from typing import Any, Literal, Mapping, Optional, Protocol, Sequence
 
 from studio_types import (
+    ApplyCapabilitiesPayload,
+    CapabilityOperation,
     JOB_STATUSES,
     JOB_TYPES,
     TERMINAL_JOB_STATUSES,
@@ -401,6 +403,117 @@ def create_move_object_job(
         ),
         created_at=created_at,
         content_fingerprint=derive_content_fingerprint("move_object", payload),
+    )
+
+    validation = validate_job(job)
+    if not validation.valid:
+        return CreateJobResult(ok=False, errors=validation.errors)
+    return CreateJobResult(ok=True, job=job)
+
+
+def create_capability_job(
+    job_id: str,
+    project_id: str,
+    session_id: str,
+    user_id: str,
+    request_id: str,
+    operations: Sequence[CapabilityOperation],
+    created_at: str,
+    *,
+    required_scene_version: Optional[str] = None,
+    summary: Optional[str] = None,
+    operation_index: int = 0,
+) -> CreateJobResult:
+    """Assemble a queued ``apply_capabilities`` job.
+
+    One job carries the WHOLE plan. The alternative — one job per capability — would
+    take and release the project lock dozens of times for a single "reconstruct this
+    plan", and would make the browser show one reply per wall. Per-step durability is
+    preserved inside the job instead: each operation carries its own
+    ``operation_index``, which is the per-step mutation identity the worker journals
+    against, so a retry resumes rather than repeats.
+
+    Like the other builders, this is deterministic: identifiers and timestamps come
+    from the caller, so no clock or randomness leaks into the contract layer.
+    """
+    if not is_non_empty_string(request_id):
+        return CreateJobResult(
+            ok=False,
+            errors=[
+                ChatError(
+                    code="VALIDATION_ERROR",
+                    message=JOB_MESSAGES["MISSING_REQUEST_ID"],
+                )
+            ],
+        )
+
+    if (
+        isinstance(operation_index, bool)
+        or not isinstance(operation_index, int)
+        or operation_index < 0
+    ):
+        return CreateJobResult(
+            ok=False,
+            errors=[
+                ChatError(
+                    code="VALIDATION_ERROR",
+                    message=JOB_MESSAGES["INVALID_OPERATION_INDEX"],
+                )
+            ],
+        )
+
+    if not operations:
+        return CreateJobResult(
+            ok=False,
+            errors=[
+                ChatError(
+                    code="VALIDATION_ERROR",
+                    message="A capability plan must contain at least one operation.",
+                )
+            ],
+        )
+
+    # The indices are the per-step mutation identity, so a gap or a repeat would make
+    # already-applied detection ambiguous. Refuse rather than renumber silently.
+    expected = list(range(len(operations)))
+    actual = [operation.operation_index for operation in operations]
+    if actual != expected:
+        return CreateJobResult(
+            ok=False,
+            errors=[
+                ChatError(
+                    code="VALIDATION_ERROR",
+                    message=(
+                        "Capability operation indices must be 0, 1, 2, … in order; "
+                        f"got {actual}."
+                    ),
+                )
+            ],
+        )
+
+    payload = ApplyCapabilitiesPayload(
+        operations=tuple(operations),
+        required_scene_version=required_scene_version,
+        summary=summary,
+    )
+    origin = RequestOrigin(request_id=request_id, operation_index=operation_index)
+
+    job = Job(
+        job_id=job_id,
+        job_type="apply_capabilities",
+        project_id=project_id,
+        session_id=session_id,
+        user_id=user_id,
+        payload=payload,
+        origin=origin,
+        status="queued",
+        idempotency_key=derive_idempotency_key(
+            project_id=project_id,
+            request_id=origin.request_id,
+            operation_index=origin.operation_index,
+        ),
+        created_at=created_at,
+        content_fingerprint=derive_content_fingerprint("apply_capabilities", payload),
     )
 
     validation = validate_job(job)
