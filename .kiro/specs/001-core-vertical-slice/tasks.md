@@ -54,11 +54,16 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - `python3 -m studio_fixtures.regenerate` generates / verifies / inspects; Blender located via the Task 4 runtime helper.
   - _Requirements: 8.1_
 
-- [ ] 6. Blender worker execution workflow
-  - Implement the 10-step `blender.md` workflow: lock → recovery point → validate → execute → inspect → save → snapshot → preview hook → release.
-  - Verify resulting state (`abs(new_x - (old_x+0.50)) < 1e-4`) before success.
-  - Always release lock, including failure paths; rollback on verify mismatch.
-  - Worker tests: lock acquire/release, recovery point, autosave, lock-conflict (`LOCK_CONFLICT`), verify-failure (`VERIFY_FAILED`).
+- [x] 6. Blender worker execution workflow
+  - `WorkerExecutor` orchestrates: validate → resolve project → lock → load record → plan (once) → recovery copy → execute Task 4 op → verify durability from the saved file → complete → release.
+  - Retry safety: the MoveObjectPlan is persisted BEFORE mutation and reused verbatim on retry; the worker never recomputes `expected_before` once a plan exists.
+  - Internal execution phases are separate from the public Job lifecycle.
+  - `WorkerExecutionStore` + local atomic filesystem journal (temp → fsync → `os.replace` → dir fsync); corrupt records refuse execution rather than replanning.
+  - `ProjectLockProvider` + `flock` implementation (per project, Linux code confined to `locks.py`); `ProjectLocator` maps `project_id` to a trusted path so Jobs can never carry filesystem paths.
+  - Recovery snapshot before every mutation, preserved on failure, never overwritten across attempts.
+  - `BlenderOperationExecutor` boundary with a fake (fast tests, real Task 4 logic) and a headless-subprocess implementation using the Task 4 runtime resolver.
+  - Crash windows A–D designed and tested; success requires the coordinates to be durable in the saved `.blend`, verified by a fresh Blender process.
+  - No Redis, no PostgreSQL, no queue consumption, no agent, no web.
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
 
 - [ ] 7. AgentProvider abstraction and context builder

@@ -25,6 +25,7 @@ build/
 *.blend2
 
 # Runtime data
+runtime/
 data/
 storage/
 renders/

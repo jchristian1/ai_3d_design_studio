@@ -6,6 +6,7 @@ pythonpath = [
     "packages/validation/python",
     "packages/spatial/python",
     "services/blender-mcp",
+    "services/blender-worker",
     "tests/fixtures",
 ]
 testpaths = [
