@@ -46,23 +46,8 @@ pytest.importorskip("uvicorn", reason="uvicorn not installed")
 pytest.importorskip("httpx", reason="httpx not installed")
 
 from blender_mcp.blender_runtime import find_blender_executable  # noqa: E402
-from blender_worker.blender_ops import (  # noqa: E402
-    SubprocessBlenderOperationExecutor,
-)
-from blender_worker.executor import WorkerExecutor  # noqa: E402
-from blender_worker.journal import FileSystemExecutionStore  # noqa: E402
-from blender_worker.link.client import BackoffPolicy, WorkerLinkClient  # noqa: E402
-from blender_worker.link.identity import WorkerIdentity  # noqa: E402
-from blender_worker.link.websocket_transport import (  # noqa: E402
-    WebSocketWorkerTransport,
-)
-from blender_worker.locks import FileLockProvider  # noqa: E402
-from blender_worker.registry import MappingProjectRegistry  # noqa: E402
-from studio_api.settings import Settings  # noqa: E402
 from studio_contracts import worker_protocol as protocol  # noqa: E402
-from studio_fixtures.control_plane import ControlPlaneServer  # noqa: E402
-from studio_preview.artifacts import LocalArtifactStore  # noqa: E402
-from studio_preview.blender_preview import BlenderPreviewGenerator  # noqa: E402
+from studio_fixtures.slice_stack import build_slice_stack  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = REPO_ROOT / "apps" / "web"
@@ -80,77 +65,31 @@ pytestmark = pytest.mark.blender
 
 @pytest.fixture
 def live_stack(tmp_path: Path):
-    """A real control plane and a real Blender worker."""
+    """A real control plane and a real Blender worker.
+
+    Assembled by the shared ``studio_fixtures.slice_stack`` builder so this file
+    contains assertions only — there is one place that wires the local slice
+    together, not one per test module.
+    """
     if find_blender_executable() is None:
         pytest.skip("Blender executable not found")
     if shutil.which("node") is None:
         pytest.skip("node not available")
 
-    from studio_fixtures.seed_project import ensure_seed_project
-
-    projects_root = tmp_path / "projects"
-    projects_root.mkdir()
-    project_path = projects_root / "seed_project.blend"
-    shutil.copy2(ensure_seed_project(), project_path)
-
-    runtime = tmp_path / "runtime"
-    artifact_root = tmp_path / "artifacts"
-
-    executor = WorkerExecutor(
-        store=FileSystemExecutionStore(runtime),
-        locks=FileLockProvider(runtime),
-        projects=MappingProjectRegistry(projects_root, {PROJECT_ID: project_path}),
-        blender=SubprocessBlenderOperationExecutor(),
-        recovery_root=runtime / "recovery",
-        previews=BlenderPreviewGenerator(),
-        artifacts=LocalArtifactStore(artifact_root),
-        preview_width=320,
-        preview_height=180,
-    )
-
-    settings = Settings(
-        environment="local",
-        worker_token=TOKEN,
-        project_ids=(PROJECT_ID,),
-        heartbeat_interval_seconds=120.0,
-        artifact_root=str(artifact_root),
-        # Exactly what local development uses.
+    with build_slice_stack(
+        tmp_path,
+        token=TOKEN,
+        worker_id=WORKER_ID,
+        # Exactly what local browser development uses.
         allowed_origins=(BROWSER_ORIGIN, "http://127.0.0.1:3000"),
-    )
-
-    with ControlPlaneServer.build(settings) as server:
-        worker = WorkerLinkClient(
-            identity=WorkerIdentity(
-                worker_id=WORKER_ID,
-                control_plane_url=server.worker_url,
-                token=TOKEN,
-            ),
-            transport=WebSocketWorkerTransport(server.worker_url, receive_timeout=5.0),
-            executor=executor,
-            backoff=BackoffPolicy(initial_seconds=0.05, max_seconds=0.5),
-            probe_blender=True,
-        )
-        assert worker.connect_and_register(timeout=30.0)
-        try:
-            with server.client() as http:
-                _await_worker(http)
-                yield {
-                    "server": server,
-                    "http": http,
-                    "worker": worker,
-                    "project_path": project_path,
-                }
-        finally:
-            worker.disconnect()
-
-
-def _await_worker(http, deadline_seconds: float = 30.0) -> None:
-    end = time.monotonic() + deadline_seconds
-    while time.monotonic() < end:
-        if http.get("/health").json()["ready_workers"] == 1:
-            return
-        time.sleep(0.05)
-    raise AssertionError("the worker never registered")
+    ) as stack:
+        yield {
+            "server": stack.server,
+            "http": stack.http,
+            "worker": stack.worker,
+            "project_path": stack.project_path,
+            "stack": stack,
+        }
 
 
 def run_web_client(script: str, base_url: str, timeout: int = 600) -> dict:
@@ -373,9 +312,7 @@ def test_no_response_the_browser_receives_contains_a_secret(live_stack):
 # ---------------------------------------------------------------------------
 
 
-def _handle_until(
-    client: WorkerLinkClient, expected: str, deadline_seconds: float = 300.0
-) -> bool:
+def _handle_until(client, expected: str, deadline_seconds: float = 300.0) -> bool:
     end = time.monotonic() + deadline_seconds
     while time.monotonic() < end:
         if client.handle_next(timeout=1.0) == expected:
