@@ -17,7 +17,7 @@ from blender_worker.main import (
     _Stopping,
     discover_projects,
     register_with_retry,
-    serve,
+    run_worker_loop,
 )
 
 PROJECT_ID = "proj_seed"
@@ -127,24 +127,24 @@ def test_registration_stops_when_shutdown_is_requested():
     assert client.attempts == 0, "no attempt after shutdown was requested"
 
 
-def test_serve_returns_zero_when_stopped_before_registering():
+def test_the_loop_returns_zero_when_stopped_before_registering():
     """Ctrl-C while waiting for the API is a clean exit, not a failure."""
     client = StubClient([])
     stopping = _Stopping()
     stopping.request()
 
-    assert serve(client, stopping) == 0
+    assert run_worker_loop(client, stopping) == 0
 
 
-def test_serve_reports_failure_when_registration_is_refused():
+def test_the_loop_reports_failure_when_registration_is_refused():
     client = StubClient(
         [False],
         error={"code": "VALIDATION_ERROR", "message": "authentication failed"},
     )
-    assert serve(client, _Stopping()) == 1
+    assert run_worker_loop(client, _Stopping()) == 1
 
 
-def test_serve_reconciles_undelivered_results_at_startup():
+def test_the_loop_reconciles_undelivered_results_at_startup():
     """A result the control plane never received is reported, not re-executed."""
     client = StubClient([True])
     stopping = _Stopping()
@@ -164,7 +164,7 @@ def test_serve_reconciles_undelivered_results_at_startup():
         def requested(self, _value: bool) -> None:
             pass
 
-    assert serve(client, OneShot(client)) == 0
+    assert run_worker_loop(client, OneShot(client)) == 0
     assert client.reconciled >= 1
     assert client.disconnected is True
     del stopping

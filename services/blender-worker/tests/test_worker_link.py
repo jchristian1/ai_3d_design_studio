@@ -822,16 +822,50 @@ def test_20_worker_executor_remains_transport_agnostic():
 
 
 def test_20_transport_module_never_listens_or_binds():
-    link_dir = Path(__file__).resolve().parents[1] / "blender_worker" / "link"
-    for path in link_dir.rglob("*.py"):
+    """The WHOLE worker package must never listen — not just its transport.
+
+    Scope note: this originally covered only ``blender_worker/link/``, which meant
+    Task 11's ``main.py`` entered the package without ever being checked. The
+    outbound-only guarantee is a property of the workstation, not of one directory,
+    so the guard now walks every module in the package.
+    """
+    worker_package = Path(__file__).resolve().parents[1] / "blender_worker"
+    checked = 0
+    for path in worker_package.rglob("*.py"):
+        # blender_scripts run INSIDE Blender and never touch the network; they are
+        # covered by the separate no-network assertion below.
         tree = ast.parse(path.read_text("utf-8"))
         called = {
             node.func.attr
             for node in ast.walk(tree)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
         }
-        for forbidden in ("bind", "listen", "serve", "serve_forever"):
+        called |= {
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        for forbidden in (
+            "bind",
+            "listen",
+            "serve",
+            "serve_forever",
+            "create_server",
+            "start_server",
+        ):
             assert forbidden not in called, f"{path.name} calls {forbidden}()"
+        checked += 1
+
+    assert checked >= 10, f"only {checked} worker modules were scanned"
+
+
+def test_20_the_worker_package_imports_no_server_machinery():
+    """A listener needs a server library. None may be imported anywhere here."""
+    worker_package = Path(__file__).resolve().parents[1] / "blender_worker"
+    for path in worker_package.rglob("*.py"):
+        modules = _imports(path)
+        for forbidden in ("socketserver", "http", "flask", "fastapi", "starlette"):
+            assert forbidden not in modules, f"{path.name} imports {forbidden}"
 
 
 def test_20_worker_link_does_not_import_bpy():

@@ -144,7 +144,34 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - Shared assembly extracted to `tests/fixtures/studio_fixtures/slice_stack.py` (`build_slice_stack` / `LocalSliceStack`), reusing `ControlPlaneServer`, `WorkerLinkClient`, `WorkerExecutor`, `FileLockProvider`, the Task 5 fixture working copy, the Blender executable resolver, and the preview/artifact helpers. `tests/e2e/test_web_api_contract.py` was refactored onto it so the local slice is wired in one place. The worker loop is pumped by the test rather than a background thread, so every scenario is deterministic.
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
 
-- [ ] 13. Wire full path and verify slice
-  - Connect all boundaries; run unit + MCP + worker + integration + E2E suites green.
-  - Confirm meters canonical, AgentProvider-only access, no public Blender exposure.
+- [x] 13. Wire full path and verify slice
+  - Traced the complete path against the REAL code (imports and call graphs, not the diagram): browser → `lib/api/client.ts` → `routes/chat` → `get_identity` → `AgentProvider.interpret` → `AgentPlan` → `JobFactory` → canonical Job → `WorkerConnectionManager`/`WorkerGateway` → `/ws/workers` → `WorkerLinkClient` → `WorkerExecutor` → `blender_mcp.tools.move_object` → Blender → save → `BlenderPreviewGenerator` → `LocalArtifactStore` → `job_result` → `JobReconciler` → project-scoped job status → project-scoped artifact route → browser. Verified in-lock ordering: plan persisted (139) and recovery copy (156) BEFORE mutation (174), verification from the saved file (198), preview (219) after `PROJECT_SAVED` (212).
+  - Agent boundary: AST scan found ZERO code-level references to `RuleBasedProvider`/`AstraProvider`/`CodexProvider` outside `studio_agent/providers/`; the API imports only the `AgentProvider` Protocol and `get_provider`. No natural-language parsing outside the provider. Astra/Codex remain placeholders no test requires. No chain-of-thought stored or transmitted.
+  - Metres: zero `/ 100`, `* 0.01` or cm→m tables in runtime code outside `packages/spatial`; one conversion site; metres flow unchanged through Job → protocol → MoveObjectPlan → Blender (`length_unit: METERS` asserted) → result → ChatResponse. Axis semantics confirmed; camera-relative interpretation still explicitly deferred.
+  - Idempotency, durability, MCP/Blender exposure, network posture, API tenancy, preview, frontend/session, packaging and schema parity all audited — results recorded in `verification.md`. A fresh venv + `pip install -e ".[dev]"` imports all nine packages with no `PYTHONPATH`; `studio_preview` is in editable discovery (no packaging defect). `SCHEMA_FILES` parity is 22/22 across both languages; `AgentPlan` correctly remains schema-free.
+  - TWO DEFECTS FOUND AND FIXED, both boundary erosion introduced by later tasks: (1) the "workstation never listens" guard scanned only `blender_worker/link/`, so Task 11's `main.py` entered the package unchecked against Requirement 7.1 — the guard now walks the whole package, checks bare and attribute calls, asserts a minimum scan count, and a companion test forbids importing any server library; (2) `main.py` defined `serve()` for the worker's inbound loop — a name indistinguishable from `serve_forever()` to an audit — renamed `run_worker_loop`. No other production code changed.
+  - Requirement traceability: all 33 acceptance criteria across Requirements 1–8 mapped to implementing modules and named tests in `.kiro/specs/001-core-vertical-slice/verification.md`. None deferred.
+  - Suites run green: full fast Python 1250; all Blender-marked 78; MCP 92; worker 161; integration 30; API 191; mandatory E2E 7; all E2E 20; shared TypeScript 460; frontend 88; `tsc --noEmit` clean; `next build` succeeds.
   - _Requirements: 1.3, 3.4, 5.4, 7.2, 8.4_
+
+## Spec 001 — COMPLETE
+
+All 13 tasks are implemented and all 33 acceptance criteria across Requirements 1–8
+are verified by executable tests. See
+`.kiro/specs/001-core-vertical-slice/verification.md` for the full audit and
+requirement traceability record.
+
+The slice proves the intended flow end to end: a user types
+*"Move Cube 50 cm to the right."* in a browser and the cube moves 0.50 m in a real
+Blender project, the project is saved, a preview PNG is generated and served, and the
+browser shows the updated image — with no terminal, Blender, Python, or MCP knowledge
+required from the user.
+
+Verified against real Blender: `0.00 m → 0.50 m`; a verbatim `request_id` retry leaves
+`0.50 m`; a new `request_id` reaches `1.00 m`.
+
+Known scope boundaries carried forward (each deliberate and documented in
+`verification.md`): single project, no authentication, in-memory control-plane job
+records, single worker, single-machine `flock`, the narrow rule-based grammar,
+still-image Workbench preview, polling instead of server-push, deferred
+camera-relative directions, and no production TLS/deployment.

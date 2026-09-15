@@ -215,8 +215,14 @@ def register_with_retry(client: WorkerLinkClient, stopping: _Stopping) -> bool:
     return False
 
 
-def serve(client: WorkerLinkClient, stopping: _Stopping) -> int:
-    """Run the worker loop until shutdown is requested."""
+def run_worker_loop(client: WorkerLinkClient, stopping: _Stopping) -> int:
+    """Run the worker's inbound loop until shutdown is requested.
+
+    Named a LOOP, not a server: this process only ever reads from a connection it
+    opened outbound. Nothing here binds or listens, and the name must not suggest
+    otherwise — `serve` reads like `serve_forever`, and the workstation's
+    outbound-only guarantee is checked by an audit that greps for exactly that.
+    """
     if not register_with_retry(client, stopping):
         return 0 if stopping.requested else 1
 
@@ -289,7 +295,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     signal.signal(signal.SIGTERM, stopping.request)
 
     try:
-        return serve(client, stopping)
+        return run_worker_loop(client, stopping)
     except KeyboardInterrupt:  # pragma: no cover - signal handler normally wins
         client.disconnect()
         return 0
@@ -306,5 +312,5 @@ __all__ = [
     "build_executor",
     "discover_projects",
     "main",
-    "serve",
+    "run_worker_loop",
 ]
