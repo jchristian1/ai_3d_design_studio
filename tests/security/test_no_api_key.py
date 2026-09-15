@@ -63,6 +63,8 @@ ALLOWED_MENTIONS = {
     "services/agent/studio_agent/codex.py": "strips the variable from the child environment",
     # Asserts the stripping actually happens.
     "services/agent/tests/test_codex_client.py": "asserts the variable never reaches Codex",
+    # Asserts the stripping also covers the interactive sign-in child process.
+    "services/agent/tests/test_codex_login.py": "asserts the variable never reaches codex login",
 }
 
 
@@ -135,7 +137,17 @@ def test_no_frontend_environment_variable_exposes_a_key() -> None:
 
 
 def test_no_api_key_input_exists_in_the_browser() -> None:
-    """There is deliberately no place for a user to paste a key."""
+    """There is deliberately no place for a user to paste a key.
+
+    The check looks for the two shapes a real key field takes — a labelled input, or an
+    identifier that holds one — rather than for the words. The sign-in panel says in
+    prose that it never uses a key, and that sentence must not be what trips this guard.
+    """
+    field_pattern = re.compile(
+        r"(?:placeholder|aria-label|name|id|label|htmlFor)\s*=\s*[\"'{][^\"'}]*api[-_ ]?key",
+        re.IGNORECASE,
+    )
+    identifier_pattern = re.compile(r"\b(apiKey|api_key|API_KEY)\b")
     offenders: list[str] = []
     web = REPO_ROOT / "apps" / "web"
     if not web.exists():  # pragma: no cover
@@ -145,7 +157,24 @@ def test_no_api_key_input_exists_in_the_browser() -> None:
             continue
         if any(part in SKIP_DIRECTORIES for part in path.parts):
             continue
-        text = path.read_text(encoding="utf-8", errors="ignore").lower()
-        if "api key" in text or "apikey" in text:
-            offenders.append(path.relative_to(REPO_ROOT).as_posix())
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if field_pattern.search(line) or identifier_pattern.search(line):
+                offenders.append(f"{relative}: {line.strip()}")
     assert not offenders, "an API key field appears in the browser:\n" + "\n".join(offenders)
+
+
+def test_the_browser_key_field_guard_actually_catches_one() -> None:
+    """Proves the guard above would fail if someone added a key field."""
+    field_pattern = re.compile(
+        r"(?:placeholder|aria-label|name|id|label|htmlFor)\s*=\s*[\"'{][^\"'}]*api[-_ ]?key",
+        re.IGNORECASE,
+    )
+    identifier_pattern = re.compile(r"\b(apiKey|api_key|API_KEY)\b")
+
+    assert field_pattern.search('<input placeholder="OpenAI API key" />')
+    assert field_pattern.search("<input aria-label='api-key' />")
+    assert identifier_pattern.search("const [apiKey, setApiKey] = useState('')")
+    # And that the honest prose in the sign-in panel does not look like a field.
+    assert not field_pattern.search("It never asks for your password and never uses an API key.")
+    assert not identifier_pattern.search("It never asks for your password and never uses an API key.")

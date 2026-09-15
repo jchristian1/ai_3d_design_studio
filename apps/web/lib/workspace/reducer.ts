@@ -293,12 +293,12 @@ export function workspaceReducer(
     case "notice":
       return { ...state, notice: event.message };
 
-    default: {
-      // Exhaustiveness: a new event without a case is a compile error, not a silent
-      // no-op at runtime.
-      const unreachable: never = event;
-      return state;
-    }
+    default:
+      // Exhaustiveness: `event` narrows to `never` here, so adding an event variant
+      // without a case is a COMPILE error. At runtime the state is returned unchanged
+      // rather than thrown, because a reducer that can throw would take the whole
+      // workspace down over a stray event.
+      return ignoreUnknown(event, state);
   }
 }
 
@@ -308,4 +308,8 @@ export function latestModelUrl(
 ): string | null {
   const model: ArtifactRefView | null = state.model;
   return model ? toAbsolute(model.url) : null;
+}
+
+function ignoreUnknown(_event: never, state: WorkspaceState): WorkspaceState {
+  return state;
 }

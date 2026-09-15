@@ -1,4 +1,4 @@
-import { StudioShell } from "../components/StudioShell.tsx";
+import { WorkspaceShell } from "../components/WorkspaceShell.tsx";
 
 /**
  * The studio.
@@ -9,5 +9,5 @@ import { StudioShell } from "../components/StudioShell.tsx";
  * than from configuration.
  */
 export default function Page() {
-  return <StudioShell />;
+  return <WorkspaceShell />;
 }

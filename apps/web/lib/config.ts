@@ -54,3 +54,13 @@ export function resolveApiBaseUrl(
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
+
+/**
+ * The file types the upload endpoint accepts, as an `accept` attribute.
+ *
+ * A hint to the file picker only. The backend validates the extension, the declared
+ * type AND the actual leading bytes, so this list being generous or stale can never
+ * widen what is really accepted.
+ */
+export const SUPPORTED_UPLOAD_ACCEPT =
+  ".png,.jpg,.jpeg,.webp,.pdf,.txt,.md,image/png,image/jpeg,image/webp,application/pdf,text/plain,text/markdown";

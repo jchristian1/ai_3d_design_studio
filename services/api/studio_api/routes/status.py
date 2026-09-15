@@ -10,10 +10,13 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Request
+from pydantic import BaseModel, ConfigDict
 
 from studio_agent import codex
+from studio_agent.codex import CodexError
 
-from .support import get_dependencies
+from .. import errors
+from .support import ControlPlaneHTTPError, get_dependencies
 
 _log = logging.getLogger(__name__)
 
@@ -111,3 +114,82 @@ def blender_status(request: Request) -> dict[str, Any]:
         "supports_modelling": False,
         "worker_count": 0,
     }
+
+
+
+# --- signing in to ChatGPT -------------------------------------------------
+#
+# These endpoints drive the OFFICIAL `codex login` flow and relay what it prints. The
+# platform never implements OAuth, never contacts auth.openai.com itself, never reads a
+# credential file, and never asks for a password: Codex owns authentication end to end.
+#
+# The command is fixed. Nothing from the request body reaches the argument list; the only
+# choice is which of the two official modes to use. The control plane binds loopback in
+# local development, so this is the user driving their own Codex client from their own
+# browser on their own machine.
+
+
+class LoginRequestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: Use the device-code flow, for when the localhost callback cannot be reached.
+    device_auth: bool = False
+
+
+def _login_capable(provider: Any) -> bool:
+    return callable(getattr(provider, "begin_login", None))
+
+
+def _no_login_support(provider: Any) -> dict[str, Any]:
+    return {
+        "supported": False,
+        "state": "idle",
+        "message": (
+            f"The configured provider ({getattr(provider, 'name', 'unknown')}) does not "
+            "sign in to anything."
+        ),
+        "waiting": False,
+        "verification_url": None,
+        "user_code": None,
+    }
+
+
+@router.post("/astra/login")
+def begin_astra_login(body: LoginRequestBody, request: Request) -> dict[str, Any]:
+    """Start signing in to ChatGPT, and return what the user has to do next."""
+    dependencies = get_dependencies(request)
+    provider = dependencies.design_provider
+    if not _login_capable(provider):
+        return _no_login_support(provider)
+
+    try:
+        session = provider.begin_login(device_auth=body.device_auth)
+    except CodexError as error:
+        failure = errors.failure(errors.PROVIDER_UNAVAILABLE, "PROVIDER_UNAVAILABLE", str(error))
+        raise ControlPlaneHTTPError(failure.http_status, failure.body()) from error
+
+    return {"supported": True, **session.snapshot(), "status": provider.status().snapshot()}
+
+
+@router.get("/astra/login")
+def astra_login_state(request: Request) -> dict[str, Any]:
+    """Poll the in-progress sign-in. The browser calls this while the user authorises."""
+    dependencies = get_dependencies(request)
+    provider = dependencies.design_provider
+    if not _login_capable(provider):
+        return _no_login_support(provider)
+
+    session = provider.login_session()
+    return {"supported": True, **session.snapshot(), "status": provider.status().snapshot()}
+
+
+@router.delete("/astra/login")
+def cancel_astra_login(request: Request) -> dict[str, Any]:
+    """Abandon a sign-in, stopping the local callback server it started."""
+    dependencies = get_dependencies(request)
+    provider = dependencies.design_provider
+    if not _login_capable(provider):
+        return _no_login_support(provider)
+
+    provider.cancel_login()
+    return {"supported": True, **provider.login_session().snapshot()}

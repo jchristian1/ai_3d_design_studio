@@ -31,6 +31,8 @@ import os
 import re
 import shutil
 import subprocess
+import threading
+import time
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -91,6 +93,69 @@ class CodexError(RuntimeError):
     """Raised when Codex cannot be used for a reason the caller should report."""
 
 
+# --- sign-in ---------------------------------------------------------------
+#
+# Authentication belongs entirely to the Codex client. This module starts the OFFICIAL
+# `codex login` flow and reports what that flow prints. It never implements OAuth,
+# never talks to auth.openai.com itself, never reads or parses a credential file, and
+# never asks for a password.
+#
+# Two supported modes, both official:
+#
+#   default      `codex login` runs a callback server on localhost and prints an
+#                authorize URL. One click for a user whose browser is on this machine,
+#                which is exactly the local single-user case.
+#   device code  `codex login --device-auth` prints a verification URL plus a one-time
+#                code. Used when the callback server cannot be reached.
+
+LOGIN_IDLE: Final = "idle"
+LOGIN_STARTING: Final = "starting"
+LOGIN_WAITING: Final = "waiting"
+LOGIN_COMPLETE: Final = "complete"
+LOGIN_FAILED: Final = "failed"
+LOGIN_CANCELLED: Final = "cancelled"
+
+#: How long to wait for the CLI to print its URL before giving up on the attempt.
+LOGIN_PROMPT_TIMEOUT_SECONDS: Final = 25.0
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_AUTH_URL = re.compile(r"https://auth\.openai\.com/\S+")
+#: The device code as the CLI prints it, for example FIZI-U80Z5.
+_DEVICE_CODE = re.compile(r"\b([A-Z0-9]{4}-[A-Z0-9]{4,8})\b")
+
+
+@dataclass
+class CodexLoginSession:
+    """An in-progress official Codex sign-in."""
+
+    state: str = LOGIN_IDLE
+    #: Where the user must go to authorise. Always an official OpenAI URL.
+    verification_url: Optional[str] = None
+    #: Present only in the device-code flow.
+    user_code: Optional[str] = None
+    device_auth: bool = False
+    detail: str = ""
+
+    @property
+    def waiting(self) -> bool:
+        return self.state in (LOGIN_STARTING, LOGIN_WAITING)
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "state": self.state,
+            "verification_url": self.verification_url,
+            "user_code": self.user_code,
+            "device_auth": self.device_auth,
+            "detail": self.detail,
+            "waiting": self.waiting,
+        }
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI.sub("", text)
+
+
+
 @dataclass(frozen=True)
 class CodexStatus:
     """The connection state shown as "Astra via Codex" in the toolbar."""
@@ -139,6 +204,11 @@ class CodexClient:
     #: Overridable purely so tests can drive a fake CLI.
     runner: Optional[Any] = None
     _cached_version: Optional[str] = field(default=None, init=False, repr=False)
+    #: The in-progress sign-in, if any. One at a time: a second attempt supersedes the
+    #: first, because two concurrent callback servers would fight over the same port.
+    _login: Optional[CodexLoginSession] = field(default=None, init=False, repr=False)
+    _login_process: Optional[Any] = field(default=None, init=False, repr=False)
+    _login_lock: Any = field(default_factory=threading.RLock, init=False, repr=False)
 
     # -- discovery ---------------------------------------------------------
     def resolve_executable(self) -> Optional[str]:
@@ -251,6 +321,120 @@ class CodexClient:
             state=CONNECTED,
             codex_version=version_text,
             model=self.model,
+        )
+
+    # -- sign-in -----------------------------------------------------------
+    def login_session(self) -> CodexLoginSession:
+        """The current sign-in attempt, refreshed against the child process."""
+        with self._login_lock:
+            session = self._login
+            if session is None:
+                return CodexLoginSession()
+            process = self._login_process
+            if process is not None and process.poll() is not None:
+                # The CLI finished. Believe `codex login status`, not the exit code:
+                # that is the supported way to know whether we are signed in.
+                signed_in = self.status().connected
+                session.state = LOGIN_COMPLETE if signed_in else LOGIN_FAILED
+                if not signed_in and not session.detail:
+                    session.detail = "The sign-in did not complete. Please try again."
+                self._login_process = None
+            return session
+
+    def begin_login(self, *, device_auth: bool = False) -> CodexLoginSession:
+        """Start the OFFICIAL Codex sign-in flow and return what the user must do.
+
+        Runs a FIXED command; nothing from a request reaches the argument list. The only
+        choice a caller has is which of the two official modes to use.
+        """
+        if self.resolve_executable() is None:
+            raise CodexError(STATE_MESSAGES[NOT_INSTALLED])
+
+        if self.status().connected:
+            return CodexLoginSession(state=LOGIN_COMPLETE, detail="Already signed in.")
+
+        with self._login_lock:
+            self.cancel_login()
+
+            arguments = ["login", *(["--device-auth"] if device_auth else [])]
+            session = CodexLoginSession(state=LOGIN_STARTING, device_auth=device_auth)
+            self._login = session
+
+            try:
+                process = self._spawn_login(arguments)
+            except OSError as error:
+                session.state = LOGIN_FAILED
+                session.detail = f"Codex could not be started: {error}"
+                raise CodexError(session.detail) from error
+            self._login_process = process
+
+        # Read the CLI's instructions. They arrive on stdout for the device flow and on
+        # stderr for the default flow, so both are watched. This is the CLI talking to a
+        # person, which is precisely what we are relaying -- it is not model output.
+        deadline = time.monotonic() + LOGIN_PROMPT_TIMEOUT_SECONDS
+        collected: list[str] = []
+        while time.monotonic() < deadline:
+            line = _read_line(process)
+            if line is None:
+                if process.poll() is not None:
+                    break
+                time.sleep(0.05)
+                continue
+            clean = _strip_ansi(line)
+            collected.append(clean)
+
+            url = _AUTH_URL.search(clean)
+            if url and session.verification_url is None:
+                session.verification_url = url.group(0)
+            if device_auth and session.user_code is None:
+                code = _DEVICE_CODE.search(clean)
+                if code:
+                    session.user_code = code.group(1)
+
+            ready = session.verification_url is not None and (
+                session.user_code is not None or not device_auth
+            )
+            if ready:
+                session.state = LOGIN_WAITING
+                return session
+
+        with self._login_lock:
+            if session.verification_url is not None:
+                session.state = LOGIN_WAITING
+                return session
+            session.state = LOGIN_FAILED
+            session.detail = _login_failure_detail(collected)
+            self.cancel_login()
+        raise CodexError(session.detail)
+
+    def cancel_login(self) -> None:
+        """Abandon an in-progress sign-in and stop its callback server."""
+        with self._login_lock:
+            process = self._login_process
+            self._login_process = None
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except Exception:  # pragma: no cover - best effort
+                    process.kill()
+            if self._login is not None and self._login.waiting:
+                self._login.state = LOGIN_CANCELLED
+
+    def _spawn_login(self, arguments: Sequence[str]) -> Any:
+        executable = self.resolve_executable()
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in {"OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORG_ID"}
+        }
+        return subprocess.Popen(  # noqa: S603 - fixed command, no request input
+            [str(executable), *arguments],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=environment,
         )
 
     # -- structured completion --------------------------------------------
@@ -373,3 +557,28 @@ def parse_event_stream(stdout: str) -> list[dict[str, Any]]:
         if isinstance(event, dict):
             events.append(event)
     return events
+
+
+def _read_line(process: Any) -> Optional[str]:
+    """Read one line from the login process without blocking forever.
+
+    ``readline`` on a pipe blocks until a newline arrives, which is exactly what is
+    wanted here: the caller bounds the whole wait with its own deadline, and the CLI
+    prints its instructions promptly.
+    """
+    stream = getattr(process, "stdout", None)
+    if stream is None:
+        return None
+    line = stream.readline()
+    return line if line else None
+
+
+def _login_failure_detail(lines: Sequence[str]) -> str:
+    """Explain a sign-in that never produced a URL, using what the CLI said."""
+    for line in reversed(list(lines)):
+        stripped = line.strip()
+        if stripped:
+            return f"Codex reported: {stripped[:300]}"
+    return (
+        "Codex did not produce a sign-in link. Try running `codex login` in a terminal."
+    )

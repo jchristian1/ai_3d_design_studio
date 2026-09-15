@@ -145,6 +145,21 @@ export interface ConnectionStatusView {
   worker_count?: number;
 }
 
+/** An in-progress official Codex sign-in. */
+export interface LoginSessionView {
+  supported: boolean;
+  state: "idle" | "starting" | "waiting" | "complete" | "failed" | "cancelled";
+  /** Where the user authorises. Always an official OpenAI URL. */
+  verification_url: string | null;
+  /** Present only in the device-code flow. */
+  user_code: string | null;
+  device_auth?: boolean;
+  detail?: string;
+  waiting: boolean;
+  message?: string;
+  status?: ConnectionStatusView;
+}
+
 export interface DesignChatInput {
   requestId: string;
   sessionId: string;
@@ -170,6 +185,9 @@ export interface WorkspaceClient {
   getScene(projectId: string): Promise<SceneView | null>;
   getLatestModel(projectId: string): Promise<ArtifactRefView | null>;
   getAstraStatus(): Promise<ConnectionStatusView>;
+  beginAstraLogin(deviceAuth?: boolean): Promise<LoginSessionView>;
+  getAstraLogin(): Promise<LoginSessionView>;
+  cancelAstraLogin(): Promise<LoginSessionView>;
   getBlenderStatus(): Promise<ConnectionStatusView>;
   setFact(projectId: string, key: string, value: string): Promise<FactView>;
   absoluteUrl(url: string): string;
@@ -315,6 +333,21 @@ export function createWorkspaceClient(options: WorkspaceClientOptions = {}): Wor
 
     getBlenderStatus() {
       return send<ConnectionStatusView>("/api/status/blender");
+    },
+
+    beginAstraLogin(deviceAuth = false) {
+      return send<LoginSessionView>(
+        "/api/status/astra/login",
+        json({ device_auth: deviceAuth }),
+      );
+    },
+
+    getAstraLogin() {
+      return send<LoginSessionView>("/api/status/astra/login");
+    },
+
+    cancelAstraLogin() {
+      return send<LoginSessionView>("/api/status/astra/login", { method: "DELETE" });
     },
 
     async setFact(projectId, key, value) {

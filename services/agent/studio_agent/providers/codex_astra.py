@@ -224,6 +224,16 @@ class CodexAstraProvider:
     def status(self) -> CodexStatus:
         return self.client.status()
 
+    def begin_login(self, *, device_auth: bool = False):
+        """Start the official Codex sign-in. Delegated: the client owns auth."""
+        return self.client.begin_login(device_auth=device_auth)
+
+    def login_session(self):
+        return self.client.login_session()
+
+    def cancel_login(self) -> None:
+        self.client.cancel_login()
+
     def _metadata(self, operation_count: int = 0) -> ProviderMetadata:
         return ProviderMetadata(
             provider_name=self.name,
