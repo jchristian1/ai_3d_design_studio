@@ -20,7 +20,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 
-import { createElement } from "react";
+import { StrictMode, createElement } from "react";
 import globalJsdom from "global-jsdom";
 
 let cleanupDom: () => void;
@@ -170,11 +170,42 @@ async function send() {
  *
  * Uses getAllByText because every studio reply legitimately appears twice: once
  * in the visible transcript and once in the `aria-live` region that announces the
- * latest reply. Requiring uniqueness would punish the accessibility feature.
+ * latest reply. Requiring uniqueness here would punish the accessibility feature —
+ * which is exactly why duplicate-message assertions use `transcript()` below
+ * instead of this helper.
  */
 function expectMessage(pattern: RegExp): void {
   const found = screen.getAllByText(pattern);
   assert.ok(found.length > 0, `no message matched ${pattern}`);
+}
+
+/**
+ * The transcript as the user sees it: one entry per rendered message.
+ *
+ * Reads the ordered list only, deliberately excluding the `aria-live` mirror, so a
+ * count here is the browser-visible number of chat lines. `expectMessage` cannot
+ * detect a duplicated message because the live region always adds a second copy of
+ * the latest one; this can.
+ */
+function transcript(): Array<{ author: string; text: string }> {
+  const list = document.querySelector("ol");
+  if (!list) return [];
+  return Array.from(list.querySelectorAll("li")).map((item) => ({
+    author: item.querySelector("span")?.textContent?.trim() ?? "",
+    text: item.querySelector("p")?.textContent?.trim() ?? "",
+  }));
+}
+
+function studioLines(): string[] {
+  return transcript()
+    .filter((entry) => entry.author === "Studio")
+    .map((entry) => entry.text);
+}
+
+function userLines(): string[] {
+  return transcript()
+    .filter((entry) => entry.author === "You")
+    .map((entry) => entry.text);
 }
 
 // ---------------------------------------------------------------------------
@@ -814,4 +845,306 @@ test("17: an uncertain submission offers a retry that reuses the request_id", as
   // response), so no retry button appears — the user is told what happened.
   assert.equal(requestIds.length, 1);
   expectMessage(/something went wrong/i);
+});
+
+
+// ---------------------------------------------------------------------------
+// REGRESSION: exactly one terminal Studio message per command
+// ---------------------------------------------------------------------------
+
+/**
+ * The bug this pins, seen in a real browser:
+ *
+ *   You     Move Cube 50 cm to the right.
+ *   Studio  Done — the change has been applied and saved.
+ *   Studio  Done — the change has been applied and saved.     <-- duplicated
+ *
+ * The polling source reports a terminal state through BOTH `onUpdate` and
+ * `onSettled`, so the reducer received `job_status: succeeded` (which appended the
+ * terminal wording as a progress line) immediately followed by `job_succeeded`
+ * (which appended it again as a success line). The old
+ * replace-the-previous-progress-line rule only collapsed messages when BOTH were
+ * progress, so the two different tones both survived.
+ *
+ * These tests count entries in the rendered transcript, not `getAllByText`, because
+ * the `aria-live` mirror always contains a second copy of the latest reply and
+ * would mask a real duplicate.
+ */
+
+test("REGRESSION: one successful command shows exactly one terminal Studio message", async () => {
+  const harness = renderStudio((transport) => {
+    transport.onPost("/api/chat", {
+      status: 202,
+      body: submission({ request_id: "req_dup_1" }),
+    });
+    // The terminal state on the FIRST poll: onUpdate and onSettled both fire.
+    transport.onGet(jobPath("job_req_dup_1_0"), {
+      status: 200,
+      body: jobStatus("succeeded", { job_id: "job_req_dup_1_0" }),
+    });
+  });
+  await settle();
+
+  await type(MOVE_COMMAND);
+  await send();
+  await advance(harness.scheduler, 750);
+
+  const studio = studioLines();
+  const done = studio.filter((line) => /applied and saved/i.test(line));
+
+  assert.equal(
+    done.length,
+    1,
+    `expected one terminal message, saw ${done.length}: ${JSON.stringify(studio)}`,
+  );
+  // One user line, one studio line: the whole exchange.
+  assert.deepEqual(userLines(), [MOVE_COMMAND]);
+  assert.equal(studio.length, 1, JSON.stringify(studio));
+});
+
+test("REGRESSION: progress then success leaves one Studio line, not one per status", async () => {
+  const responses = ["queued", "claimed", "running", "succeeded"] as const;
+  let index = 0;
+
+  const harness = renderStudio((transport) => {
+    transport.onPost("/api/chat", {
+      status: 202,
+      body: submission({ request_id: "req_dup_2" }),
+    });
+    transport.onGet(jobPath("job_req_dup_2_0"), () => {
+      const status = responses[Math.min(index, responses.length - 1)]!;
+      index += 1;
+      return { status: 200, body: jobStatus(status, { job_id: "job_req_dup_2_0" }) };
+    });
+  });
+  await settle();
+
+  await type(MOVE_COMMAND);
+  await send();
+
+  // Each transient status replaces the previous line rather than adding one.
+  assert.equal(studioLines().length, 1);
+  await advance(harness.scheduler, 750);
+  assert.equal(studioLines().length, 1);
+  await advance(harness.scheduler, 750);
+  assert.equal(studioLines().length, 1);
+
+  await advance(harness.scheduler, 750);
+  const studio = studioLines();
+  assert.equal(studio.length, 1, JSON.stringify(studio));
+  assert.match(studio[0]!, /applied and saved/i);
+});
+
+test("REGRESSION: continued polling of a terminal job appends no messages", async () => {
+  const harness = renderStudio((transport) => {
+    transport.onPost("/api/chat", {
+      status: 202,
+      body: submission({ request_id: "req_dup_3" }),
+    });
+    transport.onGet(jobPath("job_req_dup_3_0"), {
+      status: 200,
+      body: jobStatus("succeeded", { job_id: "job_req_dup_3_0" }),
+    });
+  });
+  await settle();
+
+  await type(MOVE_COMMAND);
+  await send();
+  await advance(harness.scheduler, 750);
+  const before = studioLines();
+
+  // Polling has stopped, but drive the clock hard anyway: no message may appear.
+  await advance(harness.scheduler, 60_000);
+
+  assert.deepEqual(studioLines(), before);
+  assert.equal(before.length, 1);
+});
+
+test("REGRESSION: a preview arriving with success does not restate the outcome", async () => {
+  const artifact = preview({ artifact_id: "preview_dup4dup4dup4dup4" });
+  const harness = renderStudio((transport) => {
+    transport.onPost("/api/chat", {
+      status: 202,
+      body: submission({ request_id: "req_dup_4" }),
+    });
+    transport.onGet(jobPath("job_req_dup_4_0"), {
+      status: 200,
+      body: jobStatus("succeeded", {
+        job_id: "job_req_dup_4_0",
+        preview: artifact,
+      }),
+    });
+  });
+  await settle();
+
+  await type(MOVE_COMMAND);
+  await send();
+  await advance(harness.scheduler, 750);
+
+  // The image updated...
+  const image = screen.getByRole("img") as HTMLImageElement;
+  assert.ok(image.getAttribute("src")?.includes("preview_dup4dup4dup4dup4"));
+  // ...and the transcript still holds exactly one studio line.
+  assert.equal(studioLines().length, 1, JSON.stringify(studioLines()));
+});
+
+test("REGRESSION: a second command adds exactly one more terminal message", async () => {
+  let index = 0;
+  const harness = renderStudio((transport) => {
+    transport.onPost("/api/chat", (call) => {
+      index += 1;
+      return {
+        status: 202,
+        body: submission({
+          request_id: String((call.body as Record<string, string>).request_id),
+          job_id: `job_dup_${index}`,
+        }),
+      };
+    });
+    transport.on(
+      (path, method) => method === "GET" && path.includes("/jobs/job_dup_"),
+      (call) => ({
+        status: 200,
+        body: jobStatus("succeeded", {
+          job_id: call.url.split("/").pop() ?? "job_dup_1",
+        }),
+      }),
+    );
+  });
+  await settle();
+
+  await type(MOVE_COMMAND);
+  await send();
+  await advance(harness.scheduler, 750);
+  assert.equal(studioLines().length, 1);
+
+  await type(MOVE_COMMAND);
+  await send();
+  await advance(harness.scheduler, 750);
+
+  const studio = studioLines();
+  assert.equal(studio.length, 2, JSON.stringify(studio));
+  assert.equal(userLines().length, 2);
+  for (const line of studio) {
+    assert.match(line, /applied and saved/i);
+  }
+});
+
+test("REGRESSION: a failed job also shows exactly one terminal message", async () => {
+  const harness = renderStudio((transport) => {
+    transport.onPost("/api/chat", {
+      status: 202,
+      body: submission({ request_id: "req_dup_5" }),
+    });
+    transport.onGet(jobPath("job_req_dup_5_0"), {
+      status: 200,
+      body: jobStatus("failed", {
+        job_id: "job_req_dup_5_0",
+        error: { code: "OBJECT_NOT_FOUND", message: "the target does not exist" },
+      }),
+    });
+  });
+  await settle();
+
+  await type(MOVE_COMMAND);
+  await send();
+  await advance(harness.scheduler, 750);
+
+  const studio = studioLines();
+  assert.equal(studio.length, 1, JSON.stringify(studio));
+  assert.match(studio[0]!, /that object isn't in this project/i);
+});
+
+test("REGRESSION: a degraded preview shows one warning line, not a warning plus a success", async () => {
+  const harness = renderStudio((transport) => {
+    transport.onPost("/api/chat", {
+      status: 202,
+      body: submission({ request_id: "req_dup_6" }),
+    });
+    transport.onGet(jobPath("job_req_dup_6_0"), {
+      status: 200,
+      body: jobStatus("succeeded", {
+        job_id: "job_req_dup_6_0",
+        preview: null,
+        preview_error: {
+          code: "BLENDER_UNAVAILABLE",
+          message: "no preview could be generated",
+        },
+      }),
+    });
+  });
+  await settle();
+
+  await type(MOVE_COMMAND);
+  await send();
+  await advance(harness.scheduler, 750);
+
+  const studio = studioLines();
+  assert.equal(studio.length, 1, JSON.stringify(studio));
+  assert.match(studio[0]!, /applied and saved/i);
+  assert.match(studio[0]!, /preview/i);
+});
+
+
+test("REGRESSION: React Strict Mode does not duplicate the terminal message", async () => {
+  // Next.js App Router enables Strict Mode in development, which double-invokes
+  // reducers and effects to surface impurity. That is precisely the environment
+  // Christian saw the duplicate in, so the whole shell is mounted inside
+  // StrictMode here rather than trusting that the reducer is pure.
+  const transport = new StubTransport()
+    .onGet("/health", { status: 200, body: health() })
+    .onGet(`/api/projects/${PROJECT_ID}/preview/latest`, {
+      status: 404,
+      body: { error: { code: "VALIDATION_ERROR", message: "none" } },
+    })
+    .onPost("/api/chat", {
+      status: 202,
+      body: submission({ request_id: "req_strict" }),
+    })
+    .onGet(jobPath("job_req_strict_0"), {
+      status: 200,
+      body: jobStatus("succeeded", {
+        job_id: "job_req_strict_0",
+        preview: preview({ artifact_id: "preview_strictstrict1234" }),
+      }),
+    });
+
+  const scheduler = new ManualScheduler();
+  const client = createApiClient({ baseUrl: API_BASE, fetchImpl: transport.fetch });
+
+  render(
+    createElement(
+      StrictMode,
+      null,
+      createElement(StudioShell, {
+        sessionOptions: {
+          client,
+          jobUpdates: createPollingJobUpdates(client, {
+            intervalMs: 750,
+            timeoutMs: 60_000,
+            scheduler,
+          }),
+          sessionId: "sess_strict",
+        },
+      }),
+    ),
+  );
+  await settle();
+
+  await type(MOVE_COMMAND);
+  await send();
+  await advance(scheduler, 750);
+
+  const studio = studioLines();
+  assert.equal(
+    studio.length,
+    1,
+    `Strict Mode produced ${studio.length} studio lines: ${JSON.stringify(studio)}`,
+  );
+  assert.match(studio[0]!, /applied and saved/i);
+  assert.deepEqual(userLines(), [MOVE_COMMAND]);
+
+  // Only one submission was sent, despite effects running twice.
+  const posts = transport.calls.filter((call) => call.url === "/api/chat");
+  assert.equal(posts.length, 1);
 });

@@ -610,3 +610,209 @@ test("a job that never terminates times out instead of polling forever", async (
   assert.equal(timedOut, true);
   assert.equal(scheduler.pendingCount, 0);
 });
+
+
+// ---------------------------------------------------------------------------
+// REGRESSION: exactly one terminal Studio message per submission
+// ---------------------------------------------------------------------------
+
+/**
+ * The browser-visible bug: after one successful command the transcript showed
+ *
+ *   Studio  Done — the change has been applied and saved.
+ *   Studio  Done — the change has been applied and saved.
+ *
+ * Root cause: a terminal poll dispatches TWO events. `createPollingJobUpdates`
+ * calls `onUpdate(status)` for every observed state — including the terminal one —
+ * and then `onSettled(status)`. The hook maps those to `job_status` and
+ * `job_succeeded`. The old reducer appended a message for both, and its
+ * de-duplication only collapsed a new PROGRESS line onto a previous PROGRESS line,
+ * so `job_status`'s progress-toned copy and `job_succeeded`'s success-toned copy
+ * both survived with identical text.
+ *
+ * The fix is structural rather than cosmetic: every studio message carries an id
+ * derived from its submission, appending is replace-by-id, and terminal wording is
+ * owned solely by `job_succeeded`/`job_failed`. One submission therefore has exactly
+ * one reply slot, and no event ordering can produce two terminal lines.
+ */
+
+function terminalLines(state: SessionState): string[] {
+  return state.messages
+    .filter((message) => message.author === "studio")
+    .filter((message) => ["success", "warning", "error"].includes(message.tone))
+    .map((message) => message.text);
+}
+
+test("REGRESSION: the exact terminal poll sequence yields one terminal message", () => {
+  let state = accepted("req_dup");
+
+  // Precisely what the polling loop does on a terminal poll.
+  state = sessionReducer(state, { type: "job_status", jobStatus: "succeeded" });
+  state = sessionReducer(state, {
+    type: "job_succeeded",
+    preview: null,
+    previewWarning: null,
+  });
+
+  const done = studioTexts(state).filter((text) => text === STATUS_TEXT.succeeded);
+  assert.equal(done.length, 1, JSON.stringify(studioTexts(state)));
+  assert.equal(terminalLines(state).length, 1);
+  // One user line, one studio line.
+  assert.equal(state.messages.length, 2);
+});
+
+test("REGRESSION: a terminal job_status records the status but adds no message", () => {
+  const tracking = accepted("req_status_only");
+  const before = tracking.messages.length;
+
+  const after = sessionReducer(tracking, {
+    type: "job_status",
+    jobStatus: "succeeded",
+  });
+
+  // The status is recorded, because the UI reports it in the status bar...
+  assert.equal(after.submission?.jobStatus, "succeeded");
+  // ...but the wording belongs to job_succeeded, which knows about the preview.
+  assert.equal(after.messages.length, before);
+});
+
+test("REGRESSION: repeated job_succeeded events do not accumulate messages", () => {
+  let state = accepted("req_repeat");
+  for (let i = 0; i < 5; i += 1) {
+    state = sessionReducer(state, {
+      type: "job_succeeded",
+      preview: preview(),
+      previewWarning: null,
+    });
+  }
+
+  assert.equal(terminalLines(state).length, 1);
+  assert.equal(state.messages.length, 2);
+});
+
+test("REGRESSION: preview metadata after success updates the image only", () => {
+  let state = sessionReducer(accepted("req_late_preview"), {
+    type: "job_succeeded",
+    preview: null,
+    previewWarning: null,
+  });
+  const afterSuccess = state.messages.length;
+
+  state = sessionReducer(state, {
+    type: "preview_loaded",
+    preview: preview({ artifact_id: "preview_latelatelate1234" }),
+  });
+
+  assert.equal(state.preview?.artifact_id, "preview_latelatelate1234");
+  assert.equal(state.messages.length, afterSuccess, "preview_loaded added a message");
+});
+
+test("REGRESSION: an explicit retry of the same request_id does not duplicate lines", () => {
+  // First attempt times out, so it is retryable with its original id.
+  let state = sessionReducer(accepted("req_retry_dup"), {
+    type: "job_timed_out",
+    message: "This change is taking longer than expected.",
+  });
+  assert.equal(terminalLines(state).length, 1);
+
+  // The retry re-enters the flow with the SAME request_id.
+  state = sessionReducer(state, {
+    type: "submission_started",
+    requestId: "req_retry_dup",
+    message: MOVE_COMMAND,
+    messageId: "user_req_retry_dup",
+  });
+  state = sessionReducer(state, {
+    type: "submission_accepted",
+    jobId: "job_req_retry_dup_0",
+    jobStatus: "succeeded",
+    duplicate: true,
+  });
+  state = sessionReducer(state, {
+    type: "job_succeeded",
+    preview: preview(),
+    previewWarning: null,
+  });
+
+  // The command is echoed once and answered once.
+  assert.equal(state.messages.filter((m) => m.author === "user").length, 1);
+  assert.equal(terminalLines(state).length, 1);
+  assert.equal(state.messages.length, 2);
+});
+
+test("REGRESSION: two intentional commands yield two terminal messages", () => {
+  let state = sessionReducer(accepted("req_a"), {
+    type: "job_succeeded",
+    preview: preview({ artifact_id: "preview_aaaa1111aaaa1111" }),
+    previewWarning: null,
+  });
+
+  state = sessionReducer(state, {
+    type: "submission_started",
+    requestId: "req_b",
+    message: MOVE_COMMAND,
+    messageId: "user_req_b",
+  });
+  state = sessionReducer(state, {
+    type: "submission_accepted",
+    jobId: "job_req_b_0",
+    jobStatus: "queued",
+    duplicate: false,
+  });
+  state = sessionReducer(state, {
+    type: "job_succeeded",
+    preview: preview({ artifact_id: "preview_bbbb2222bbbb2222" }),
+    previewWarning: null,
+  });
+
+  assert.equal(terminalLines(state).length, 2);
+  assert.equal(state.messages.filter((m) => m.author === "user").length, 2);
+  assert.equal(state.messages.length, 4);
+});
+
+test("REGRESSION: the reducer is pure, so React's double invocation is safe", () => {
+  // React invokes a reducer twice per dispatch in development to surface impurity.
+  // A message id derived from a counter or a clock would differ between the two
+  // runs and could produce a duplicate line; derived ids cannot.
+  const tracking = accepted("req_pure");
+  const event = {
+    type: "job_succeeded" as const,
+    preview: preview(),
+    previewWarning: null,
+  };
+
+  const first = sessionReducer(tracking, event);
+  const second = sessionReducer(tracking, event);
+
+  assert.deepEqual(first.messages, second.messages);
+  assert.deepEqual(
+    first.messages.map((m) => m.id),
+    second.messages.map((m) => m.id),
+  );
+  // And applying it twice in sequence is also stable.
+  const twice = sessionReducer(first, event);
+  assert.deepEqual(twice.messages, first.messages);
+});
+
+test("REGRESSION: message ids are stable and derived from the submission", () => {
+  const state = sessionReducer(accepted("req_ids"), {
+    type: "job_succeeded",
+    preview: null,
+    previewWarning: null,
+  });
+
+  const ids = state.messages.map((message) => message.id);
+  assert.deepEqual(ids, ["user_req_ids", "studio_req_ids"]);
+  // No duplicates anywhere in the transcript.
+  assert.equal(new Set(ids).size, ids.length);
+});
+
+test("REGRESSION: unattached notices remain distinct", () => {
+  let state = start();
+  state = sessionReducer(state, { type: "notice", text: "first", tone: "info" });
+  state = sessionReducer(state, { type: "notice", text: "second", tone: "info" });
+
+  assert.deepEqual(studioTexts(state), ["first", "second"]);
+  const ids = state.messages.map((m) => m.id);
+  assert.equal(new Set(ids).size, ids.length);
+});
