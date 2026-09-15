@@ -1698,9 +1698,30 @@ def test_settings_defaults_are_local_and_conservative():
 
     assert settings.environment == "local"
     assert settings.host == "127.0.0.1", "loopback by default"
-    assert settings.allowed_origins == (), "no CORS until a browser client exists"
     assert settings.agent_provider == "rule_based"
     assert settings.project_ids == ("proj_seed",)
+
+    # Local development defaults to the Next.js dev server's loopback origins, so
+    # `npm run dev` reaches `uvicorn` with no configuration. An explicit two-entry
+    # allow-list, never a wildcard.
+    assert settings.allowed_origins == (
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    )
+    assert "*" not in settings.allowed_origins
+
+
+def test_no_cors_default_is_granted_outside_local():
+    """A deployment must name its own origins; nothing is inherited."""
+    settings = load_settings({"STUDIO_API_ENVIRONMENT": "production"})
+    assert settings.allowed_origins == ()
+
+
+def test_a_configured_origin_list_overrides_the_local_default():
+    settings = load_settings(
+        {"STUDIO_API_ALLOWED_ORIGINS": "http://localhost:4321"}
+    )
+    assert settings.allowed_origins == ("http://localhost:4321",)
 
 
 def test_settings_never_expose_the_token_in_repr():
@@ -1709,6 +1730,7 @@ def test_settings_never_expose_the_token_in_repr():
 
 
 def test_no_cors_middleware_is_installed_when_no_origins_are_configured():
+    """`build_app` configures no origins, so the middleware is absent entirely."""
     client, _ = build_app()
     response = client.get(
         "/health", headers={"Origin": "https://evil.example.com"}
@@ -1718,6 +1740,25 @@ def test_no_cors_middleware_is_installed_when_no_origins_are_configured():
     assert "access-control-allow-origin" not in {
         k.lower() for k in response.headers
     }, "no origin may be granted access by default"
+
+
+def test_an_unlisted_origin_is_refused_even_with_the_local_default():
+    """The local default is an allow-list, not a relaxation."""
+    settings = load_settings({})
+    client, _ = build_app(
+        settings=Settings(
+            environment="local",
+            worker_token=TOKEN,
+            project_ids=(PROJECT_ID,),
+            allowed_origins=settings.allowed_origins,
+        )
+    )
+
+    allowed = client.get("/health", headers={"Origin": "http://localhost:3000"})
+    assert allowed.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+    denied = client.get("/health", headers={"Origin": "https://evil.example.com"})
+    assert denied.headers.get("access-control-allow-origin") != "https://evil.example.com"
 
 
 def test_cors_allows_only_explicitly_configured_origins():

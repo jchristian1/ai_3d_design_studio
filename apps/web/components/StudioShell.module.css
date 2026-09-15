@@ -1,0 +1,94 @@
+/*
+ * The two-panel studio layout.
+ *
+ *   ┌──────────────────────────────────────────────┐
+ *   │ header                          connection ● │
+ *   ├──────────────────┬───────────────────────────┤
+ *   │ chat             │ preview                   │
+ *   ├──────────────────┴───────────────────────────┤
+ *   │ status bar                                   │
+ *   └──────────────────────────────────────────────┘
+ *
+ * Grid rather than flex, because the shape is genuinely two-dimensional and the
+ * middle row must be the only one that scrolls.
+ */
+
+.shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  background: var(--surface-0);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.project {
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* minmax(0, …) so a long message cannot push the grid wider than the viewport. */
+.main {
+  display: grid;
+  grid-template-columns: minmax(320px, 2fr) minmax(0, 3fr);
+  min-height: 0;
+}
+
+.chatColumn {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.previewColumn {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-0);
+}
+
+@media (max-width: 900px) {
+  /* Stack on narrow screens; the preview leads because it is the result. */
+  .main {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(220px, 40dvh) minmax(0, 1fr);
+  }
+
+  .chatColumn {
+    order: 2;
+    border-right: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .previewColumn {
+    order: 1;
+  }
+}

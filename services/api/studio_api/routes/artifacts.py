@@ -117,6 +117,48 @@ def preview_model_from_wire(
 
 
 @router.get(
+    "/projects/{project_id}/preview/latest",
+    response_model=PreviewModel,
+    summary="Metadata for the project's most recent preview",
+)
+async def get_latest_preview(
+    project_id: str,
+    dependencies: AppDependencies = Depends(get_dependencies),
+) -> PreviewModel:
+    """The newest preview for a project, so a browser has something to show on open.
+
+    Deliberately minimal: it answers "what does this project look like right now?"
+    and nothing else. It is NOT version history — there is no list, no pagination,
+    no ordering choice, and no way to address an older preview except by the
+    artifact id a job already reported. Building history properly needs a project
+    version model, which does not exist yet.
+
+    404 when the project has never been previewed, which the UI renders as its
+    empty state rather than as an error.
+    """
+    if dependencies.projects.get(project_id) is None:
+        raise ControlPlaneHTTPError(
+            status_code=404,
+            body=error_body("VALIDATION_ERROR", PROJECT_NOT_FOUND_MESSAGE),
+        )
+
+    store = dependencies.artifacts
+    # `list_for_project` is ordered by created_at, so "latest" is the last entry.
+    # Only registered artifacts are ever returned, so this cannot surface a
+    # .blend, a journal record, or anything else living in the directory.
+    artifacts = store.list_for_project(project_id) if store else ()
+    if not artifacts:
+        raise ControlPlaneHTTPError(
+            status_code=404,
+            body=error_body(
+                "VALIDATION_ERROR", "this project has no preview yet"
+            ),
+        )
+
+    return preview_model_for(project_id, artifacts[-1])
+
+
+@router.get(
     "/projects/{project_id}/artifacts/{artifact_id}",
     summary="Fetch a generated preview artifact",
     response_class=Response,

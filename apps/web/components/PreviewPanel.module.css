@@ -1,0 +1,117 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px 10px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.meta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px 20px;
+}
+
+.figure {
+  position: relative;
+  margin: 0;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image {
+  display: block;
+  /* Fit the stage while preserving aspect ratio. `height: auto` with max-height
+     keeps a tall image correct too. */
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  transition: opacity 160ms ease;
+}
+
+/* The previous image stays visible but visibly not-current. */
+.dimmed {
+  opacity: 0.45;
+}
+
+.overlay {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(14, 16, 19, 0.88);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.empty {
+  text-align: center;
+  max-width: 340px;
+  padding: 32px 24px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+}
+
+.emptyTitle {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.emptyBody {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.notice {
+  margin: 0;
+  max-width: 380px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.warning {
+  margin: 0;
+  padding: 10px 20px 16px;
+  color: var(--warn);
+  font-size: 13.5px;
+}

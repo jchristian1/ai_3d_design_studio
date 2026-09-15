@@ -118,9 +118,19 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - Tests: 130 fast (50 artifact store, 29 worker preview, 51 API artifact routes), 11 real-Blender rendering, 8 HTTP→agent→worker→Blender→PNG E2E. Verified 0.00→0.50 (artifact A) →1.00 (artifact B, A still retrievable, images differ), and a retry reusing A with no new mutation and no new artifact.
   - _Requirements: 6.1, 6.2_
 
-- [ ] 11. Web app chat + preview UI
-  - Minimal Next.js/React chat input posting `ChatRequest` with `project_id`/`session_id`.
-  - Show pending state, then success + updated preview, or a readable error.
+- [x] 11. Web app chat + preview UI
+  - Next.js 16 App Router + React 19 + TypeScript in `apps/web`, CSS modules, no UI framework. Two-panel studio layout (chat | preview) with header connection indicator and status bar, stacking responsively.
+  - All HTTP isolated in `lib/api`: typed `getHealth`/`getWorkers`/`submitChat`/`getJobStatus`/`getLatestPreview`/`getArtifactUrl`, injected `fetch` and base URL, per-request timeouts, and ONE place where a failure becomes words. Components never see a `Response`, a status, or an error body.
+  - Canonical types reused from `@studio/types` (`JobStatus`, `ArtifactType`, `Vec3`) so the browser cannot drift from the contracts; API-specific view models (`ChatSubmission`, `JobStatusView`, `PreviewView` with its projected `url`) declared explicitly as view models.
+  - Session lifecycle extracted into a PURE reducer (`lib/session/reducer.ts`) plus a `JobUpdateSource` seam: `createPollingJobUpdates` today, SSE/WebSocket later with no change to the hook, reducer, or components. Polling stops at terminal, never overlaps, is cancellable, is bounded by a timeout, and tolerates a transient blip.
+  - `request_id` per user message and a stable per-session `session_id`, both from `crypto.randomUUID`; an explicit retry of an UNCERTAIN submission reuses the original `request_id`, preserving Task 3/9 idempotency. A definitively rejected instruction is not offered as a retry.
+  - Preview: initial state from a new `GET /api/projects/{id}/preview/latest` (404 → clean empty state), the previous image retained (dimmed) during a change instead of flashing blank, plus loading, unavailable, and broken-image states. Absolute URLs built from `NEXT_PUBLIC_API_BASE_URL`; no filesystem path is ever rendered.
+  - A degraded preview never reads as a failed change: `job_status: succeeded` with `preview_error` shows the change as applied and saved, with a warning.
+  - Error mapping from canonical codes to designer-readable messages (offline, timeout, no worker, unsupported instruction, bad units, missing object, malformed response); no stack trace, status code, backend wording, or raw code reaches the screen. Connection indicator reports service and design machine INDEPENDENTLY, derived from `ready_workers`/`blender_capable_workers` rather than from a 200.
+  - Accessibility: semantic landmarks, labelled textarea, Enter-to-send with IME guard, accessible button names, `aria-live` progress announcements, descriptive image alt text, visible focus, colour never the sole signal.
+  - REQUIRED SUPPORTING WORK, because no worker process existed: added `python -m blender_worker` (`main.py` + `__main__.py`) with environment-driven identity, project discovery, bounded reconnect, journal reconciliation on start, and cooperative shutdown; plus `scripts/bootstrap_local_project.py` to place a working project. Without these the browser experience could not be run at all.
+  - Local CORS: the `local` environment defaults to an explicit two-entry allow-list (`http://localhost:3000`, `http://127.0.0.1:3000`); still never a wildcard, and no default outside local.
+  - Tests: 71 frontend (`node --test`; real client vs stub transport, reducer + polling with a manual clock, real `StudioShell` in jsdom) covering all 18 required behaviours, plus 5 API-backed contract tests running the browser's own client against real FastAPI + real worker + real Blender + real PNG, including CORS preflight. No browser automation: it would re-verify the same HTTP conversation, so the remaining gap is the documented manual acceptance scenario, labelled manual.
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 6.3_
 
 - [ ] 12. Mandatory end-to-end test

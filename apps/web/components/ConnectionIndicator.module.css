@@ -1,0 +1,52 @@
+.indicator {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--idle);
+  /* A ring so the state reads even against the panel background. */
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+}
+
+.ok {
+  background: var(--ok);
+}
+
+.down {
+  background: var(--error);
+}
+
+.unknown {
+  background: var(--idle);
+}
+
+.label {
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 640px) {
+  .indicator {
+    gap: 10px;
+  }
+
+  .label {
+    /* Keep the dots, drop the words, on very narrow screens. Screen-reader text
+       still carries the full state. */
+    display: none;
+  }
+}

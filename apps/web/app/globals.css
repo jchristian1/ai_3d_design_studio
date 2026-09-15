@@ -1,0 +1,109 @@
+/*
+ * Global styling for the Spec 001 interface.
+ *
+ * Restrained on purpose: a neutral dark studio surface, one accent colour, and
+ * clear typography. No UI framework and no design system — a component library
+ * pulled in for one screen would be a dependency to maintain long before it earns
+ * its place, and the visual language will be decided properly later.
+ *
+ * Design tokens live here as custom properties so the eventual real design system
+ * has one place to replace.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --surface-0: #0e1013;
+  --surface-1: #15181d;
+  --surface-2: #1b1f26;
+  --surface-3: #232833;
+
+  --border: #2a303a;
+  --border-strong: #38404d;
+
+  --text: #e8eaed;
+  --text-muted: #9aa3b0;
+  --text-subtle: #6b7482;
+
+  --accent: #5b9cff;
+  --accent-contrast: #06111f;
+
+  --ok: #4ec98b;
+  --warn: #e6b455;
+  --error: #f0716f;
+  --idle: #5a6472;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--surface-0);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+textarea,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+/* Visible focus is not optional: it is how keyboard users navigate. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/*
+ * Screen-reader-only text. Used for labels that would be redundant visually but
+ * are required for an accessible name.
+ */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

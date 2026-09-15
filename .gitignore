@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+# Committed template for local web development. It contains only the API base URL
+# and must never contain a secret (NEXT_PUBLIC_* values ship to the browser).
+!.env.local.example
 
 # Python
 __pycache__/
@@ -16,6 +19,8 @@ node_modules/
 .next/
 dist/
 build/
+*.tsbuildinfo
+next-env.d.ts
 
 # IDE
 .vscode/

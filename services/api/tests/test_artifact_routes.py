@@ -510,6 +510,79 @@ def test_12_there_is_no_artifact_listing_route(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Latest preview (the browser's initial state)
+# ---------------------------------------------------------------------------
+
+
+def test_latest_preview_is_404_before_anything_is_rendered(tmp_path):
+    """The UI renders this as an empty state, not as an error."""
+    client, _ = build_app(tmp_path)
+
+    response = client.get(f"/api/projects/{PROJECT_ID}/preview/latest")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_latest_preview_returns_the_newest_artifact(tmp_path):
+    client, dependencies = build_app(tmp_path)
+    first = store_artifact(dependencies, "job_old")
+    # created_at ordering decides "latest", so make it unambiguous.
+    second = dependencies.artifacts.put(
+        project_id=PROJECT_ID,
+        artifact_id=derive_artifact_id(PROJECT_ID, "job_new"),
+        data=PNG_BYTES + b"newer",
+        media_type="image/png",
+        width=640,
+        height=360,
+        job_id="job_new",
+        created_at="2099-01-01T00:00:00Z",
+    )
+
+    body = client.get(f"/api/projects/{PROJECT_ID}/preview/latest").json()
+
+    assert body["artifact_id"] == second.artifact_id
+    assert body["artifact_id"] != first.artifact_id
+    assert body["url"] == artifact_path(second.artifact_id)
+    # And it is immediately fetchable.
+    assert client.get(body["url"]).status_code == 200
+
+
+def test_latest_preview_is_project_scoped(tmp_path):
+    client, dependencies = build_app(tmp_path, project_ids=(PROJECT_ID, OTHER_PROJECT))
+    store_artifact(dependencies, "job_scoped")
+
+    assert client.get(f"/api/projects/{PROJECT_ID}/preview/latest").status_code == 200
+    # A real project with no artifacts of its own sees nothing.
+    assert (
+        client.get(f"/api/projects/{OTHER_PROJECT}/preview/latest").status_code == 404
+    )
+    assert (
+        client.get("/api/projects/proj_unknown/preview/latest").status_code == 404
+    )
+
+
+def test_latest_preview_never_exposes_a_path(tmp_path):
+    client, dependencies = build_app(tmp_path)
+    store_artifact(dependencies, "job_paths_latest")
+
+    text = client.get(f"/api/projects/{PROJECT_ID}/preview/latest").text
+    for leaked in (str(dependencies.artifacts.root), str(tmp_path), ".png", ".blend"):
+        assert leaked not in text, f"latest preview leaked {leaked!r}"
+
+
+def test_latest_preview_ignores_unregistered_files(tmp_path):
+    """A planted .blend must not become 'the latest preview'."""
+    client, dependencies = build_app(tmp_path)
+    project_dir = dependencies.artifacts.root / PROJECT_ID
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "seed_project.blend").write_bytes(b"BLENDER-secret")
+    (project_dir / "zzz_not_an_artifact.json").write_text("{}")
+
+    assert client.get(f"/api/projects/{PROJECT_ID}/preview/latest").status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # 13. The API imports no bpy and no preview Blender script
 # ---------------------------------------------------------------------------
 

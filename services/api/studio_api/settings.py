@@ -63,6 +63,18 @@ DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 15.0
 #: this LOGICAL id only — never a filesystem path (see projects.py).
 DEFAULT_PROJECT_IDS: tuple[str, ...] = ("proj_seed",)
 
+#: Origins the Next.js dev server actually runs on. Applied ONLY in the ``local``
+#: environment and only when nothing is configured, so `npm run dev` talks to
+#: `uvicorn` without anyone having to set a variable first.
+#:
+#: This is an explicit two-entry allow-list, not a wildcard: `*` remains refused
+#: outside local development, and a non-local deployment inherits NO default at all
+#: and must name its origins.
+DEFAULT_LOCAL_ALLOWED_ORIGINS: tuple[str, ...] = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+)
+
 
 class ConfigurationError(RuntimeError):
     """The application is configured in a way that must not be allowed to run."""
@@ -91,7 +103,9 @@ class Settings:
     worker_token: str = field(default="", repr=False)
 
     #: Explicit browser origins. Empty means CORS middleware is NOT installed at
-    #: all, which is the correct posture until the web task exists.
+    #: all. In the local environment this defaults to the Next.js dev server's
+    #: loopback origins; outside local it defaults to nothing, so a deployment must
+    #: name its origins deliberately.
     allowed_origins: tuple[str, ...] = ()
 
     #: Which AgentProvider to resolve. Configuration, not code: switching to
@@ -172,14 +186,21 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
         raise ConfigurationError(f"{ENV_HEARTBEAT_INTERVAL} must be a number") from exc
 
     project_ids = _split(source.get(ENV_PROJECT_IDS)) or DEFAULT_PROJECT_IDS
+    environment = get(ENV_ENVIRONMENT, LOCAL_ENVIRONMENT)
+
+    # A configured value always wins. The loopback default applies only when the
+    # operator said nothing AND this is local development.
+    origins = _split(source.get(ENV_ALLOWED_ORIGINS))
+    if not origins and environment == LOCAL_ENVIRONMENT:
+        origins = DEFAULT_LOCAL_ALLOWED_ORIGINS
 
     return Settings(
-        environment=get(ENV_ENVIRONMENT, LOCAL_ENVIRONMENT),
+        environment=environment,
         host=get(ENV_HOST, DEFAULT_HOST),
         port=port,
         # Not stripped: a token's surrounding whitespace could be significant.
         worker_token=source.get(ENV_WORKER_TOKEN) or "",
-        allowed_origins=_split(source.get(ENV_ALLOWED_ORIGINS)),
+        allowed_origins=origins,
         agent_provider=get(ENV_AGENT_PROVIDER, DEFAULT_AGENT_PROVIDER),
         development_user_id=get(ENV_DEVELOPMENT_USER_ID, DEFAULT_DEVELOPMENT_USER_ID),
         project_ids=project_ids,
@@ -192,6 +213,7 @@ __all__ = [
     "DEFAULT_AGENT_PROVIDER",
     "DEFAULT_DEVELOPMENT_USER_ID",
     "DEFAULT_HOST",
+    "DEFAULT_LOCAL_ALLOWED_ORIGINS",
     "DEFAULT_PORT",
     "DEFAULT_PROJECT_IDS",
     "ENV_ALLOWED_ORIGINS",
