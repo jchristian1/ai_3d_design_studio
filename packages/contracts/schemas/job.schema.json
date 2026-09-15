@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "job.schema.json",
+  "title": "Job",
+  "description": "A unit of work explicitly bound to a project. project_id is mandatory: a worker must never modify another project's Blender file (see .kiro/steering/security.md). Identifiers must be non-blank, hence the `\\S` pattern alongside minLength.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "project_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "session_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "type": {
+      "type": "string",
+      "enum": ["chat"],
+      "description": "Job types supported by the platform. Extend as new operations land."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "running", "succeeded", "failed"]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp"
+    },
+    "result": {
+      "description": "Operation-specific result payload. Unconstrained at the contract level."
+    }
+  },
+  "required": ["id", "project_id", "session_id", "type", "status", "created_at"],
+  "additionalProperties": false
+}

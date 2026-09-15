@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chat-response.schema.json",
+  "title": "ChatResponse",
+  "description": "Result returned to the browser after processing a ChatRequest. object_position is in canonical meters and is used by both the UI and verification (see .kiro/steering/testing.md).",
+  "type": "object",
+  "properties": {
+    "status": { "type": "string", "enum": ["success", "error"] },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Human-readable description of the work performed or the failure."
+    },
+    "object_position": { "$ref": "vec3.schema.json" },
+    "preview_url": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "error": { "$ref": "error-response.schema.json" }
+  },
+  "required": ["status", "summary"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "An error response MUST carry a structured error payload.",
+      "if": { "properties": { "status": { "const": "error" } }, "required": ["status"] },
+      "then": { "required": ["error"] }
+    },
+    {
+      "description": "A success response MUST NOT carry an error payload (no stale/ambiguous success).",
+      "if": { "properties": { "status": { "const": "success" } }, "required": ["status"] },
+      "then": { "not": { "required": ["error"] } }
+    }
+  ]
+}

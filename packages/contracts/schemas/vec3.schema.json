@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vec3.schema.json",
+  "title": "Vec3",
+  "description": "A 3D vector. All components are in canonical METERS (see .kiro/steering/blender.md). JSON numbers cannot encode NaN/Infinity; the finite-meters rule is additionally enforced by the validation layer.",
+  "type": "object",
+  "properties": {
+    "x": { "type": "number", "description": "meters" },
+    "y": { "type": "number", "description": "meters" },
+    "z": { "type": "number", "description": "meters" }
+  },
+  "required": ["x", "y", "z"],
+  "additionalProperties": false
+}

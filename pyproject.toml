@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+# Make the shared Python mirror packages importable without installation.
+pythonpath = [
+    "packages/types/python",
+    "packages/contracts/python",
+    "packages/validation/python",
+]
+testpaths = [
+    "packages",
+    "services",
+    "tests",
+]
+python_files = ["test_*.py", "*_test.py"]

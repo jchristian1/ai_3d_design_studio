@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "error-code.schema.json",
+  "title": "ErrorCode",
+  "description": "Structured, machine-readable error codes surfaced across every service boundary. This enum is the single canonical list; TypeScript and Python constants are verified against it by conformance tests.",
+  "type": "string",
+  "enum": [
+    "VALIDATION_ERROR",
+    "OBJECT_NOT_FOUND",
+    "INVALID_UNITS",
+    "LOCK_CONFLICT",
+    "BLENDER_UNAVAILABLE",
+    "VERIFY_FAILED",
+    "INTERNAL_ERROR"
+  ]
+}

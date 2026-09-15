@@ -1,0 +1,19 @@
+{
+  "name": "ai-3d-design-studio",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Browser-based AI 3D design studio (monorepo root).",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test:ts && npm run test:py",
+    "test:ts": "node --test packages/contracts/src/*.test.ts packages/validation/src/*.test.ts",
+    "test:py": "python3 -m pytest",
+    "test:conformance": "node --test packages/contracts/src/conformance.test.ts && python3 -m pytest packages/contracts/python/test_conformance.py tests/contracts"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

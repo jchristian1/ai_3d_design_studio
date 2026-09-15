@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "error-response.schema.json",
+  "title": "ErrorResponse",
+  "description": "Canonical structured error payload. Carried inside ChatResponse and returned by MCP tools and the worker so failures cross boundaries as codes, not exceptions.",
+  "type": "object",
+  "properties": {
+    "code": { "$ref": "error-code.schema.json" },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Human-readable explanation. Safe to display to the user."
+    }
+  },
+  "required": ["code", "message"],
+  "additionalProperties": false
+}

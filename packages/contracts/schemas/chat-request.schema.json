@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chat-request.schema.json",
+  "title": "ChatRequest",
+  "description": "A natural-language design request from the browser. project_id is REQUIRED: every request is explicitly project-scoped (see .kiro/steering/security.md project isolation). String identifiers must be non-blank: `minLength` alone would admit whitespace-only values, so a `\\S` pattern is required alongside it.",
+  "type": "object",
+  "properties": {
+    "project_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "session_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "message": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "selected_object_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Optional browser-selected object the user is referring to."
+    }
+  },
+  "required": ["project_id", "session_id", "message"],
+  "additionalProperties": false
+}

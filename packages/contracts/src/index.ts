@@ -1,0 +1,111 @@
+/**
+ * Shared API/event contracts for AI 3D Design Studio — TypeScript representation.
+ *
+ * Direction of truth:
+ *
+ *   packages/contracts/schemas/*.schema.json   <-- CANONICAL (language-neutral)
+ *            |
+ *            +--> TypeScript representation  (this file)
+ *            +--> Python representation      (studio_contracts)
+ *
+ * The interfaces below are a REPRESENTATION of the canonical schemas. They are
+ * not the source of truth and neither is the Python module. When a contract
+ * changes, the schema in ../schemas changes first; conformance tests
+ * (./conformance.test.ts and test_conformance.py) fail until both language
+ * representations are realigned.
+ *
+ * Canonical schemas:
+ *   ChatRequest    -> chat-request.schema.json
+ *   ChatResponse   -> chat-response.schema.json
+ *   ChatError      -> error-response.schema.json
+ *   ErrorCode      -> error-code.schema.json
+ */
+
+import type { Vec3 } from "@studio/types";
+
+export {
+  SCHEMA_DIR,
+  loadSchema,
+  listSchemaNames,
+  schemaEnum,
+  schemaRequired,
+  schemaProperties,
+  validateAgainstSchema,
+} from "./schema.ts";
+export type { JsonSchema, SchemaViolation } from "./schema.ts";
+
+/**
+ * A natural-language design request from the browser.
+ *
+ * `project_id` is REQUIRED: every request must be explicitly scoped to a
+ * project (see .kiro/steering/security.md project isolation).
+ */
+export interface ChatRequest {
+  project_id: string;
+  session_id: string;
+  message: string;
+  /** Optional browser-selected object the user is referring to. */
+  selected_object_id?: string;
+}
+
+/** Structured, machine-readable error codes surfaced across boundaries. */
+export type ErrorCode =
+  | "VALIDATION_ERROR"
+  | "OBJECT_NOT_FOUND"
+  | "INVALID_UNITS"
+  | "LOCK_CONFLICT"
+  | "BLENDER_UNAVAILABLE"
+  | "VERIFY_FAILED"
+  | "INTERNAL_ERROR";
+
+export interface ChatError {
+  code: ErrorCode;
+  message: string;
+}
+
+export type ChatStatus = "success" | "error";
+
+/**
+ * The result returned to the browser after processing a ChatRequest.
+ *
+ * `object_position` is expressed in canonical meters and is used both by the
+ * UI and by verification (see .kiro/steering/testing.md).
+ */
+export interface ChatResponse {
+  status: ChatStatus;
+  summary: string;
+  object_position?: Vec3;
+  preview_url?: string;
+  error?: ChatError;
+}
+
+export const ERROR_CODES: readonly ErrorCode[] = [
+  "VALIDATION_ERROR",
+  "OBJECT_NOT_FOUND",
+  "INVALID_UNITS",
+  "LOCK_CONFLICT",
+  "BLENDER_UNAVAILABLE",
+  "VERIFY_FAILED",
+  "INTERNAL_ERROR",
+] as const;
+
+/**
+ * Canonical schema file names, so callers and tests never hardcode paths.
+ * Each entry maps a representation type to its language-neutral definition.
+ */
+export const SCHEMA_FILES = {
+  Vec3: "vec3.schema.json",
+  Job: "job.schema.json",
+  ChatRequest: "chat-request.schema.json",
+  ChatResponse: "chat-response.schema.json",
+  ErrorResponse: "error-response.schema.json",
+  ErrorCode: "error-code.schema.json",
+} as const;
+
+/**
+ * Strip undefined-valued optional fields so a representation object becomes a
+ * wire document comparable to the canonical schema (JSON has no `undefined`).
+ */
+export function toWire<T extends object>(value: T): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}

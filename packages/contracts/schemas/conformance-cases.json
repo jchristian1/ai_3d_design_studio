@@ -1,0 +1,234 @@
+{
+  "description": "Language-neutral conformance corpus. Both the TypeScript and Python schema validators run these exact cases against the canonical schemas and must agree. Adding a case here immediately exercises both languages.",
+  "suites": [
+    {
+      "schema": "vec3.schema.json",
+      "valid": [
+        { "name": "origin", "data": { "x": 0, "y": 0, "z": 0 } },
+        { "name": "half meter on x", "data": { "x": 0.5, "y": 0, "z": 0 } },
+        { "name": "negative components", "data": { "x": -1.25, "y": 2.4, "z": -0.05 } }
+      ],
+      "invalid": [
+        { "name": "missing z", "data": { "x": 0, "y": 0 } },
+        { "name": "string component", "data": { "x": "0.5", "y": 0, "z": 0 } },
+        { "name": "extra property", "data": { "x": 0, "y": 0, "z": 0, "w": 1 } },
+        { "name": "not an object", "data": [0, 0, 0] }
+      ]
+    },
+    {
+      "schema": "error-code.schema.json",
+      "valid": [
+        { "name": "object not found", "data": "OBJECT_NOT_FOUND" },
+        { "name": "lock conflict", "data": "LOCK_CONFLICT" },
+        { "name": "verify failed", "data": "VERIFY_FAILED" }
+      ],
+      "invalid": [
+        { "name": "unknown code", "data": "SOMETHING_ELSE" },
+        { "name": "lowercase", "data": "object_not_found" },
+        { "name": "not a string", "data": 42 }
+      ]
+    },
+    {
+      "schema": "error-response.schema.json",
+      "valid": [
+        {
+          "name": "object not found with message",
+          "data": { "code": "OBJECT_NOT_FOUND", "message": "no object named 'Cube'" }
+        }
+      ],
+      "invalid": [
+        { "name": "missing message", "data": { "code": "INVALID_UNITS" } },
+        { "name": "empty message", "data": { "code": "INVALID_UNITS", "message": "" } },
+        { "name": "unknown code", "data": { "code": "NOPE", "message": "bad" } }
+      ]
+    },
+    {
+      "schema": "chat-request.schema.json",
+      "valid": [
+        {
+          "name": "move cube request",
+          "data": {
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "message": "Move Cube 50 cm to the right"
+          }
+        },
+        {
+          "name": "with selected object",
+          "data": {
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "message": "Move it right",
+            "selected_object_id": "obj_8d83f"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing project_id",
+          "data": { "session_id": "sess_1", "message": "Move Cube" }
+        },
+        {
+          "name": "blank project_id",
+          "data": { "project_id": "   ", "session_id": "sess_1", "message": "Move Cube" }
+        },
+        {
+          "name": "missing session_id",
+          "data": { "project_id": "proj_1", "message": "Move Cube" }
+        },
+        {
+          "name": "empty message",
+          "data": { "project_id": "proj_1", "session_id": "sess_1", "message": "" }
+        },
+        {
+          "name": "empty selected_object_id",
+          "data": {
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "message": "Move Cube",
+            "selected_object_id": ""
+          }
+        },
+        { "name": "not an object", "data": "Move Cube 50 cm to the right" },
+        {
+          "name": "unknown property",
+          "data": {
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "message": "Move Cube",
+            "delta_x": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "schema": "chat-response.schema.json",
+      "valid": [
+        {
+          "name": "success with position and preview",
+          "data": {
+            "status": "success",
+            "summary": "Moved Cube 0.50 m on +X",
+            "object_position": { "x": 0.5, "y": 0, "z": 0 },
+            "preview_url": "s3://previews/p.png"
+          }
+        },
+        {
+          "name": "minimal success",
+          "data": { "status": "success", "summary": "Done" }
+        },
+        {
+          "name": "error with structured code",
+          "data": {
+            "status": "error",
+            "summary": "Object not found",
+            "error": { "code": "OBJECT_NOT_FOUND", "message": "no object named 'Cube'" }
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "error status without error payload",
+          "data": { "status": "error", "summary": "It broke" }
+        },
+        {
+          "name": "success status carrying an error payload",
+          "data": {
+            "status": "success",
+            "summary": "Moved Cube",
+            "error": { "code": "VERIFY_FAILED", "message": "mismatch" }
+          }
+        },
+        {
+          "name": "unknown status",
+          "data": { "status": "partial", "summary": "Half done" }
+        },
+        {
+          "name": "position with non-numeric component",
+          "data": {
+            "status": "success",
+            "summary": "Moved Cube",
+            "object_position": { "x": "0.5", "y": 0, "z": 0 }
+          }
+        },
+        {
+          "name": "missing summary",
+          "data": { "status": "success" }
+        }
+      ]
+    },
+    {
+      "schema": "job.schema.json",
+      "valid": [
+        {
+          "name": "queued chat job",
+          "data": {
+            "id": "job_1",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "type": "chat",
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00+00:00"
+          }
+        },
+        {
+          "name": "succeeded job with result",
+          "data": {
+            "id": "job_2",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "type": "chat",
+            "status": "succeeded",
+            "created_at": "2026-09-15T04:05:00Z",
+            "result": { "object_position": { "x": 0.5, "y": 0, "z": 0 } }
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing project_id",
+          "data": {
+            "id": "job_3",
+            "session_id": "sess_1",
+            "type": "chat",
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "unknown status",
+          "data": {
+            "id": "job_4",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "type": "chat",
+            "status": "pending",
+            "created_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "unknown job type",
+          "data": {
+            "id": "job_5",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "type": "render",
+            "status": "queued",
+            "created_at": "2026-09-15T04:00:00Z"
+          }
+        },
+        {
+          "name": "created_at not a timestamp",
+          "data": {
+            "id": "job_6",
+            "project_id": "proj_1",
+            "session_id": "sess_1",
+            "type": "chat",
+            "status": "queued",
+            "created_at": "yesterday"
+          }
+        }
+      ]
+    }
+  ]
+}
