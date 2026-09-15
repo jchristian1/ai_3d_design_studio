@@ -35,6 +35,25 @@ Node dependencies (workspace links only, no external packages):
 npm install
 ```
 
+## Running the control plane
+
+```bash
+source .venv/bin/activate
+uvicorn studio_api.app:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+`--factory` is required: `services/api` exposes an application factory rather than a
+module-level `app`, so configuration is validated per application. Workers then
+connect outbound to `ws://127.0.0.1:8000/ws/workers`.
+
+Interactive API documentation is served at `/docs`. Configuration and the full route
+list are documented in `services/api/README.md`.
+
+```bash
+export STUDIO_WORKER_TOKEN=...          # never commit; shared with the worker
+export STUDIO_API_ENVIRONMENT=local     # defaults shown in services/api/README.md
+```
+
 ## Running tests
 
 With the virtual environment active:
@@ -46,11 +65,14 @@ pytest
 # TypeScript suite
 npm run test:ts
 
-# Local WebSocket worker-link integration (fast: real sockets, fake Blender)
+# Integration: real HTTP + real WebSockets, fake Blender
 pytest tests/integration
 
 # Real-Blender tests — opt-in and slower
 pytest -m blender
+
+# The full slice: HTTP -> agent -> worker -> real Blender
+pytest -m blender tests/e2e/test_api_blender_e2e.py
 ```
 
 Without activating, prefix with the interpreter: `.venv/bin/python -m pytest`.
@@ -68,10 +90,14 @@ packages/types       shared data types
 packages/spatial     deterministic unit/direction utilities (no Blender, no AI)
 packages/validation  reusable validation rules
 services/agent       AgentProvider abstraction + deterministic RuleBasedProvider
-services/api         control plane; worker-link boundary (worker_link/PROTOCOL.md)
+services/api         FastAPI control plane (services/api/README.md);
+                     worker-link boundary (worker_link/PROTOCOL.md)
 services/blender-mcp semantic Blender operations (move_object) behind MCP
 services/blender-worker  job execution, journal, locks, control-plane link
 tests/fixtures       deterministic seed Blender project (generated, not committed)
+                     plus the in-process control-plane test harness
+tests/integration    real HTTP/WebSocket integration tiers
+tests/e2e            HTTP -> agent -> worker -> real Blender
 ```
 
 ## Blender

@@ -87,11 +87,19 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - `websockets==15.0.1` declared in `pyproject.toml`, installed into a project-local `.venv`.
   - _Requirements: 7.1, 7.2, 7.3_
 
-- [ ] 9. API chat endpoint and job orchestration
-  - Implement `POST /projects/{project_id}/chat` in `services/api` (FastAPI).
-  - Validate contract, create project-scoped `Job`, invoke `AgentProvider`, return `ChatResponse`.
-  - Reject missing `project_id` with structured error.
-  - Integration test: API → job → worker → MCP → Blender.
+- [x] 9. API chat endpoint and job orchestration
+  - FastAPI application FACTORY (`create_app(settings, dependencies)`) with an explicit dependency container on `app.state`; no module-level `app` and no import-time singleton, so configuration is validated per application and tests inject fakes.
+  - Routes: `GET /health`, `GET /api/workers`, `POST /api/chat`, `POST /api/projects/{project_id}/chat` (spec-named form; path and body `project_id` must agree), `GET /api/projects/{project_id}/jobs/{job_id}`, `WS /ws/workers`. `/api` is the versionable prefix.
+  - `ChatService.submit_chat(request, identity)` owns the workflow: authorize project → build AgentContext → `provider.interpret()` → `JobFactory` → canonical Job → record → select worker → offer. Routes only parse HTTP and render; no concrete provider is named in `routes/` or `chat_service.py` (AST-tested).
+  - Trusted identity: `user_id` comes from an injected `IdentityResolver`, never the body. The canonical ChatRequest has no `user_id` and the HTTP model mirrors `additionalProperties:false` with `extra="forbid"`, so sending one is a 422. `DevelopmentIdentityResolver` fails closed outside `local`.
+  - Control-plane project registry holds LOGICAL ids only; no filesystem path is known, stored, or accepted. Path-shaped `project_id` rejected before use; unknown project → 404, never guessed.
+  - Project isolation of retrieval: job records are keyed by `(project_id, job_id)` and `JobRecordStore.get` requires `project_id` as a leading argument, so there is NO unscoped lookup. The route authorizes the project first, then scopes the lookup; a job in another project returns a byte-identical 404 to one that never existed, so cross-project existence cannot be probed. `status_url` is project-scoped.
+  - Asynchronous submission model: `POST /api/chat` returns `202` with job identity + `status_url`; `GET /api/projects/{project_id}/jobs/{job_id}` reports the canonical Task 3 lifecycle (`queued → claimed → running → succeeded|failed`) and embeds the canonical `ChatResponse` once terminal. `accepted` is deliberately NOT a canonical job state.
+  - `WorkerGateway` adds a transport-neutral live-connection registry over the Task 8 manager; the FastAPI `/ws/workers` binding uses one writer task independent of its receive loop, preserving the Task 8 anti-deadlock invariant (regression-tested at unit and integration tier). No protocol logic reimplemented.
+  - In-memory `JobRecordStore` behind a Protocol honouring Task 3's atomic insert-or-return-existing keyed by `(project_id, idempotency_key)`. API state loss cannot cause re-execution: mutation identity is derived, and a `job_result` for an unknown job is ADOPTED (the worker journal is authoritative), never turned into new work.
+  - Deliberate HTTP mapping via an API-level failure reason separate from the canonical error code (422/404/409/503/401/500), one structured error body everywhere, validation described by field not value, and no stack trace, path, or token in any response.
+  - CORS middleware installed only when origins are configured explicitly; `*` refused outside `local`. All configuration centralized in `settings.py`; `fastapi`/`uvicorn` pinned in `pyproject.toml`.
+  - Tests: 124 fast (`services/api/tests`), 19 integration with real HTTP + real WebSockets (`tests/integration`), 5 opt-in real-Blender E2E (`tests/e2e`). E2E proves `0.00 → 0.50`, retry of the same `request_id` stays `0.50`, a new `request_id` reaches `1.00`, and a stale retry still leaves `1.00`.
   - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
 - [ ] 10. Preview generation

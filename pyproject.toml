@@ -8,18 +8,32 @@ version = "0.0.1"
 description = "Browser-based AI 3D design studio (monorepo, Python services)."
 requires-python = ">=3.11"
 
-# Runtime dependencies. `websockets` is required by the worker <-> control-plane
-# transport (services/blender-worker/.../link and services/api/.../worker_link),
-# so it is a genuine runtime dependency, not a development tool.
+# Runtime dependencies.
+#
+# `websockets` is required by the worker <-> control-plane transport
+# (services/blender-worker/.../link and services/api/.../worker_link) AND by
+# uvicorn to serve the /ws/workers endpoint, so one pinned version covers both
+# ends of the link.
+#
+# `fastapi` brings starlette and pydantic; `uvicorn` is the ASGI server the
+# control plane is run with. Both are genuine runtime dependencies of
+# services/api, not development tooling. Pinned exactly so a deployment cannot
+# drift from what was tested.
 dependencies = [
     "websockets==15.0.1",
+    "fastapi==0.141.1",
+    "uvicorn==0.53.0",
 ]
 
 [project.optional-dependencies]
 # Development-only tooling. Deliberately separate so test tooling never becomes a
 # production dependency.
+#
+# `httpx` backs starlette's TestClient, which the fast API tests use to drive the
+# application in-process without binding a port.
 dev = [
     "pytest>=8",
+    "httpx==0.28.1",
 ]
 
 # Multi-root package discovery.
@@ -42,6 +56,7 @@ packages = [
     "studio_agent",
     "studio_agent.providers",
     "studio_api",
+    "studio_api.routes",
     "studio_api.worker_link",
     "blender_mcp",
     "blender_mcp.adapters",
@@ -58,6 +73,7 @@ studio_spatial = "packages/spatial/python/studio_spatial"
 studio_agent = "services/agent/studio_agent"
 "studio_agent.providers" = "services/agent/studio_agent/providers"
 studio_api = "services/api/studio_api"
+"studio_api.routes" = "services/api/studio_api/routes"
 "studio_api.worker_link" = "services/api/studio_api/worker_link"
 blender_mcp = "services/blender-mcp/blender_mcp"
 "blender_mcp.adapters" = "services/blender-mcp/blender_mcp/adapters"
