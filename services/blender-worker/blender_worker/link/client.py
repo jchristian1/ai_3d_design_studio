@@ -323,6 +323,10 @@ class WorkerLinkClient:
             result=outcome.result,
             error=outcome.error,
             execution_phase=outcome.phase,
+            # Reported alongside, never inside, the operation result: a preview
+            # describes a picture of the mutation, not the mutation itself.
+            preview=outcome.preview if outcome.succeeded else None,
+            preview_error=outcome.preview_error,
         )
         delivered = self._safe_send(message)
         if delivered:
@@ -360,6 +364,10 @@ class WorkerLinkClient:
                 result=record.result,
                 error=record.error,
                 execution_phase=record.phase,
+                # The stored preview reference travels with the stored result, so
+                # a reconciled success is not silently missing its picture.
+                preview=record.preview if record.job_status == "succeeded" else None,
+                preview_error=record.preview_error,
             )
             if self._safe_send(message):
                 record.result_delivered = True

@@ -30,10 +30,21 @@ from typing import Any, Mapping, Optional
 from . import SCHEMA_FILES, validate_against_schema
 
 #: Current protocol version. Bump on any breaking vocabulary change.
-PROTOCOL_VERSION = 1
+#:
+#: v2 added the optional ``preview`` / ``preview_error`` fields to ``job_result``
+#: (Task 10). Because every message is validated with ``additionalProperties:
+#: false``, a peer that predates a new field REJECTS messages carrying it — so an
+#: additive optional field is still a vocabulary change and still bumps the
+#: version. Silently relying on "optional means compatible" would produce
+#: mysterious validation failures against an older peer.
+PROTOCOL_VERSION = 2
 
 #: Versions this build can speak. A worker outside this set is rejected.
-SUPPORTED_PROTOCOL_VERSIONS: tuple[int, ...] = (1,)
+#:
+#: v1 remains supported: a v1 worker simply never reports a preview, which is a
+#: degraded but entirely valid worker. The control plane is therefore free to be
+#: upgraded before the workstations are.
+SUPPORTED_PROTOCOL_VERSIONS: tuple[int, ...] = (1, 2)
 
 TOKEN_FIELD = "token"
 REDACTED = "***redacted***"
@@ -260,7 +271,16 @@ def job_result(
     result: Any = None,
     error: Optional[Mapping[str, Any]] = None,
     execution_phase: Optional[str] = None,
+    preview: Optional[Mapping[str, Any]] = None,
+    preview_error: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
+    """Report the outcome of one execution.
+
+    ``preview`` and ``preview_error`` are deliberately SEPARATE from ``result``
+    and ``error``. A preview is a reporting addition to a mutation that already
+    happened, so a failed preview must never be able to make a successful,
+    durably-saved design change look like a failure.
+    """
     message = _base(JOB_RESULT)
     message.update(
         {
@@ -276,6 +296,10 @@ def job_result(
         message["error"] = dict(error)
     if execution_phase is not None:
         message["execution_phase"] = execution_phase
+    if preview is not None:
+        message["preview"] = dict(preview)
+    if preview_error is not None:
+        message["preview_error"] = dict(preview_error)
     return message
 
 

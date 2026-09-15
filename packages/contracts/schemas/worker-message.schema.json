@@ -27,29 +27,57 @@
         "pong"
       ]
     },
-    "worker_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
-    "job_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
-    "project_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "worker_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "job_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
     "token": {
       "type": "string",
       "minLength": 1,
       "description": "Pre-shared worker token, present ONLY on worker_hello. Never stored by the control plane, never logged, never echoed in any other message."
     },
-    "capabilities": { "$ref": "worker-capabilities.schema.json" },
+    "capabilities": {
+      "$ref": "worker-capabilities.schema.json"
+    },
     "job": {
       "type": "object",
-      "description": "A canonical Job. Deliberately NOT $ref'd to job.schema.json here: the envelope layer validates envelopes, and the Job contract is enforced separately by validate_job at BOTH ends. That separation matters — if a malformed job failed envelope validation it would be dropped as unparseable, and the control plane would never receive the explicit job_rejected explaining why. The control plane validates before offering; the worker validates again before accepting, because network input is untrusted."
+      "description": "A canonical Job. Deliberately NOT $ref'd to job.schema.json here: the envelope layer validates envelopes, and the Job contract is enforced separately by validate_job at BOTH ends. That separation matters \u2014 if a malformed job failed envelope validation it would be dropped as unparseable, and the control plane would never receive the explicit job_rejected explaining why. The control plane validates before offering; the worker validates again before accepting, because network input is untrusted."
     },
-    "connection_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
-    "heartbeat_interval_seconds": { "type": "number", "exclusiveMinimum": 0 },
+    "connection_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "heartbeat_interval_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
     "worker_state": {
       "type": "string",
-      "enum": ["ready", "busy"],
+      "enum": [
+        "ready",
+        "busy"
+      ],
       "description": "Liveness detail so the control plane can tell healthy-idle from healthy-busy."
     },
     "job_status": {
       "type": "string",
-      "enum": ["succeeded", "failed", "duplicate"],
+      "enum": [
+        "succeeded",
+        "failed",
+        "duplicate"
+      ],
       "description": "duplicate means the job was already completed locally; the result is being reported, not re-executed."
     },
     "execution_phase": {
@@ -59,74 +87,302 @@
     "result": {
       "description": "Operation result payload, present on a succeeded or duplicate job_result."
     },
-    "error": { "$ref": "error-response.schema.json" },
-    "sent_at": { "type": "string", "format": "date-time" }
+    "preview": {
+      "$ref": "preview-artifact.schema.json",
+      "description": "Reference to a preview artifact generated after the mutation was verified and saved. Only meaningful on job_result. Absent when no preview was produced; a preview is a REPORTING addition and never affects whether the mutation happened."
+    },
+    "preview_error": {
+      "$ref": "error-response.schema.json",
+      "description": "Why preview generation failed, when the mutation itself succeeded. Reported SEPARATELY from `error` so the control plane never claims a design change failed after it was durably saved."
+    },
+    "error": {
+      "$ref": "error-response.schema.json"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    }
   },
-  "required": ["protocol_version", "type"],
+  "required": [
+    "protocol_version",
+    "type"
+  ],
   "additionalProperties": false,
   "allOf": [
     {
       "description": "worker_hello must identify and authenticate the worker and declare capabilities.",
-      "if": { "properties": { "type": { "const": "worker_hello" } }, "required": ["type"] },
-      "then": { "required": ["worker_id", "token", "capabilities"] }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "worker_hello"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "worker_id",
+          "token",
+          "capabilities"
+        ]
+      }
     },
     {
       "description": "worker_registered confirms the worker and states the heartbeat cadence.",
-      "if": { "properties": { "type": { "const": "worker_registered" } }, "required": ["type"] },
-      "then": { "required": ["worker_id", "connection_id", "heartbeat_interval_seconds"] }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "worker_registered"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "worker_id",
+          "connection_id",
+          "heartbeat_interval_seconds"
+        ]
+      }
     },
     {
       "description": "worker_rejected must say why, structurally.",
-      "if": { "properties": { "type": { "const": "worker_rejected" } }, "required": ["type"] },
-      "then": { "required": ["error"] }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "worker_rejected"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "error"
+        ]
+      }
     },
     {
       "description": "heartbeat reports which worker and whether it is busy.",
-      "if": { "properties": { "type": { "const": "heartbeat" } }, "required": ["type"] },
-      "then": { "required": ["worker_id", "worker_state"] }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "heartbeat"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "worker_id",
+          "worker_state"
+        ]
+      }
     },
     {
       "description": "A job offer carries a canonical Job and nothing else about it.",
-      "if": { "properties": { "type": { "const": "job_offer" } }, "required": ["type"] },
-      "then": { "required": ["job", "job_id", "project_id"] }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job_offer"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "job",
+          "job_id",
+          "project_id"
+        ]
+      }
     },
     {
       "description": "Acceptance is explicit; socket delivery is not acceptance.",
-      "if": { "properties": { "type": { "const": "job_accepted" } }, "required": ["type"] },
-      "then": { "required": ["worker_id", "job_id", "project_id"] }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job_accepted"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "worker_id",
+          "job_id",
+          "project_id"
+        ]
+      }
     },
     {
       "description": "A rejection must carry a structured reason.",
-      "if": { "properties": { "type": { "const": "job_rejected" } }, "required": ["type"] },
-      "then": { "required": ["worker_id", "job_id", "project_id", "error"] }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job_rejected"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "worker_id",
+          "job_id",
+          "project_id",
+          "error"
+        ]
+      }
     },
     {
       "description": "Progress is scoped to a job.",
-      "if": { "properties": { "type": { "const": "job_progress" } }, "required": ["type"] },
-      "then": { "required": ["worker_id", "job_id", "project_id", "execution_phase"] }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job_progress"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "worker_id",
+          "job_id",
+          "project_id",
+          "execution_phase"
+        ]
+      }
     },
     {
       "description": "A result must state its status.",
-      "if": { "properties": { "type": { "const": "job_result" } }, "required": ["type"] },
-      "then": { "required": ["worker_id", "job_id", "project_id", "job_status"] }
+      "if": {
+        "properties": {
+          "type": {
+            "const": "job_result"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "worker_id",
+          "job_id",
+          "project_id",
+          "job_status"
+        ]
+      }
     },
     {
       "description": "A failed result must carry a structured error.",
       "if": {
         "properties": {
-          "type": { "const": "job_result" },
-          "job_status": { "const": "failed" }
+          "type": {
+            "const": "job_result"
+          },
+          "job_status": {
+            "const": "failed"
+          }
         },
-        "required": ["type", "job_status"]
+        "required": [
+          "type",
+          "job_status"
+        ]
       },
-      "then": { "required": ["error"] }
+      "then": {
+        "required": [
+          "error"
+        ]
+      }
     },
     {
       "description": "Only worker_hello may carry a token.",
       "if": {
-        "not": { "properties": { "type": { "const": "worker_hello" } }, "required": ["type"] }
+        "not": {
+          "properties": {
+            "type": {
+              "const": "worker_hello"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
       },
-      "then": { "not": { "required": ["token"] } }
+      "then": {
+        "not": {
+          "required": [
+            "token"
+          ]
+        }
+      }
+    },
+    {
+      "description": "Preview fields belong to job_result only. A preview says something about a completed mutation, so it is meaningless on a heartbeat, an offer, or a registration, and allowing it there would create a second place to look for artifact information.",
+      "if": {
+        "not": {
+          "properties": {
+            "type": {
+              "const": "job_result"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "preview"
+              ]
+            },
+            {
+              "required": [
+                "preview_error"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "description": "A preview reference may only accompany a result that actually succeeded. Attaching one to a failed job would imply a picture of a change that was never applied.",
+      "if": {
+        "properties": {
+          "job_status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "job_status"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "preview"
+          ]
+        }
+      }
     }
   ]
 }

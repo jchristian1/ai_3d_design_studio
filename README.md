@@ -93,6 +93,7 @@ services/agent       AgentProvider abstraction + deterministic RuleBasedProvider
 services/api         FastAPI control plane (services/api/README.md);
                      worker-link boundary (worker_link/PROTOCOL.md)
 services/blender-mcp semantic Blender operations (move_object) behind MCP
+services/preview     preview generation + artifact store (services/preview/README.md)
 services/blender-worker  job execution, journal, locks, control-plane link
 tests/fixtures       deterministic seed Blender project (generated, not committed)
                      plus the in-process control-plane test harness
@@ -125,5 +126,5 @@ export STUDIO_CONTROL_PLANE_URL=ws://127.0.0.1:8765/ws/workers
 export STUDIO_WORKER_GPU_NAME="NVIDIA RTX 4070 Ti"   # optional
 ```
 
-Generated runtime state (execution journal, locks, recovery snapshots) lives under
-the git-ignored `runtime/` directory.
+Generated runtime state (execution journal, locks, recovery snapshots, and preview
+artifacts under `runtime/artifacts/`) lives in the git-ignored `runtime/` directory.

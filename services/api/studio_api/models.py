@@ -104,6 +104,32 @@ class ChatResponseModel(BaseModel):
     error: Optional[ErrorModel] = None
 
 
+class PreviewModel(BaseModel):
+    """A preview artifact as a browser sees it.
+
+    Mirrors the canonical ``preview-artifact.schema.json`` and adds exactly one
+    field the canonical contract deliberately omits: ``url``.
+
+    The canonical artifact carries no URL because a worker must not know the
+    control plane's route shape, and the same artifact is addressed differently in
+    different deployments. The URL is therefore an API-layer PROJECTION, built here
+    from ``(project_id, artifact_id)`` — which is also why no filesystem path can
+    ever appear: there is none to project from.
+    """
+
+    artifact_id: str
+    artifact_type: str
+    media_type: str
+    created_at: str
+    width: int
+    height: int
+    size_bytes: int
+    checksum: str
+    #: Project-scoped logical URL to fetch the bytes.
+    url: str
+    engine: Optional[str] = None
+
+
 class JobStatusModel(BaseModel):
     """The response of GET /api/projects/{project_id}/jobs/{job_id}."""
 
@@ -124,6 +150,14 @@ class JobStatusModel(BaseModel):
     reconciled: bool = False
     result: Optional[dict[str, Any]] = None
     error: Optional[ErrorModel] = None
+    #: The preview artifact for this change, when one is available. The bytes are
+    #: NEVER inlined: a job status response is polled, and base64 image data would
+    #: make every poll carry the whole image.
+    preview: Optional[PreviewModel] = None
+    #: Why the preview is unavailable, when the change itself succeeded. A job can
+    #: be ``succeeded`` with ``preview: null`` and this set — the design change was
+    #: applied and saved; only the picture of it is missing.
+    preview_error: Optional[ErrorModel] = None
     #: The canonical ChatResponse, present only once the job is terminal.
     chat: Optional[ChatResponseModel] = None
 
@@ -189,6 +223,7 @@ __all__ = [
     "ErrorModel",
     "HealthModel",
     "JobStatusModel",
+    "PreviewModel",
     "WorkerCapabilitiesModel",
     "WorkerModel",
     "WorkersResponseModel",

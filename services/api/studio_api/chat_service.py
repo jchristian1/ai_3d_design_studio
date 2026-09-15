@@ -425,7 +425,9 @@ class ChatService:
 # ---------------------------------------------------------------------------
 
 
-def chat_response_for(record: JobRecord) -> ChatResponse:
+def chat_response_for(
+    record: JobRecord, preview_url: Optional[str] = None
+) -> ChatResponse:
     """Render a terminal job record as the canonical ChatResponse.
 
     The canonical ``ChatResponse`` (``chat-response.schema.json``) is the contract
@@ -433,12 +435,25 @@ def chat_response_for(record: JobRecord) -> ChatResponse:
     result rather than reinvented. It closes its object, which is exactly why job
     identity is NOT crammed into it: identity lives in the surrounding API
     envelope.
+
+    ``preview_url`` is passed in by the HTTP layer rather than derived here: only
+    the route knows the URL shape, and this module must not.
     """
     if record.job_status == "succeeded":
         return ChatResponse(
             status="success",
-            summary="The change has been applied and the project was saved.",
+            summary=(
+                "The change has been applied and the project was saved."
+                if preview_url
+                # Honest about the degraded case: the design change really did
+                # happen, and only the picture of it is missing.
+                else "The change has been applied and the project was saved, "
+                "but a preview image could not be generated."
+                if record.preview_error
+                else "The change has been applied and the project was saved."
+            ),
             object_position=_final_position(record.result),
+            preview_url=preview_url,
         )
 
     error = record.error or {}

@@ -58,6 +58,7 @@ packages = [
     "studio_api",
     "studio_api.routes",
     "studio_api.worker_link",
+    "studio_preview",
     "blender_mcp",
     "blender_mcp.adapters",
     "blender_mcp.tools",
@@ -72,6 +73,7 @@ studio_validation = "packages/validation/python/studio_validation"
 studio_spatial = "packages/spatial/python/studio_spatial"
 studio_agent = "services/agent/studio_agent"
 "studio_agent.providers" = "services/agent/studio_agent/providers"
+studio_preview = "services/preview/studio_preview"
 studio_api = "services/api/studio_api"
 "studio_api.routes" = "services/api/studio_api/routes"
 "studio_api.worker_link" = "services/api/studio_api/worker_link"

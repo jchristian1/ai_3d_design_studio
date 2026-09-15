@@ -150,8 +150,14 @@ class JobReconciler:
             # A duplicate or repeated result for an already-terminal job updates
             # bookkeeping only. It must not create a second record and must not
             # trigger any new work.
-            if is_resend:
-                record.reconciled = True
+            #
+            # A preview MAY legitimately appear here: the worker can have
+            # regenerated an artifact that was lost between rendering and
+            # recording, and learning about it costs nothing and mutates nothing.
+            before = record.preview
+            self._apply_preview(record, message)
+            if is_resend or record.preview != before:
+                record.reconciled = record.reconciled or bool(is_resend)
                 record.touch()
                 self.store.save(record)
             return
@@ -163,9 +169,33 @@ class JobReconciler:
         record.result = dict(result) if isinstance(result, Mapping) else result
         error = message.get("error")
         record.error = dict(error) if isinstance(error, Mapping) else None
+        self._apply_preview(record, message)
         record.reconciled = bool(is_resend)
         record.touch()
         self.store.save(record)
+
+    @staticmethod
+    def _apply_preview(record: JobRecord, message: Mapping[str, Any]) -> None:
+        """Record the reported preview, if any.
+
+        A preview is recorded only for a SUCCEEDED job: an artifact accompanying a
+        failure would imply a picture of a change that was never applied, and the
+        protocol schema forbids that combination anyway.
+
+        An absent ``preview`` on a later report does not clear an artifact already
+        recorded — the artifact remains durable and retrievable regardless of what
+        a subsequent message happens to include.
+        """
+        preview = message.get("preview")
+        if isinstance(preview, Mapping) and record.job_status == "succeeded":
+            record.preview = dict(preview)
+
+        preview_error = message.get("preview_error")
+        if isinstance(preview_error, Mapping):
+            record.preview_error = dict(preview_error)
+        elif record.preview is not None:
+            # A preview arrived, so any earlier "unavailable" note is stale.
+            record.preview_error = None
 
     def _adopt_orphan_result(
         self, message: Mapping[str, Any], canonical: str, is_resend: bool
@@ -192,6 +222,8 @@ class JobReconciler:
         now = utc_now()
         result = message.get("result")
         error = message.get("error")
+        preview = message.get("preview")
+        preview_error = message.get("preview_error")
         record = JobRecord(
             job_id=job_id,
             project_id=project_id,
@@ -209,6 +241,16 @@ class JobReconciler:
             execution_phase=message.get("execution_phase"),
             result=dict(result) if isinstance(result, Mapping) else result,
             error=dict(error) if isinstance(error, Mapping) else None,
+            # An adopted success may carry its preview: the artifact is durable in
+            # the store whether or not this process remembers requesting it.
+            preview=(
+                dict(preview)
+                if isinstance(preview, Mapping) and canonical == "succeeded"
+                else None
+            ),
+            preview_error=(
+                dict(preview_error) if isinstance(preview_error, Mapping) else None
+            ),
             reconciled=bool(is_resend),
             adopted_after_state_loss=True,
         )

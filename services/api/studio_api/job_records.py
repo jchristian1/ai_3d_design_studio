@@ -90,6 +90,12 @@ class JobRecord:
     execution_phase: Optional[str] = None
     result: Optional[dict[str, Any]] = None
     error: Optional[dict[str, Any]] = None
+    #: PreviewArtifact wire document reported by the worker (Task 10). Present only
+    #: when a preview is durable. Contains no filesystem path by contract.
+    preview: Optional[dict[str, Any]] = None
+    #: Why the preview is unavailable, when the mutation itself succeeded. Reported
+    #: separately so a degraded preview never reads as a failed design change.
+    preview_error: Optional[dict[str, Any]] = None
     #: True when the terminal state arrived as a worker reconciliation (a resend
     #: of a result the control plane had not received) rather than a first report.
     reconciled: bool = False
@@ -125,6 +131,8 @@ class JobRecord:
             "updated_at": self.updated_at,
             "result": self.result,
             "error": self.error,
+            "preview": self.preview,
+            "preview_error": self.preview_error,
             "reconciled": self.reconciled,
         }
 

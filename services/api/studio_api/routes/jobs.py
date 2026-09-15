@@ -50,7 +50,8 @@ from studio_contracts import to_wire
 
 from ..chat_service import chat_response_for
 from ..errors import error_body
-from ..models import ChatResponseModel, ErrorModel, JobStatusModel
+from ..models import ChatResponseModel, ErrorModel, JobStatusModel, PreviewModel
+from .artifacts import preview_model_from_wire
 from .support import AppDependencies, ControlPlaneHTTPError, get_dependencies
 
 router = APIRouter(prefix="/api", tags=["jobs"])
@@ -101,11 +102,20 @@ async def get_project_job(
             body=error_body("VALIDATION_ERROR", JOB_NOT_FOUND_MESSAGE),
         )
 
+    # ---- 3. project the preview into its HTTP view -------------------
+    # Built from (project_id, artifact_id) only. There is no path to leak because
+    # the canonical artifact contract has no path field.
+    preview: Optional[PreviewModel] = preview_model_from_wire(
+        project_id, record.preview
+    )
+    preview_url = preview.url if preview is not None else None
+
     chat: Optional[ChatResponseModel] = None
     if record.is_terminal:
-        chat = ChatResponseModel(**to_wire(chat_response_for(record)))
+        chat = ChatResponseModel(**to_wire(chat_response_for(record, preview_url)))
 
     error = record.error
+    preview_error = record.preview_error
     return JobStatusModel(
         job_id=record.job_id,
         project_id=record.project_id,
@@ -125,6 +135,17 @@ async def get_project_job(
                 message=str(error.get("message", "the change could not be applied")),
             )
             if isinstance(error, dict) and error
+            else None
+        ),
+        preview=preview,
+        preview_error=(
+            ErrorModel(
+                code=str(preview_error.get("code", "INTERNAL_ERROR")),
+                message=str(
+                    preview_error.get("message", "the preview is unavailable")
+                ),
+            )
+            if isinstance(preview_error, dict) and preview_error
             else None
         ),
         chat=chat,

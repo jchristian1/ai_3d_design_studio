@@ -25,16 +25,24 @@ today:
 | job records      | InMemoryJobRecordStore       | Task 3 JobStore (Redis/Postgres) |
 | agent provider   | configured via registry      | AstraProvider / CodexProvider  |
 | worker selection | SingleReadyWorkerSelector    | multi-worker scheduler         |
+| artifacts        | LocalArtifactStore           | S3 / object storage            |
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from studio_agent import JobFactory
 from studio_agent.provider import AgentProvider
 from studio_agent.providers.registry import get_provider
+
+# The ARTIFACT STORE only. The control plane must never acquire a dependency on
+# Blender, on subprocess execution, or on the render scripts, so
+# BlenderPreviewGenerator is deliberately NOT imported here — generation happens on
+# the worker. A test asserts this package imports no Blender implementation.
+from studio_preview.artifacts import ArtifactStore, LocalArtifactStore
 
 from .chat_service import ChatService
 from .identity import IdentityResolver, default_identity_resolver
@@ -61,6 +69,9 @@ class AppDependencies:
     selector: WorkerSelector
     reconciler: JobReconciler
     chat_service: ChatService
+    #: Serves generated preview artifacts (Task 10). Read-only from the control
+    #: plane's perspective: the worker writes, the API serves.
+    artifacts: ArtifactStore
     job_factory: JobFactory = field(default_factory=JobFactory)
 
 
@@ -71,6 +82,7 @@ def build_dependencies(
     projects: Optional[ProjectRegistry] = None,
     store: Optional[JobRecordStore] = None,
     manager: Optional[WorkerConnectionManager] = None,
+    artifacts: Optional[ArtifactStore] = None,
 ) -> AppDependencies:
     """Wire the real Spec 001 dependency graph.
 
@@ -79,6 +91,11 @@ def build_dependencies(
     """
     resolved_projects = projects or registry_from_ids(settings.project_ids)
     resolved_store = store or InMemoryJobRecordStore()
+
+    # The root is server-chosen configuration; a request can never influence it.
+    resolved_artifacts = artifacts or LocalArtifactStore(
+        Path(settings.artifact_root) if settings.artifact_root else None
+    )
 
     resolved_manager = manager or WorkerConnectionManager(
         expected_token=settings.worker_token,
@@ -117,6 +134,7 @@ def build_dependencies(
         selector=selector,
         reconciler=reconciler,
         chat_service=chat_service,
+        artifacts=resolved_artifacts,
         job_factory=job_factory,
     )
 

@@ -30,6 +30,11 @@ EXECUTING: Final = "executing"
 MUTATION_VERIFIED: Final = "mutation_verified"
 #: The new position was confirmed present in the saved .blend by a fresh read.
 PROJECT_SAVED: Final = "project_saved"
+#: A preview artifact for this execution is durable, OR preview generation was
+#: attempted and failed. Reaching this phase says nothing about the mutation: the
+#: mutation was already durable at PROJECT_SAVED, and a failed preview must never
+#: be able to make a saved design change look failed (Task 10).
+PREVIEW_GENERATED: Final = "preview_generated"
 #: Terminal success.
 COMPLETED: Final = "completed"
 #: Terminal failure.
@@ -42,11 +47,21 @@ EXECUTION_PHASES: Final[tuple[str, ...]] = (
     EXECUTING,
     MUTATION_VERIFIED,
     PROJECT_SAVED,
+    PREVIEW_GENERATED,
     COMPLETED,
     FAILED,
 )
 
 TERMINAL_PHASES: Final[tuple[str, ...]] = (COMPLETED, FAILED)
+
+#: Phases in which the mutation is already durable in the saved .blend. A retry
+#: reaching any of these must never mutate again; it may only finish REPORTING
+#: (and may regenerate a preview, which cannot change the design).
+PHASES_AFTER_MUTATION_IS_DURABLE: Final[tuple[str, ...]] = (
+    PROJECT_SAVED,
+    PREVIEW_GENERATED,
+    COMPLETED,
+)
 
 #: Phases after which the plan is guaranteed to exist and MUST be reused rather
 #: than recomputed. Recomputing expected_before on a retry is how double
@@ -57,6 +72,7 @@ PHASES_WITH_PLAN: Final[tuple[str, ...]] = (
     EXECUTING,
     MUTATION_VERIFIED,
     PROJECT_SAVED,
+    PREVIEW_GENERATED,
     COMPLETED,
 )
 

@@ -51,10 +51,11 @@ Interactive documentation is at `/docs`; the machine-readable schema is at
 | `POST` | `/api/chat` | submit a design change |
 | `POST` | `/api/projects/{project_id}/chat` | project-scoped form of the above |
 | `GET` | `/api/projects/{project_id}/jobs/{job_id}` | status and result of a change |
+| `GET` | `/api/projects/{project_id}/artifacts/{artifact_id}` | preview artifact bytes |
 | `WS` | `/ws/workers` | worker link (Task 8 protocol) |
 
-Job retrieval is project-scoped **by path**, and there is no unscoped variant. A
-`job_id` is an identifier, not a capability.
+Job and artifact retrieval are project-scoped **by path**, and there is no unscoped
+variant. A `job_id` and an `artifact_id` are identifiers, not capabilities.
 
 `/api` is the versionable prefix. A future breaking change becomes `/api/v2`
 without disturbing `/health` (an infrastructure probe) or `/ws/workers`, whose
@@ -305,6 +306,45 @@ sets `reconciled`. Retrying a completed `request_id` returns the existing job wi
 instruction is a client error → 409, because mutation identity would otherwise claim
 two different changes are the same one.
 
+## Preview artifacts (Task 10)
+
+A verified mutation produces a PNG preview. The control plane never renders and never
+learns a filesystem path: the worker reports `(project_id, artifact_id)` over the
+worker protocol, and the API projects that into a logical URL.
+
+```
+GET /api/projects/{project_id}/artifacts/{artifact_id}   ->  200 image/png
+```
+
+Job status carries the metadata plus that URL:
+
+```json
+"preview": {
+  "artifact_id": "preview_c02467a3a1b99c8845a4b777f01a8d06",
+  "artifact_type": "preview_image",
+  "media_type": "image/png",
+  "width": 320, "height": 180, "size_bytes": 47002,
+  "checksum": "sha256:38360165cfdbe482…",
+  "url": "/api/projects/proj_seed/artifacts/preview_c02467a3a1b99c8845a4b777f01a8d06",
+  "engine": "BLENDER_WORKBENCH"
+}
+```
+
+The bytes are never inlined as base64: job status is polled, so an embedded image
+would be re-sent on every poll. `chat.preview_url` carries the same logical URL
+inside the canonical `ChatResponse`.
+
+**A failed preview never fails the change.** A job can be `succeeded` with
+`preview: null` and `preview_error` set — the design change was applied and saved,
+and only the picture is missing. See `services/preview/README.md` for the full
+rationale, the camera and render strategy, and the retry semantics.
+
+**Isolation and safety.** Artifact retrieval authorizes the project first, then
+scopes the lookup; an artifact in another project returns a byte-identical 404 to one
+that never existed. `artifact_id` must match the canonical pattern, and the store
+derives the filename itself, so a `.blend`, a journal record, a recovery snapshot, or
+an `.env` file cannot be addressed. There is no listing route.
+
 ## Error mapping
 
 Two vocabularies, kept separate on purpose:
@@ -326,6 +366,7 @@ canonical error instead.
 | unsupported units | 422 | `INVALID_UNITS` |
 | unknown or unsafe project | 404 | `VALIDATION_ERROR` |
 | unknown job id, or a job in another project | 404 | `VALIDATION_ERROR` |
+| unknown artifact, or an artifact in another project | 404 | `VALIDATION_ERROR` |
 | `request_id` reused for different content | 409 | `PRECONDITION_MISMATCH` |
 | no ready worker | 503 | `BLENDER_UNAVAILABLE` |
 | provider unavailable | 503 | `PROVIDER_UNAVAILABLE` |
@@ -417,7 +458,7 @@ These are known gaps, not oversights. Each is scoped to a later task:
 | `SingleReadyWorkerSelector` — first ready worker, no scheduling | multi-worker task |
 | `RuleBasedProvider` — a tiny grammar, not real language understanding | Astra/Codex provider task |
 | No TLS in the local run — loopback only | deployment task (`wss://`, terminated in front) |
-| No preview or render — `preview_url` is never populated | Task 10 |
+| No final render — only a fast Workbench still preview | final-render task |
 | No CORS origins configured | Task 11 (web app) |
 | One operation per request; multi-operation plans are refused | future planning work |
 | `InMemoryProjectRegistry` has no per-user ownership check, so any caller may read any *registered* project | authentication + permissions task |

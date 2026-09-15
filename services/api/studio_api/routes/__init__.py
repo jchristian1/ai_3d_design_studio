@@ -9,10 +9,11 @@ rewritten when the agent provider, the job store, or the worker scheduler change
     health.py     GET  /health
     chat.py       POST /api/chat, POST /api/projects/{project_id}/chat
     jobs.py       GET  /api/projects/{project_id}/jobs/{job_id}
+    artifacts.py  GET  /api/projects/{project_id}/artifacts/{artifact_id}
     workers.py    GET  /api/workers
     worker_ws.py  WS   /ws/workers
 """
 
-from . import chat, health, jobs, worker_ws, workers
+from . import artifacts, chat, health, jobs, worker_ws, workers
 
-__all__ = ["chat", "health", "jobs", "worker_ws", "workers"]
+__all__ = ["artifacts", "chat", "health", "jobs", "worker_ws", "workers"]

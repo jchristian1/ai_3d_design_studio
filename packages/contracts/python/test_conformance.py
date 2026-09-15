@@ -33,11 +33,13 @@ from studio_contracts import (
     validate_against_schema,
 )
 from studio_types import (
+    ARTIFACT_TYPES,
     JOB_STATUSES,
     JOB_TYPES,
     Job,
     MoveObjectPayload,
     ObjectRef,
+    PreviewArtifact,
     RequestOrigin,
     Vec3,
 )
@@ -104,6 +106,16 @@ def test_job_types_equal_canonical_enum():
     assert list(JOB_TYPES) == schema_enum(SCHEMA_FILES["JobType"])
 
 
+def test_artifact_types_equal_canonical_enum():
+    assert list(ARTIFACT_TYPES) == schema_enum(SCHEMA_FILES["ArtifactType"])
+
+
+def test_preview_artifact_type_resolves_to_canonical_enum():
+    assert schema_enum(
+        SCHEMA_FILES["PreviewArtifact"], ["artifact_type"]
+    ) == schema_enum(SCHEMA_FILES["ArtifactType"])
+
+
 def test_job_job_type_resolves_to_canonical_enum():
     assert schema_enum(SCHEMA_FILES["Job"], ["job_type"]) == schema_enum(
         SCHEMA_FILES["JobType"]
@@ -127,6 +139,7 @@ def _field_names(cls) -> list[str]:
         (ChatError, "ErrorResponse"),
         (Job, "Job"),
         (Vec3, "Vec3"),
+        (PreviewArtifact, "PreviewArtifact"),
     ],
 )
 def test_dataclass_fields_match_canonical_properties(cls, schema_key):
@@ -155,6 +168,20 @@ def test_dataclass_fields_match_canonical_properties(cls, schema_key):
             ],
         ),
         ("Vec3", ["x", "y", "z"]),
+        (
+            "PreviewArtifact",
+            [
+                "artifact_id",
+                "artifact_type",
+                "checksum",
+                "created_at",
+                "height",
+                "media_type",
+                "project_id",
+                "size_bytes",
+                "width",
+            ],
+        ),
     ],
 )
 def test_canonical_required_fields(schema_key, expected_required):
@@ -230,6 +257,33 @@ def _sample_job() -> Job:
 def test_python_job_is_schema_valid():
     result = validate_against_schema(SCHEMA_FILES["Job"], to_wire(_sample_job()))
     assert result.valid, result.violations
+
+
+def test_python_preview_artifact_is_schema_valid():
+    artifact = PreviewArtifact(
+        artifact_id="preview_a1b2c3d4e5f60718",
+        project_id="proj_seed",
+        artifact_type="preview_image",
+        media_type="image/png",
+        created_at="2026-09-15T04:00:00Z",
+        width=640,
+        height=360,
+        size_bytes=20481,
+        checksum="sha256:" + "a" * 64,
+        job_id="job_req_e2e_001_0",
+        engine="BLENDER_WORKBENCH",
+    )
+    result = validate_against_schema(
+        SCHEMA_FILES["PreviewArtifact"], to_wire(artifact)
+    )
+    assert result.valid, result.violations
+
+
+def test_preview_artifact_contract_cannot_carry_a_path_or_url():
+    """The artifact reference must never become a way to name a file."""
+    properties = schema_properties(SCHEMA_FILES["PreviewArtifact"])
+    for forbidden in ("path", "url", "filepath", "filename", "directory", "blend_path"):
+        assert forbidden not in properties, f"PreviewArtifact exposes {forbidden}"
 
 
 def test_python_default_created_at_matches_canonical_date_time_format():

@@ -38,8 +38,17 @@ from typing import Any, Optional, Protocol
 
 from . import phases
 
-#: Bumped when the record layout changes, so an old record is detected rather
-#: than silently misread.
+#: Bumped when the record layout changes INCOMPATIBLY, so an old record is
+#: detected rather than silently misread.
+#:
+#: Task 10 added the optional ``preview`` / ``preview_error`` fields and did NOT
+#: bump this, deliberately. ``from_wire`` filters to known fields and every new
+#: field has a default, so a v1 record loads correctly (previews simply absent)
+#: and a v1 reader ignores the new keys. Bumping would instead make every existing
+#: local journal record unreadable and refuse to execute those jobs — a real cost
+#: for no safety gain. Contrast the worker PROTOCOL, which did bump: there,
+#: ``additionalProperties: false`` means an older peer actively REJECTS an unknown
+#: field, so the same additive change is breaking on the wire but not on disk.
 RECORD_VERSION = 1
 
 
@@ -76,6 +85,15 @@ class ExecutionRecord:
     recovery: Optional[dict[str, Any]] = None
     #: The MoveObjectResult wire document from the last execution attempt.
     result: Optional[dict[str, Any]] = None
+    #: The PreviewArtifact wire document for this execution, once one is durable.
+    #: Its presence is what makes a retry REUSE the existing preview instead of
+    #: rendering another. It is deliberately separate from ``result``: a preview
+    #: describes a picture of the mutation, not the mutation itself.
+    preview: Optional[dict[str, Any]] = None
+    #: Why preview generation failed, when the mutation itself succeeded. Recorded
+    #: separately from ``error`` so a failed preview can never be mistaken for a
+    #: failed design change.
+    preview_error: Optional[dict[str, Any]] = None
     #: Structured error when the phase is failed.
     error: Optional[dict[str, Any]] = None
     #: The public Job status this execution maps to.

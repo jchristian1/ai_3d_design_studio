@@ -30,8 +30,8 @@ import {
   validateAgainstSchema,
 } from "./index.ts";
 import type { ChatRequest, ChatResponse } from "./index.ts";
-import { JOB_STATUSES, JOB_TYPES } from "@studio/types";
-import type { Job, Vec3 } from "@studio/types";
+import { ARTIFACT_TYPES, JOB_STATUSES, JOB_TYPES } from "@studio/types";
+import type { Job, PreviewArtifact, Vec3 } from "@studio/types";
 import { CHAT_REQUEST_FIELDS, validateChatRequest } from "@studio/validation";
 
 interface Case {
@@ -98,6 +98,17 @@ test("job.job_type resolves to the canonical job-type enum", () => {
   assert.deepEqual(
     schemaEnum(SCHEMA_FILES.Job, ["job_type"]),
     schemaEnum(SCHEMA_FILES.JobType),
+  );
+});
+
+test("ARTIFACT_TYPES equals canonical artifact-type enum", () => {
+  assert.deepEqual([...ARTIFACT_TYPES], schemaEnum(SCHEMA_FILES.ArtifactType));
+});
+
+test("preview artifact_type resolves to the canonical artifact-type enum", () => {
+  assert.deepEqual(
+    schemaEnum(SCHEMA_FILES.PreviewArtifact, ["artifact_type"]),
+    schemaEnum(SCHEMA_FILES.ArtifactType),
   );
 });
 
@@ -189,6 +200,52 @@ test("Job field set matches canonical schema", () => {
 test("Vec3 field set matches canonical schema", () => {
   const maximal: Required<Vec3> = { x: 0, y: 0, z: 0 };
   assert.deepEqual(Object.keys(maximal).sort(), schemaProperties(SCHEMA_FILES.Vec3));
+});
+
+test("PreviewArtifact field set matches canonical schema", () => {
+  const maximal: Required<PreviewArtifact> = {
+    artifact_id: "preview_a1b2c3d4e5f60718",
+    project_id: "proj_seed",
+    artifact_type: "preview_image",
+    media_type: "image/png",
+    created_at: "2026-09-15T04:00:00Z",
+    width: 640,
+    height: 360,
+    size_bytes: 20481,
+    checksum: `sha256:${"a".repeat(64)}`,
+    job_id: "job_req_e2e_001_0",
+    engine: "BLENDER_WORKBENCH",
+  };
+  assert.deepEqual(
+    Object.keys(maximal).sort(),
+    schemaProperties(SCHEMA_FILES.PreviewArtifact),
+  );
+});
+
+test("a TS PreviewArtifact serializes to a schema-valid document", () => {
+  const artifact: PreviewArtifact = {
+    artifact_id: "preview_a1b2c3d4e5f60718",
+    project_id: "proj_seed",
+    artifact_type: "preview_image",
+    media_type: "image/png",
+    created_at: "2026-09-15T04:00:00Z",
+    width: 640,
+    height: 360,
+    size_bytes: 20481,
+    checksum: `sha256:${"a".repeat(64)}`,
+  };
+  const r = validateAgainstSchema(SCHEMA_FILES.PreviewArtifact, toWire(artifact));
+  assert.ok(r.valid, JSON.stringify(r.violations));
+});
+
+test("PreviewArtifact cannot carry a path or url", () => {
+  const properties = schemaProperties(SCHEMA_FILES.PreviewArtifact);
+  for (const forbidden of ["path", "url", "filepath", "filename", "directory"]) {
+    assert.ok(
+      !properties.includes(forbidden),
+      `PreviewArtifact exposes ${forbidden}`,
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------

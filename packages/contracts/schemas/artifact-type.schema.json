@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "artifact-type.schema.json",
+  "title": "ArtifactType",
+  "description": "The kind of generated artifact a project version can carry. A closed enum: a consumer must never have to guess how to interpret an artifact, and an unknown value must fail validation rather than be rendered blindly. Spec 001 produces only preview_image (a fast, deterministic still image proving a mutation is visible). Reserved for later milestones, each of which needs its own media_type handling and a decision about who may request it: render_image (final Cycles render), glb_scene (interactive browser preview), viewport_stream (live viewport).",
+  "type": "string",
+  "enum": ["preview_image"]
+}

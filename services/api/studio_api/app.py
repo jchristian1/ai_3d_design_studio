@@ -24,10 +24,11 @@ Routes
 | POST   | ``/api/chat``                               | submit a design change       |
 | POST   | ``/api/projects/{id}/chat``                 | project-scoped form          |
 | GET    | ``/api/projects/{id}/jobs/{job_id}``        | status/result of a change    |
+| GET    | ``/api/projects/{id}/artifacts/{art_id}``   | preview artifact bytes       |
 | WS     | ``/ws/workers``                             | worker link (Task 8)         |
 
-Job retrieval is project-scoped by path and has no unscoped variant: a ``job_id``
-is an identifier, not a capability.
+Job and artifact retrieval are project-scoped by path and have no unscoped
+variant: a ``job_id`` and an ``artifact_id`` are identifiers, not capabilities.
 
 ``/api`` is the versionable prefix: a future breaking change becomes ``/api/v2``
 without disturbing ``/health`` (an infrastructure probe) or ``/ws/workers`` (whose
@@ -57,7 +58,7 @@ from fastapi.responses import JSONResponse
 
 from .dependencies import AppDependencies, build_dependencies
 from .errors import error_body, internal_error_body
-from .routes import chat, health, jobs, worker_ws, workers
+from .routes import artifacts, chat, health, jobs, worker_ws, workers
 from .routes.support import ControlPlaneHTTPError
 from .settings import Settings, load_settings
 
@@ -103,6 +104,7 @@ def create_app(
     app.include_router(chat.router)
     app.include_router(jobs.router)
     app.include_router(workers.router)
+    app.include_router(artifacts.router)
     app.include_router(worker_ws.router)
 
     return app

@@ -191,6 +191,65 @@ class MoveObjectPlan:
     desired_after_meters: Vec3
 
 
+# ---------------------------------------------------------------------------
+# Generated artifacts (Spec 001, Task 10)
+# ---------------------------------------------------------------------------
+
+#: The kind of generated artifact a project version can carry.
+#:
+#: Spec 001 produces only ``preview_image``: a fast, deterministic still image
+#: whose whole purpose is to prove a requested change is visible. Reserved for
+#: later milestones, each needing its own media_type handling: ``render_image``
+#: (final Cycles render), ``glb_scene`` (interactive browser preview),
+#: ``viewport_stream`` (live viewport).
+#:
+#: Canonical schema: artifact-type.schema.json
+ArtifactType = Literal["preview_image"]
+
+ARTIFACT_TYPES: tuple[ArtifactType, ...] = ("preview_image",)
+
+#: The one artifact type Spec 001 generates, named so callers do not repeat the
+#: string literal.
+PREVIEW_IMAGE: ArtifactType = "preview_image"
+
+
+@dataclass(frozen=True)
+class PreviewArtifact:
+    """A reference to one durably stored generated artifact.
+
+    This is what lets a browser see the result of a Blender mutation without the
+    control plane, the browser, or the job ever learning a filesystem path.
+
+    NOTE WHAT IS ABSENT: no path, no directory, no filename, no URL.
+    ``(project_id, artifact_id)`` is the complete address. The HTTP layer projects
+    that into a logical URL, because a worker must not know the control plane's
+    route shape and the same artifact is addressed differently in different
+    deployments (local filesystem now, object storage later).
+
+    ``checksum`` is for corruption detection, test verification, and later caching
+    or version identity. It is explicitly NOT an access credential: authorization
+    is always project scope.
+
+    Canonical schema: ``preview-artifact.schema.json``
+    """
+
+    artifact_id: str
+    project_id: str
+    artifact_type: ArtifactType
+    media_type: str
+    created_at: str
+    width: int
+    height: int
+    size_bytes: int
+    #: ``sha256:<64 hex chars>`` of the stored bytes.
+    checksum: str
+    #: The job whose verified mutation this artifact depicts. Absent for an
+    #: artifact not produced by a job, such as a baseline preview.
+    job_id: Optional[str] = None
+    #: Coarse description of what produced it, e.g. BLENDER_WORKBENCH.
+    engine: Optional[str] = None
+
+
 @dataclass(frozen=True)
 class MoveObjectResult:
     """The structured outcome of a move_object execution.

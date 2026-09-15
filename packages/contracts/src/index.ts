@@ -149,6 +149,8 @@ export const SCHEMA_FILES = {
   RequestOrigin: "request-origin.schema.json",
   MoveObjectPlan: "move-object-plan.schema.json",
   MoveObjectResult: "move-object-result.schema.json",
+  ArtifactType: "artifact-type.schema.json",
+  PreviewArtifact: "preview-artifact.schema.json",
   WorkerMessage: "worker-message.schema.json",
   WorkerCapabilities: "worker-capabilities.schema.json",
   ObjectRef: "object-ref.schema.json",

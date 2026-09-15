@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "preview-artifact.schema.json",
+  "title": "PreviewArtifact",
+  "description": "A reference to one durably stored generated artifact. This is the contract that lets a browser see the result of a Blender mutation without the control plane, the browser, or the job ever learning a filesystem path. NOTE WHAT IS ABSENT: there is no path, no directory, no filename, and no URL. `artifact_id` plus `project_id` is the complete address; the HTTP layer projects that into a logical URL (see services/api). A worker must not know the control plane's route shape, and the same artifact is addressed differently in different deployments (local filesystem now, object storage later), so a URL would be wrong to bake into the durable record. String identifiers must be non-blank: `minLength` alone would admit whitespace-only values, so a `\\S` pattern is required alongside it.",
+  "type": "object",
+  "properties": {
+    "artifact_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(preview)_[a-z0-9]{8,64}$",
+      "description": "Stable, DERIVED identity of this artifact. Derived from (project_id, job_id, artifact_type) so the same completed job always maps to the same artifact and a retry reuses it instead of accumulating duplicates. The strict pattern is also a security boundary: it is a single safe path segment by construction, so it cannot address a .blend, a journal, a recovery copy, or anything outside the artifact store."
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Owning project. Every artifact lookup is scoped by this; artifact ids are never compared across projects."
+    },
+    "job_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "The job whose verified mutation this artifact depicts. Absent for an artifact not produced by a job, such as a baseline preview taken before any change."
+    },
+    "artifact_type": { "$ref": "artifact-type.schema.json" },
+    "media_type": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z]+/[a-z0-9.+-]+$",
+      "description": "IANA media type of the stored bytes, e.g. image/png. Constrained so it can be placed in a Content-Type header without further sanitising."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Pixel width. Reported so a browser can reserve layout before the image loads."
+    },
+    "height": { "type": "integer", "minimum": 1 },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Size of the stored bytes. Zero is invalid: an empty file is a failed render, not an artifact."
+    },
+    "checksum": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "SHA-256 of the stored bytes, prefixed with its algorithm so a future migration is unambiguous. Used for corruption detection, test verification, and later caching/version identity. It is explicitly NOT an access credential — knowing a checksum grants nothing, and authorization is always project scope."
+    },
+    "engine": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Coarse, non-revealing description of what produced the artifact, e.g. BLENDER_WORKBENCH. Diagnostic only."
+    }
+  },
+  "required": [
+    "artifact_id",
+    "project_id",
+    "artifact_type",
+    "media_type",
+    "created_at",
+    "width",
+    "height",
+    "size_bytes",
+    "checksum"
+  ],
+  "additionalProperties": false
+}

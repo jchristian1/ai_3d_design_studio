@@ -24,15 +24,34 @@ Worker                         Control Plane
 
 ## 1. Protocol versioning
 
-Every message carries `protocol_version`. The current version is `1`, and
-`SUPPORTED_PROTOCOL_VERSIONS` lists what a build can speak. A worker presenting an
-unsupported version is rejected at hello with a clear reason and is never
-registered, so it can never be offered a job. Bump the version on any breaking
-change to the message vocabulary.
+Every message carries `protocol_version`. The current version is `2`, and
+`SUPPORTED_PROTOCOL_VERSIONS` lists what a build can speak — currently `(1, 2)`. A
+worker presenting an unsupported version is rejected at hello with a clear reason and
+is never registered, so it can never be offered a job.
 
 The vocabulary itself is a closed enum in `worker-message.schema.json`; both ends
 validate against that canonical schema, so neither side can invent a message the
 other does not understand.
+
+### Why v2, for an *optional* field
+
+Task 10 added optional `preview` and `preview_error` fields to `job_result`. That
+still bumped the version, deliberately.
+
+Because every message is validated with `additionalProperties: false`, a peer that
+predates a new field **rejects** any message carrying it. So an additive optional
+field is a breaking vocabulary change on the wire, even though it looks harmless.
+Relying on "optional means compatible" would produce mysterious validation failures
+against an older peer.
+
+v1 remains supported: a v1 worker simply never reports a preview, which is a degraded
+but entirely valid worker. The control plane can therefore be upgraded before the
+workstations are.
+
+Contrast the worker's on-disk journal, which did **not** bump its record version for
+the same change: `from_wire` filters to known fields and every new field has a
+default, so a v1 record loads correctly and a v1 reader ignores the new keys. Bumping
+there would make existing local journals unreadable for no safety gain.
 
 ## 2. Outbound worker connection
 
@@ -154,6 +173,22 @@ error, enforced by a schema conditional.
 
 `duplicate` means the job was already completed locally and the stored result is
 being reported, not re-executed.
+
+### Preview fields (v2)
+
+`job_result` may also carry `preview` (a `PreviewArtifact` reference) and
+`preview_error`. Both are deliberately separate from `result` and `error`:
+
+- a preview describes a *picture of* the mutation, not the mutation itself;
+- a failed preview must never be able to make a durably-saved design change look
+  like a failed one.
+
+Two schema conditionals keep that honest: the preview fields are forbidden on every
+message type except `job_result`, and `preview` is forbidden when `job_status` is
+`failed` — attaching one would imply a picture of a change that was never applied.
+
+The reference contains no path and no URL. `(project_id, artifact_id)` is the whole
+address, because a worker must not know the control plane's route shape.
 
 ## 10. Disconnect behaviour
 

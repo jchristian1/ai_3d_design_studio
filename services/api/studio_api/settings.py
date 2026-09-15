@@ -47,6 +47,7 @@ ENV_AGENT_PROVIDER = f"{ENV_PREFIX}AGENT_PROVIDER"
 ENV_DEVELOPMENT_USER_ID = f"{ENV_PREFIX}DEVELOPMENT_USER_ID"
 ENV_PROJECT_IDS = f"{ENV_PREFIX}PROJECT_IDS"
 ENV_HEARTBEAT_INTERVAL = f"{ENV_PREFIX}HEARTBEAT_INTERVAL_SECONDS"
+ENV_ARTIFACT_ROOT = f"{ENV_PREFIX}ARTIFACT_ROOT"
 
 #: Shared with the worker (Task 8) on purpose: it is the same pre-shared secret,
 #: so it must not have two different names.
@@ -105,6 +106,16 @@ class Settings:
     project_ids: tuple[str, ...] = DEFAULT_PROJECT_IDS
 
     heartbeat_interval_seconds: float = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
+
+    #: Where generated preview artifacts live (Task 10). ``None`` means the
+    #: artifact store's own git-ignored default under ``runtime/artifacts``.
+    #:
+    #: TEMPORARY LOCAL COUPLING: for Spec 001 the control plane and the worker run
+    #: on one machine and share this directory, so the API can serve bytes the
+    #: worker wrote. In a real deployment the worker uploads to object storage and
+    #: the API reads from there — the same ``ArtifactStore`` boundary, a different
+    #: implementation, and no shared filesystem.
+    artifact_root: Optional[str] = None
 
     @property
     def is_local(self) -> bool:
@@ -173,6 +184,7 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
         development_user_id=get(ENV_DEVELOPMENT_USER_ID, DEFAULT_DEVELOPMENT_USER_ID),
         project_ids=project_ids,
         heartbeat_interval_seconds=heartbeat,
+        artifact_root=get(ENV_ARTIFACT_ROOT) or None,
     )
 
 
@@ -184,6 +196,7 @@ __all__ = [
     "DEFAULT_PROJECT_IDS",
     "ENV_ALLOWED_ORIGINS",
     "ENV_AGENT_PROVIDER",
+    "ENV_ARTIFACT_ROOT",
     "ENV_DEVELOPMENT_USER_ID",
     "ENV_ENVIRONMENT",
     "ENV_HOST",

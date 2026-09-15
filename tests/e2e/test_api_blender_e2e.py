@@ -35,6 +35,7 @@ than in-memory state.
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import time
 from pathlib import Path
@@ -69,6 +70,9 @@ from blender_worker.locks import FileLockProvider  # noqa: E402
 from blender_worker.registry import MappingProjectRegistry  # noqa: E402
 from studio_api.settings import Settings  # noqa: E402
 from studio_contracts import worker_protocol as protocol  # noqa: E402
+from studio_preview.artifacts import LocalArtifactStore  # noqa: E402
+from studio_preview.blender_preview import BlenderPreviewGenerator  # noqa: E402
+from studio_preview.generator import looks_like_png  # noqa: E402
 
 TOKEN = "e2e-api-token-not-committed"
 WORKER_ID = "worker_e2e_api_1"
@@ -76,6 +80,10 @@ PROJECT_ID = "proj_seed"
 DEV_USER_ID = "user_dev_local"
 
 MOVE_COMMAND = "Move Cube 50 cm to the right."
+
+#: Small preview so the E2E run stays quick.
+PREVIEW_WIDTH = 320
+PREVIEW_HEIGHT = 180
 
 #: Blender is slow to start; every wait is bounded so a hang fails visibly.
 BLENDER_DEADLINE_SECONDS = 300.0
@@ -102,6 +110,13 @@ def blender_stack(tmp_path: Path):
     shutil.copy2(ensure_seed_project(), project_path)
 
     runtime = tmp_path / "runtime"
+    artifact_root = tmp_path / "artifacts"
+
+    # The worker renders and writes artifacts; the control plane reads them. For
+    # Spec 001 both run on one machine and share this directory (see
+    # services/api/README.md — replaced by object storage later).
+    artifacts = LocalArtifactStore(artifact_root)
+
     executor = WorkerExecutor(
         store=FileSystemExecutionStore(runtime),
         locks=FileLockProvider(runtime),
@@ -109,6 +124,10 @@ def blender_stack(tmp_path: Path):
         projects=MappingProjectRegistry(projects_root, {PROJECT_ID: project_path}),
         blender=SubprocessBlenderOperationExecutor(),
         recovery_root=runtime / "recovery",
+        previews=BlenderPreviewGenerator(),
+        artifacts=artifacts,
+        preview_width=PREVIEW_WIDTH,
+        preview_height=PREVIEW_HEIGHT,
     )
 
     settings = Settings(
@@ -117,6 +136,7 @@ def blender_stack(tmp_path: Path):
         project_ids=(PROJECT_ID,),
         development_user_id=DEV_USER_ID,
         heartbeat_interval_seconds=120.0,
+        artifact_root=str(artifact_root),
     )
 
     with ControlPlaneServer.build(settings) as server:
@@ -127,6 +147,7 @@ def blender_stack(tmp_path: Path):
                 "dependencies": server.dependencies,
                 "executor": executor,
                 "project_path": project_path,
+                "artifacts": artifacts,
             }
 
 
@@ -293,6 +314,29 @@ def test_http_chat_moves_the_cube_in_real_blender_and_reports_success(blender_st
         # A job cannot be reached through a project it does not belong to.
         assert http.get(f"/api/projects/proj_other/jobs/{job_id}").status_code == 404
 
+        # ---- a real PNG preview was produced and is served -----------
+        preview = status["preview"]
+        assert preview is not None, f"no preview: {status.get('preview_error')}"
+        assert preview["media_type"] == "image/png"
+        assert preview["width"] == PREVIEW_WIDTH
+        assert preview["height"] == PREVIEW_HEIGHT
+        assert preview["url"] == (
+            f"/api/projects/{PROJECT_ID}/artifacts/{preview['artifact_id']}"
+        )
+
+        image = http.get(preview["url"])
+        assert image.status_code == 200
+        assert image.headers["content-type"] == "image/png"
+        assert looks_like_png(image.content)
+        assert len(image.content) == preview["size_bytes"]
+        assert (
+            "sha256:" + hashlib.sha256(image.content).hexdigest()
+            == preview["checksum"]
+        )
+
+        # The canonical ChatResponse carries the same logical URL.
+        assert status["chat"]["preview_url"] == preview["url"]
+
         # ---- Blender moved the cube and the .blend save persisted ---
         # Read by an independent Blender process from the saved file.
         assert coordinates_equal(saved_cube_x(project_path), 0.5)
@@ -363,6 +407,166 @@ def test_a_second_intentional_request_moves_the_cube_again_but_a_retry_does_not(
         # Exactly two mutations were ever recorded.
         records = blender_stack["dependencies"].store.all_records()
         assert len({record.idempotency_key for record in records}) == 2
+    finally:
+        worker.disconnect()
+
+
+@pytest.mark.blender
+def test_preview_artifacts_are_versioned_per_request_and_reused_on_retry(
+    blender_stack,
+):
+    """The full Task 10 preview story over real HTTP and real Blender.
+
+    Proves, in order:
+      - request 1 (Cube 0.00 -> 0.50) yields preview artifact A, served as PNG
+      - a new request_id (0.50 -> 1.00) yields a DIFFERENT artifact B
+      - artifact A is still retrievable, so nothing was overwritten
+      - the two images differ, because the scene visibly differs
+      - retrying request 1 creates no new mutation and no new artifact
+    """
+    http = blender_stack["http"]
+    project_path = blender_stack["project_path"]
+    assert coordinates_equal(saved_cube_x(project_path), 0.0)
+
+    worker = build_worker(blender_stack["executor"], blender_stack["server"].worker_url)
+    try:
+        assert worker.connect_and_register(timeout=30.0)
+        await_worker_registered(http)
+
+        # ---- request 1: 0.00 -> 0.50, preview A ---------------------
+        first = http.post("/api/chat", json=chat_body("req_e2e_p1"))
+        first_job = first.json()["job_id"]
+        assert handle_until(worker, protocol.JOB_OFFER)
+        first_status = await_status(http, first_job, "succeeded")
+
+        preview_a = first_status["preview"]
+        assert preview_a is not None, first_status.get("preview_error")
+        image_a = http.get(preview_a["url"])
+        assert image_a.status_code == 200
+        assert image_a.headers["content-type"] == "image/png"
+        assert looks_like_png(image_a.content)
+        assert coordinates_equal(saved_cube_x(project_path), 0.5)
+
+        # ---- request 2: 0.50 -> 1.00, preview B ---------------------
+        second = http.post("/api/chat", json=chat_body("req_e2e_p2"))
+        second_job = second.json()["job_id"]
+        assert second_job != first_job
+        assert handle_until(worker, protocol.JOB_OFFER)
+        second_status = await_status(http, second_job, "succeeded")
+
+        preview_b = second_status["preview"]
+        assert preview_b is not None, second_status.get("preview_error")
+        assert preview_b["artifact_id"] != preview_a["artifact_id"], (
+            "a new intentional change must produce a new artifact"
+        )
+        assert preview_b["url"] != preview_a["url"]
+
+        image_b = http.get(preview_b["url"])
+        assert image_b.status_code == 200
+        assert looks_like_png(image_b.content)
+        assert coordinates_equal(saved_cube_x(project_path), 1.0)
+
+        # ---- the OLD preview is still retrievable -------------------
+        still_there = http.get(preview_a["url"])
+        assert still_there.status_code == 200, "artifact A was overwritten or removed"
+        assert still_there.content == image_a.content
+
+        # ---- the two images genuinely differ ------------------------
+        assert image_a.content != image_b.content
+        assert preview_a["checksum"] != preview_b["checksum"], (
+            "a visibly different scene must produce a different image"
+        )
+
+        # ---- retry request 1: no mutation, no new artifact ----------
+        artifacts_before = len(
+            blender_stack["artifacts"].list_for_project(PROJECT_ID)
+        )
+        retry = http.post("/api/chat", json=chat_body("req_e2e_p1"))
+        assert retry.status_code == 202
+        assert retry.json()["job_id"] == first_job
+        assert retry.json()["duplicate"] is True
+
+        assert coordinates_equal(
+            saved_cube_x(project_path), 1.0
+        ), "a retry must not move the cube"
+
+        retried_status = http.get(job_path(first_job)).json()
+        assert retried_status["preview"]["artifact_id"] == preview_a["artifact_id"], (
+            "a retry must reuse the existing preview"
+        )
+        assert (
+            len(blender_stack["artifacts"].list_for_project(PROJECT_ID))
+            == artifacts_before
+            == 2
+        ), "retrying must not accumulate preview artifacts"
+    finally:
+        worker.disconnect()
+
+
+@pytest.mark.blender
+def test_a_served_preview_leaks_no_filesystem_path(blender_stack):
+    """The image BYTES must be as path-free as the JSON responses.
+
+    Blender embeds the .blend path in PNG metadata unless stamping is disabled;
+    this asserts the served artifact really is clean end to end.
+    """
+    http = blender_stack["http"]
+    worker = build_worker(blender_stack["executor"], blender_stack["server"].worker_url)
+    try:
+        assert worker.connect_and_register(timeout=30.0)
+        await_worker_registered(http)
+
+        submission = http.post("/api/chat", json=chat_body("req_e2e_clean")).json()
+        assert handle_until(worker, protocol.JOB_OFFER)
+        status = await_status(http, submission["job_id"], "succeeded")
+
+        image = http.get(status["preview"]["url"])
+        assert image.status_code == 200
+
+        body = image.content.decode("latin-1")
+        project_path = str(blender_stack["project_path"])
+        for leaked in (
+            project_path,
+            "seed_project",
+            ".blend",
+            "/home",
+            "/tmp",
+            TOKEN,
+        ):
+            assert leaked not in body, f"the served PNG leaked {leaked!r}"
+
+        # And no response header discloses a path either.
+        assert project_path not in str(dict(image.headers))
+    finally:
+        worker.disconnect()
+
+
+@pytest.mark.blender
+def test_another_project_cannot_fetch_a_preview_artifact(blender_stack):
+    """Artifact retrieval is project-scoped, exactly like job retrieval."""
+    http = blender_stack["http"]
+    worker = build_worker(blender_stack["executor"], blender_stack["server"].worker_url)
+    try:
+        assert worker.connect_and_register(timeout=30.0)
+        await_worker_registered(http)
+
+        submission = http.post("/api/chat", json=chat_body("req_e2e_iso")).json()
+        assert handle_until(worker, protocol.JOB_OFFER)
+        status = await_status(http, submission["job_id"], "succeeded")
+        artifact_id = status["preview"]["artifact_id"]
+
+        assert http.get(status["preview"]["url"]).status_code == 200
+
+        # Another project, an unknown project, and no scope at all.
+        assert (
+            http.get(f"/api/projects/proj_other/artifacts/{artifact_id}").status_code
+            == 404
+        )
+        assert http.get(f"/api/artifacts/{artifact_id}").status_code == 404
+        assert (
+            http.get(f"/api/artifacts/{artifact_id}?project_id={PROJECT_ID}").status_code
+            == 404
+        )
     finally:
         worker.disconnect()
 

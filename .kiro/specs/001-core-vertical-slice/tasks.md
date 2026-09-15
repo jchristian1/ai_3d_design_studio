@@ -102,9 +102,20 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - Tests: 124 fast (`services/api/tests`), 19 integration with real HTTP + real WebSockets (`tests/integration`), 5 opt-in real-Blender E2E (`tests/e2e`). E2E proves `0.00 → 0.50`, retry of the same `request_id` stays `0.50`, a new `request_id` reaches `1.00`, and a stale retry still leaves `1.00`.
   - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-- [ ] 10. Preview generation
-  - Implement viewport screenshot in `services/preview`; write to object storage; return `preview_url`.
-  - Wire worker step 9 to trigger preview after save.
+- [x] 10. Preview generation
+  - New canonical schemas `artifact-type` (closed enum, `preview_image` only) and `preview-artifact`, mirrored in Python (`studio_types.PreviewArtifact`) and TypeScript, with corpus cases so cross-language verdict parity covers them.
+  - `PreviewArtifact` deliberately carries NO path and NO url: `(project_id, artifact_id)` is the whole address, and the HTTP layer projects the logical URL. A worker must not know the control plane's route shape.
+  - `services/preview` (`studio_preview`): `PreviewGenerator` Protocol returning bytes, `BlenderPreviewGenerator` (headless subprocess, no bpy), `blender_scripts/render_preview.py` (the only bpy code), `FakePreviewGenerator`, `ArtifactStore` Protocol + `LocalArtifactStore`.
+  - Artifact identity is DERIVED from `(project_id, job_id, artifact_type)`, which supplies retry reuse and version history with no counters: a retry resolves to the same artifact, a new `request_id` produces a new one, and an earlier preview is never overwritten.
+  - Camera: the render script adds a temporary camera in memory and NEVER saves the `.blend` (asserted by SHA-256 before/after and by the saved object list). Fixed computed three-quarter framing at (7, -7, 5) looking at the origin, so +X movement is visibly horizontal.
+  - Render settings: `BLENDER_WORKBENCH`, fixed resolution, fixed flat background, fixed AA. No sampling, so output is byte-reproducible; no GPU required, so headless correctness never depends on RTX.
+  - SECURITY FIX found during this task: Blender stamps the absolute `.blend` path into PNG `tEXt` metadata (`File\0/abs/path/project.blend`), and that image is served to the browser. All stamp flags are now disabled, which removed the leak AND made renders deterministic. Regression tests assert the served PNG contains no path, hostname, or text chunk.
+  - Worker lifecycle extended: `mutate → verify → save → generate preview → record preview → complete`, with a new `preview_generated` phase. Preview generation is NON-FATAL (option B): it never raises and never touches `job_status`, so a saved change is never reported as failed. `preview_error` is recorded separately from `error`.
+  - Worker protocol bumped to v2 with `SUPPORTED_PROTOCOL_VERSIONS = (1, 2)`: optional `preview`/`preview_error` on `job_result`, forbidden on other message types and on a failed result. Documented why an additive optional field is still breaking under `additionalProperties: false`, and why the on-disk journal record version was NOT bumped.
+  - `GET /api/projects/{project_id}/artifacts/{artifact_id}` serves the PNG with the correct `Content-Type`, an ETag from the checksum, and immutable private caching. Project-scoped like Task 9 jobs: another project's artifact returns a byte-identical 404, and there is no unscoped route and no listing route.
+  - Store safety: strict `^(preview)_[a-z0-9]{8,64}$` identifier pattern, store-derived filenames, closed media-type→extension map, containment re-checked after symlink resolution. Tests plant a `.blend`, a journal record, a recovery copy and an `.env` holding a token inside the artifact directory and prove none can be fetched.
+  - Job status exposes preview metadata plus the logical URL and never a local path; bytes are never base64-inlined because status is polled.
+  - Tests: 130 fast (50 artifact store, 29 worker preview, 51 API artifact routes), 11 real-Blender rendering, 8 HTTP→agent→worker→Blender→PNG E2E. Verified 0.00→0.50 (artifact A) →1.00 (artifact B, A still retrievable, images differ), and a retry reusing A with no new mutation and no new artifact.
   - _Requirements: 6.1, 6.2_
 
 - [ ] 11. Web app chat + preview UI
