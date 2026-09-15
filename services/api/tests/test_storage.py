@@ -412,6 +412,35 @@ def test_updates_are_persisted(job_store) -> None:
     assert reloaded.preview == {"artifact_id": "preview_1"}
 
 
+def test_saving_a_record_that_does_not_exist_inserts_it(job_store) -> None:
+    """``save`` is an upsert, which the reconciler's adoption path depends on.
+
+    When a worker reports a terminal result for a job this process never recorded (the
+    API-restart case), the reconciler builds a record and calls ``save`` directly. An
+    update-only implementation would silently discard the worker's report.
+    """
+    adopted = JobRecord(
+        job_id="job_from_a_previous_process",
+        project_id="proj_a",
+        session_id="",
+        user_id="",
+        request_id="",
+        operation_index=0,
+        job_type="move_object",
+        idempotency_key="adopted:proj_a:job_from_a_previous_process",
+        job_status="succeeded",
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+        adopted_after_state_loss=True,
+    )
+    job_store.save(adopted)
+
+    stored = job_store.get("proj_a", "job_from_a_previous_process")
+    assert stored is not None
+    assert stored.job_status == "succeeded"
+    assert stored.adopted_after_state_loss is True
+
+
 def test_job_records_survive_a_restart(tmp_path: Path) -> None:
     path = tmp_path / "studio.sqlite3"
     first = StudioDatabase(path)

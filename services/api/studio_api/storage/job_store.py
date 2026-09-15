@@ -107,17 +107,21 @@ class SqliteJobRecordStore:
         return self._from_row(row) if row else None
 
     def save(self, record: JobRecord) -> JobRecord:
-        assignments = ", ".join(
-            f"{column} = ?" for column in _COLUMNS if column not in ("project_id", "job_id")
-        )
-        values = [
-            value
-            for column, value in zip(_COLUMNS, self._to_row(record))
-            if column not in ("project_id", "job_id")
-        ]
+        """Persist a record, inserting it if it does not exist yet.
+
+        ``save`` is an UPSERT, not an update. That is the protocol's real contract, and
+        it is load-bearing: the reconciler's adoption path (a terminal result arriving
+        for a job this process never recorded, after an API restart) constructs a record
+        and calls ``save`` on it directly. A plain UPDATE would match zero rows and lose
+        the worker's report, which is exactly the outcome adoption exists to prevent.
+        """
+        updatable = [column for column in _COLUMNS if column not in ("project_id", "job_id")]
+        assignments = ", ".join(f"{column} = excluded.{column}" for column in updatable)
         self._db.execute(
-            f"UPDATE job_records SET {assignments} WHERE project_id = ? AND job_id = ?",
-            (*values, record.project_id, record.job_id),
+            f"INSERT INTO job_records ({', '.join(_COLUMNS)}) "
+            f"VALUES ({', '.join('?' for _ in _COLUMNS)}) "
+            f"ON CONFLICT(project_id, job_id) DO UPDATE SET {assignments}",
+            self._to_row(record),
         )
         return record
 

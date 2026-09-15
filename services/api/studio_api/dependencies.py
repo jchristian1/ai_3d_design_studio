@@ -35,8 +35,9 @@ from pathlib import Path
 from typing import Optional
 
 from studio_agent import JobFactory
+from studio_agent.design_provider import DesignAgentProvider
 from studio_agent.provider import AgentProvider
-from studio_agent.providers.registry import get_provider
+from studio_agent.providers.registry import get_design_provider, get_provider
 
 # The ARTIFACT STORE only. The control plane must never acquire a dependency on
 # Blender, on subprocess execution, or on the render scripts, so
@@ -45,11 +46,21 @@ from studio_agent.providers.registry import get_provider
 from studio_preview.artifacts import ArtifactStore, LocalArtifactStore
 
 from .chat_service import ChatService
+from .context_builder import ContextBuilder
+from .design_chat import DesignChatService
+from .ingest import ReferenceIngestService
 from .identity import IdentityResolver, default_identity_resolver
 from .job_records import InMemoryJobRecordStore, JobRecordStore
 from .projects import ProjectRegistry, registry_from_ids
 from .reconciliation import JobReconciler
+from .scene_reporting import SceneReporter
 from .settings import Settings
+from .storage import (
+    ReferenceFileStore,
+    SqliteJobRecordStore,
+    StudioDatabase,
+    StudioRepositories,
+)
 from .worker_link.gateway import WorkerGateway
 from .worker_link.manager import WorkerConnectionManager
 from .worker_selection import SingleReadyWorkerSelector, WorkerSelector
@@ -72,6 +83,17 @@ class AppDependencies:
     #: Serves generated preview artifacts (Task 10). Read-only from the control
     #: plane's perspective: the worker writes, the API serves.
     artifacts: ArtifactStore
+    #: Durable workspace state: projects, references, facts, conversation, approvals.
+    repositories: StudioRepositories
+    #: Reference byte storage. Paths live here and never reach a contract.
+    reference_files: ReferenceFileStore
+    ingest: ReferenceIngestService
+    context_builder: ContextBuilder
+    #: The design agent, reached only through its abstraction.
+    design_provider: DesignAgentProvider
+    design_chat: DesignChatService
+    #: Keeps the cached scene and artifact index in step with worker reports.
+    scene_reporter: SceneReporter
     job_factory: JobFactory = field(default_factory=JobFactory)
 
 
@@ -83,6 +105,9 @@ def build_dependencies(
     store: Optional[JobRecordStore] = None,
     manager: Optional[WorkerConnectionManager] = None,
     artifacts: Optional[ArtifactStore] = None,
+    database: Optional[StudioDatabase] = None,
+    design_provider: Optional[DesignAgentProvider] = None,
+    reference_files: Optional[ReferenceFileStore] = None,
 ) -> AppDependencies:
     """Wire the real Spec 001 dependency graph.
 
@@ -90,7 +115,16 @@ def build_dependencies(
     a shared worker manager or a stub provider without touching the wiring.
     """
     resolved_projects = projects or registry_from_ids(settings.project_ids)
-    resolved_store = store or InMemoryJobRecordStore()
+
+    # Durable workspace state. An unset database_path means EPHEMERAL, so a directly
+    # constructed Settings (how tests build an app) gets an isolated in-memory database
+    # rather than sharing one file on disk. `load_settings` supplies the durable path,
+    # so the production entry point persists.
+    resolved_database = database or StudioDatabase(
+        Path(settings.database_path) if settings.database_path else Path(":memory:")
+    )
+    repositories = StudioRepositories(resolved_database)
+    resolved_store = store or SqliteJobRecordStore(resolved_database)
 
     # The root is server-chosen configuration; a request can never influence it.
     resolved_artifacts = artifacts or LocalArtifactStore(
@@ -123,6 +157,44 @@ def build_dependencies(
         job_factory=job_factory,
     )
 
+    # --- the design workspace -------------------------------------------
+    if reference_files is not None:
+        resolved_reference_files = reference_files
+    elif settings.reference_root:
+        resolved_reference_files = ReferenceFileStore(Path(settings.reference_root))
+    else:
+        # Ephemeral, for the same reason as the database: an unconfigured app must not
+        # write uploads into the developer's runtime directory.
+        import tempfile
+
+        resolved_reference_files = ReferenceFileStore(
+            Path(tempfile.mkdtemp(prefix="studio_references_"))
+        )
+    ingest = ReferenceIngestService(
+        repositories=repositories, files=resolved_reference_files
+    )
+    context_builder = ContextBuilder(
+        repositories=repositories, files=resolved_reference_files
+    )
+    resolved_design_provider = design_provider or get_design_provider(
+        settings.design_provider
+    )
+    design_chat = DesignChatService(
+        provider=resolved_design_provider,
+        repositories=repositories,
+        context_builder=context_builder,
+        projects=resolved_projects,
+        store=resolved_store,
+        selector=selector,
+        offer_job=gateway.offer,
+        blender_available=lambda: bool(resolved_manager.available_workers()),
+    )
+
+    # The reporter observes worker traffic, so the cached scene and the artifact index
+    # follow Blender without the gateway knowing either exists.
+    scene_reporter = SceneReporter(repositories=repositories)
+    gateway.observers.append(scene_reporter.observe)
+
     return AppDependencies(
         settings=settings,
         identity_resolver=identity_resolver or default_identity_resolver(settings),
@@ -135,6 +207,13 @@ def build_dependencies(
         reconciler=reconciler,
         chat_service=chat_service,
         artifacts=resolved_artifacts,
+        repositories=repositories,
+        reference_files=resolved_reference_files,
+        ingest=ingest,
+        context_builder=context_builder,
+        design_provider=resolved_design_provider,
+        design_chat=design_chat,
+        scene_reporter=scene_reporter,
         job_factory=job_factory,
     )
 

@@ -29,6 +29,8 @@ origin is a configuration error, not a warning.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import os
 from dataclasses import dataclass, field
 from typing import Mapping, Optional
@@ -48,6 +50,9 @@ ENV_DEVELOPMENT_USER_ID = f"{ENV_PREFIX}DEVELOPMENT_USER_ID"
 ENV_PROJECT_IDS = f"{ENV_PREFIX}PROJECT_IDS"
 ENV_HEARTBEAT_INTERVAL = f"{ENV_PREFIX}HEARTBEAT_INTERVAL_SECONDS"
 ENV_ARTIFACT_ROOT = f"{ENV_PREFIX}ARTIFACT_ROOT"
+ENV_DATABASE_PATH = f"{ENV_PREFIX}DATABASE_PATH"
+ENV_REFERENCE_ROOT = f"{ENV_PREFIX}REFERENCE_ROOT"
+ENV_DESIGN_PROVIDER = f"{ENV_PREFIX}DESIGN_PROVIDER"
 
 #: Shared with the worker (Task 8) on purpose: it is the same pre-shared secret,
 #: so it must not have two different names.
@@ -56,6 +61,17 @@ ENV_WORKER_TOKEN = "STUDIO_WORKER_TOKEN"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 DEFAULT_AGENT_PROVIDER = "rule_based"
+
+#: The design workspace defaults to Astra. Deterministic suites select
+#: "fake_llm" explicitly rather than relying on the default.
+DEFAULT_DESIGN_PROVIDER = "codex_astra"
+
+#: Durable locations used by the production entry point. Plain path arithmetic, so
+#: importing this module never touches the filesystem.
+_RUNTIME_ROOT = Path(__file__).resolve().parents[3] / "runtime"
+
+DEFAULT_DATABASE_PATH = _RUNTIME_ROOT / "studio.sqlite3"
+DEFAULT_REFERENCE_ROOT = _RUNTIME_ROOT / "references"
 DEFAULT_DEVELOPMENT_USER_ID = "user_dev_local"
 DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 15.0
 
@@ -130,6 +146,22 @@ class Settings:
     #: the API reads from there — the same ``ArtifactStore`` boundary, a different
     #: implementation, and no shared filesystem.
     artifact_root: Optional[str] = None
+    #: Where the durable workspace database lives.
+    #:
+    #: ``None`` means EPHEMERAL: an in-memory database scoped to this application
+    #: instance. That is the right default for a directly constructed ``Settings``,
+    #: which is how tests build an app -- otherwise every test would share one file on
+    #: disk and leak state into the next, and running the suite would write into the
+    #: developer's real runtime directory. ``load_settings`` fills in the durable
+    #: default, so the production entry point persists.
+    database_path: Optional[str] = None
+    #: Where uploaded reference bytes live. ``None`` means a temporary directory, for
+    #: the same reason as ``database_path``.
+    reference_root: Optional[str] = None
+    #: The design agent. Configuration, never code: "codex_astra" reaches GPT-6 Astra
+    #: through the local Codex client, "fake_llm" is the offline scripted provider, and
+    #: any Spec 001 provider name still works through the legacy adapter.
+    design_provider: str = "codex_astra"
 
     @property
     def is_local(self) -> bool:
@@ -206,6 +238,10 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
         project_ids=project_ids,
         heartbeat_interval_seconds=heartbeat,
         artifact_root=get(ENV_ARTIFACT_ROOT) or None,
+        # Durable by default here, because this is the production entry point.
+        database_path=get(ENV_DATABASE_PATH) or str(DEFAULT_DATABASE_PATH),
+        reference_root=get(ENV_REFERENCE_ROOT) or str(DEFAULT_REFERENCE_ROOT),
+        design_provider=get(ENV_DESIGN_PROVIDER, DEFAULT_DESIGN_PROVIDER),
     )
 
 
@@ -219,6 +255,12 @@ __all__ = [
     "ENV_ALLOWED_ORIGINS",
     "ENV_AGENT_PROVIDER",
     "ENV_ARTIFACT_ROOT",
+    "ENV_DATABASE_PATH",
+    "ENV_DESIGN_PROVIDER",
+    "ENV_REFERENCE_ROOT",
+    "DEFAULT_DESIGN_PROVIDER",
+    "DEFAULT_DATABASE_PATH",
+    "DEFAULT_REFERENCE_ROOT",
     "ENV_DEVELOPMENT_USER_ID",
     "ENV_ENVIRONMENT",
     "ENV_HOST",
