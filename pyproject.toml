@@ -5,6 +5,7 @@ pythonpath = [
     "packages/contracts/python",
     "packages/validation/python",
     "packages/spatial/python",
+    "services/blender-mcp",
 ]
 testpaths = [
     "packages",
@@ -12,3 +13,10 @@ testpaths = [
     "tests",
 ]
 python_files = ["test_*.py", "*_test.py"]
+
+# Real-Blender integration tests are opt-in: they launch Blender and are far
+# slower than the unit suite. Run them with:  pytest -m blender
+addopts = "-m 'not blender'"
+markers = [
+    "blender: requires a real Blender executable (opt-in, slow)",
+]

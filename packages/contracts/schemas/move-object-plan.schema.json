@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "move-object-plan.schema.json",
+  "title": "MoveObjectPlan",
+  "description": "A retry-safe execution plan for a single move_object mutation. This is the MCP request contract. It carries absolute world-space endpoints, not just a relative delta, so execution can distinguish 'not yet applied' from 'already applied' from 'the scene changed underneath us'. A blind `location += delta` is unsafe across a crash/retry window: if the move was applied and saved but completion was never recorded, replaying the delta would double the movement. desired_after_meters must equal expected_before_meters + delta_meters; JSON Schema cannot express that arithmetic, so the service verifies it with the same documented position tolerance used everywhere else. The plan contains fully resolved canonical meters only — no units, no direction tokens, no natural language.",
+  "type": "object",
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Identity of the job this execution belongs to, echoed in the result for correlation."
+    },
+    "target": { "$ref": "object-ref.schema.json" },
+    "expected_before_meters": {
+      "$ref": "vec3.schema.json",
+      "description": "World-space position the plan was computed against."
+    },
+    "delta_meters": {
+      "$ref": "vec3.schema.json",
+      "description": "The semantic movement, in canonical meters."
+    },
+    "desired_after_meters": {
+      "$ref": "vec3.schema.json",
+      "description": "Absolute target position = expected_before_meters + delta_meters."
+    }
+  },
+  "required": [
+    "job_id",
+    "target",
+    "expected_before_meters",
+    "delta_meters",
+    "desired_after_meters"
+  ],
+  "additionalProperties": false
+}

@@ -90,9 +90,12 @@ export interface ChatRequest {
 export type ErrorCode =
   | "VALIDATION_ERROR"
   | "OBJECT_NOT_FOUND"
+  | "OBJECT_NOT_MOVABLE"
   | "INVALID_UNITS"
+  | "PRECONDITION_MISMATCH"
   | "LOCK_CONFLICT"
   | "BLENDER_UNAVAILABLE"
+  | "MUTATION_FAILED"
   | "VERIFY_FAILED"
   | "INTERNAL_ERROR";
 
@@ -120,9 +123,12 @@ export interface ChatResponse {
 export const ERROR_CODES: readonly ErrorCode[] = [
   "VALIDATION_ERROR",
   "OBJECT_NOT_FOUND",
+  "OBJECT_NOT_MOVABLE",
   "INVALID_UNITS",
+  "PRECONDITION_MISMATCH",
   "LOCK_CONFLICT",
   "BLENDER_UNAVAILABLE",
+  "MUTATION_FAILED",
   "VERIFY_FAILED",
   "INTERNAL_ERROR",
 ] as const;
@@ -137,6 +143,8 @@ export const SCHEMA_FILES = {
   JobType: "job-type.schema.json",
   JobClaim: "job-claim.schema.json",
   RequestOrigin: "request-origin.schema.json",
+  MoveObjectPlan: "move-object-plan.schema.json",
+  MoveObjectResult: "move-object-result.schema.json",
   ObjectRef: "object-ref.schema.json",
   MoveObjectPayload: "move-object-payload.schema.json",
   ChatRequest: "chat-request.schema.json",

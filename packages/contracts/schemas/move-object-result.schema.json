@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "move-object-result.schema.json",
+  "title": "MoveObjectResult",
+  "description": "The structured outcome of a move_object execution. Machine-readable by design: a caller decides what happened from `applied`, `already_applied`, `verified` and `error`, never from prose. The conditionals below make the invariants unfakeable: a failure can never claim to have applied or verified anything, a success is never reported without verification, and applied/already_applied are mutually exclusive.",
+  "type": "object",
+  "properties": {
+    "job_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "target": {
+      "$ref": "object-ref.schema.json",
+      "description": "The reference that was requested."
+    },
+    "resolved_object": {
+      "$ref": "object-ref.schema.json",
+      "description": "What the reference actually resolved to in the scene."
+    },
+    "previous_position_meters": {
+      "$ref": "vec3.schema.json",
+      "description": "World-space position read before any mutation. Absent if the object could not be read."
+    },
+    "requested_delta_meters": { "$ref": "vec3.schema.json" },
+    "final_position_meters": {
+      "$ref": "vec3.schema.json",
+      "description": "World-space position read back after the operation. Absent if the object could not be read."
+    },
+    "applied": {
+      "type": "boolean",
+      "description": "True only when this execution performed the mutation."
+    },
+    "already_applied": {
+      "type": "boolean",
+      "description": "True when the scene was already at desired_after_meters, so nothing was moved. This is the retry-safe success path."
+    },
+    "verified": {
+      "type": "boolean",
+      "description": "True only when the position was read back and matches desired_after_meters within the documented tolerance."
+    },
+    "error": { "$ref": "error-response.schema.json" }
+  },
+  "required": [
+    "job_id",
+    "target",
+    "requested_delta_meters",
+    "applied",
+    "already_applied",
+    "verified"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "A failure must not claim to have applied or verified anything.",
+      "if": { "required": ["error"] },
+      "then": {
+        "properties": {
+          "applied": { "const": false },
+          "verified": { "const": false }
+        }
+      }
+    },
+    {
+      "description": "A mutation is never reported as applied unless it was verified.",
+      "if": {
+        "properties": { "applied": { "const": true } },
+        "required": ["applied"]
+      },
+      "then": {
+        "properties": { "verified": { "const": true } },
+        "required": ["final_position_meters"]
+      }
+    },
+    {
+      "description": "applied and already_applied are mutually exclusive.",
+      "not": {
+        "properties": {
+          "applied": { "const": true },
+          "already_applied": { "const": true }
+        },
+        "required": ["applied", "already_applied"]
+      }
+    },
+    {
+      "description": "The already-applied path is a verified success with a known position.",
+      "if": {
+        "properties": { "already_applied": { "const": true } },
+        "required": ["already_applied"]
+      },
+      "then": {
+        "properties": { "verified": { "const": true } },
+        "required": ["final_position_meters"]
+      }
+    }
+  ]
+}

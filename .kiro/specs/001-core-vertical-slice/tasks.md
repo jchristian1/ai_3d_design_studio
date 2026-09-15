@@ -35,11 +35,14 @@ Each task is incremental, references requirements, and ends in verifiable behavi
   - Persistence/queue boundary defined as `JobStore`/`JobClaimer` interfaces only. No Redis, no database, no worker loop.
   - _Requirements: 2.2, 2.3_
 
-- [ ] 4. MCP `move_object` tool
-  - Implement `move_object(object_ref, delta_x_m, delta_y_m, delta_z_m)` in `services/blender-mcp`.
-  - Validate object existence and finite meter deltas; return resulting `position_m`.
-  - Exclude arbitrary `execute_python` from the normal interface.
-  - MCP test: Cube X=0 + delta_x=0.50 ⇒ X=0.50; invalid object ⇒ `OBJECT_NOT_FOUND`; bad units ⇒ `INVALID_UNITS`.
+- [x] 4. MCP `move_object` tool
+  - Layered as MCP handler → `move_object` service → `SceneAdapter` → bpy, so domain behaviour is testable with an in-memory fake and only a few tests need real Blender.
+  - Retry-safe absolute execution: canonical `MoveObjectPlan` carries `expected_before_meters`, `delta_meters`, `desired_after_meters`. Three paths — already-applied (no mutation), apply (absolute write + read-back verification), conflict (`PRECONDITION_MISMATCH`, no mutation).
+  - The Job keeps storing relative `delta_meters` unchanged; `plan_from_delta` derives the absolute endpoints.
+  - One documented magnitude-aware position tolerance (`tolerance.py`) used for all three comparisons, calibrated against measured Blender float32 round-trip error.
+  - Structured `MoveObjectResult` with `applied` / `already_applied` / `verified` / `error`; schema conditionals forbid a failure claiming success or an unverified apply.
+  - Added error codes `PRECONDITION_MISMATCH`, `MUTATION_FAILED`, `OBJECT_NOT_MOVABLE`.
+  - No `execute_python`, no network listener, no MCP SDK dependency; bpy isolated to one module (all AST-verified).
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
 - [ ] 5. Seed test Blender project

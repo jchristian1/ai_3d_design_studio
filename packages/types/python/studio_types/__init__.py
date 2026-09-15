@@ -168,6 +168,52 @@ JOB_PAYLOAD_BY_TYPE: dict[str, type] = {"move_object": MoveObjectPayload}
 
 
 # ---------------------------------------------------------------------------
+# MCP execution contracts (Spec 001, Task 4)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MoveObjectPlan:
+    """A retry-safe execution plan for one move_object mutation.
+
+    Carries absolute world-space endpoints, not just a relative delta, so
+    execution can tell "not yet applied" from "already applied" from "the scene
+    changed underneath us". ``desired_after_meters`` must equal
+    ``expected_before_meters + delta_meters``.
+
+    Canonical schema: ``move-object-plan.schema.json``
+    """
+
+    job_id: str
+    target: ObjectRef
+    expected_before_meters: Vec3
+    delta_meters: Vec3
+    desired_after_meters: Vec3
+
+
+@dataclass(frozen=True)
+class MoveObjectResult:
+    """The structured outcome of a move_object execution.
+
+    Machine-readable by design: callers decide what happened from ``applied``,
+    ``already_applied``, ``verified`` and ``error``, never from prose.
+
+    Canonical schema: ``move-object-result.schema.json``
+    """
+
+    job_id: str
+    target: ObjectRef
+    requested_delta_meters: Vec3
+    applied: bool
+    already_applied: bool
+    verified: bool
+    resolved_object: Optional[ObjectRef] = None
+    previous_position_meters: Optional[Vec3] = None
+    final_position_meters: Optional[Vec3] = None
+    error: Optional[Any] = None
+
+
+# ---------------------------------------------------------------------------
 # Spatial vocabulary (Spec 001, Task 2)
 # ---------------------------------------------------------------------------
 

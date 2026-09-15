@@ -78,6 +78,18 @@
         {
           "name": "verify failed",
           "data": "VERIFY_FAILED"
+        },
+        {
+          "name": "precondition mismatch",
+          "data": "PRECONDITION_MISMATCH"
+        },
+        {
+          "name": "mutation failed",
+          "data": "MUTATION_FAILED"
+        },
+        {
+          "name": "object not movable",
+          "data": "OBJECT_NOT_MOVABLE"
         }
       ],
       "invalid": [
@@ -1507,6 +1519,522 @@
         {
           "name": "not an object",
           "data": "req_abc123"
+        }
+      ]
+    },
+    {
+      "schema": "move-object-plan.schema.json",
+      "valid": [
+        {
+          "name": "spec plan: Cube 0 -> +0.50 X",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "expected_before_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "desired_after_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "plan by stable object id",
+          "data": {
+            "job_id": "job_2",
+            "target": {
+              "object_id": "obj_8d83f"
+            },
+            "expected_before_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "delta_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 2.4
+            },
+            "desired_after_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 2.4
+            }
+          }
+        },
+        {
+          "name": "zero movement plan",
+          "data": {
+            "job_id": "job_3",
+            "target": {
+              "name": "Cube"
+            },
+            "expected_before_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "delta_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "desired_after_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "missing desired_after_meters",
+          "data": {
+            "job_id": "job_4",
+            "target": {
+              "name": "Cube"
+            },
+            "expected_before_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "missing expected_before_meters",
+          "data": {
+            "job_id": "job_5",
+            "target": {
+              "name": "Cube"
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "desired_after_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "missing job_id",
+          "data": {
+            "target": {
+              "name": "Cube"
+            },
+            "expected_before_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "desired_after_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "malformed target",
+          "data": {
+            "job_id": "job_6",
+            "target": {},
+            "expected_before_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "desired_after_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "unresolved unit string as coordinate",
+          "data": {
+            "job_id": "job_7",
+            "target": {
+              "name": "Cube"
+            },
+            "expected_before_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "delta_meters": {
+              "x": "50 cm",
+              "y": 0,
+              "z": 0
+            },
+            "desired_after_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "unresolved direction field leaks in",
+          "data": {
+            "job_id": "job_8",
+            "target": {
+              "name": "Cube"
+            },
+            "expected_before_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "desired_after_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "direction": "right"
+          }
+        },
+        {
+          "name": "unresolved unit field leaks in",
+          "data": {
+            "job_id": "job_9",
+            "target": {
+              "name": "Cube"
+            },
+            "expected_before_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "desired_after_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "unit": "cm"
+          }
+        },
+        {
+          "name": "not an object",
+          "data": "move Cube"
+        }
+      ]
+    },
+    {
+      "schema": "move-object-result.schema.json",
+      "valid": [
+        {
+          "name": "applied and verified",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "resolved_object": {
+              "name": "Cube"
+            },
+            "previous_position_meters": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "final_position_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": true,
+            "already_applied": false,
+            "verified": true
+          }
+        },
+        {
+          "name": "already applied on retry",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "resolved_object": {
+              "name": "Cube"
+            },
+            "previous_position_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "final_position_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": false,
+            "already_applied": true,
+            "verified": true
+          }
+        },
+        {
+          "name": "conflict error",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "previous_position_meters": {
+              "x": 0.25,
+              "y": 0,
+              "z": 0
+            },
+            "applied": false,
+            "already_applied": false,
+            "verified": false,
+            "error": {
+              "code": "PRECONDITION_MISMATCH",
+              "message": "scene moved"
+            }
+          }
+        },
+        {
+          "name": "object not found error",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": false,
+            "already_applied": false,
+            "verified": false,
+            "error": {
+              "code": "OBJECT_NOT_FOUND",
+              "message": "no object 'Cube'"
+            }
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "name": "error claiming applied",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": true,
+            "already_applied": false,
+            "verified": true,
+            "final_position_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "error": {
+              "code": "VERIFY_FAILED",
+              "message": "mismatch"
+            }
+          }
+        },
+        {
+          "name": "error claiming verified",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": false,
+            "already_applied": false,
+            "verified": true,
+            "error": {
+              "code": "VERIFY_FAILED",
+              "message": "mismatch"
+            }
+          }
+        },
+        {
+          "name": "applied without verification",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "final_position_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": true,
+            "already_applied": false,
+            "verified": false
+          }
+        },
+        {
+          "name": "applied without a final position",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": true,
+            "already_applied": false,
+            "verified": true
+          }
+        },
+        {
+          "name": "applied and already_applied both true",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "final_position_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": true,
+            "already_applied": true,
+            "verified": true
+          }
+        },
+        {
+          "name": "already_applied without verification",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "final_position_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": false,
+            "already_applied": true,
+            "verified": false
+          }
+        },
+        {
+          "name": "missing outcome flags",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            }
+          }
+        },
+        {
+          "name": "extra property",
+          "data": {
+            "job_id": "job_1",
+            "target": {
+              "name": "Cube"
+            },
+            "requested_delta_meters": {
+              "x": 0.5,
+              "y": 0,
+              "z": 0
+            },
+            "applied": false,
+            "already_applied": false,
+            "verified": false,
+            "message": "moved it"
+          }
         }
       ]
     }

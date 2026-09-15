@@ -2,14 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "error-code.schema.json",
   "title": "ErrorCode",
-  "description": "Structured, machine-readable error codes surfaced across every service boundary. This enum is the single canonical list; TypeScript and Python constants are verified against it by conformance tests.",
+  "description": "Structured, machine-readable error codes surfaced across every service boundary. This enum is the single canonical list; TypeScript and Python constants are verified against it by conformance tests. The codes are distinct because callers must react differently: PRECONDITION_MISMATCH means the scene moved under us and a human decision is needed; MUTATION_FAILED means the write itself failed and may be retried; VERIFY_FAILED means the write appeared to succeed but the scene disagrees and must be rolled back; OBJECT_NOT_MOVABLE means the target is locked or linked and no retry will help.",
   "type": "string",
   "enum": [
     "VALIDATION_ERROR",
     "OBJECT_NOT_FOUND",
+    "OBJECT_NOT_MOVABLE",
     "INVALID_UNITS",
+    "PRECONDITION_MISMATCH",
     "LOCK_CONFLICT",
     "BLENDER_UNAVAILABLE",
+    "MUTATION_FAILED",
     "VERIFY_FAILED",
     "INTERNAL_ERROR"
   ]
