@@ -53,6 +53,7 @@ from .identity import IdentityResolver, default_identity_resolver
 from .job_records import InMemoryJobRecordStore, JobRecordStore
 from .projects import ProjectRegistry, registry_from_ids
 from .reconciliation import JobReconciler
+from .scene_grounding import SceneGrounder
 from .scene_reporting import SceneReporter
 from .settings import Settings
 from .storage import (
@@ -94,6 +95,8 @@ class AppDependencies:
     design_chat: DesignChatService
     #: Keeps the cached scene and artifact index in step with worker reports.
     scene_reporter: SceneReporter
+    #: Reads the project before the first turn about it.
+    scene_grounder: SceneGrounder
     job_factory: JobFactory = field(default_factory=JobFactory)
 
 
@@ -187,13 +190,35 @@ def build_dependencies(
         store=resolved_store,
         selector=selector,
         offer_job=gateway.offer,
-        blender_available=lambda: bool(resolved_manager.available_workers()),
+        blender_available=lambda: bool(resolved_manager.live_workers()),
     )
 
     # The reporter observes worker traffic, so the cached scene and the artifact index
     # follow Blender without the gateway knowing either exists.
     scene_reporter = SceneReporter(repositories=repositories)
     gateway.observers.append(scene_reporter.observe)
+
+    # Reads the project before the first turn about it. Constructed after the gateway
+    # because it dispatches through it, and given to the chat service so a turn is never
+    # planned against an unread project.
+    #
+    # `scene_grounding_timeout_seconds` is the master switch. Zero — the default for a
+    # directly constructed Settings, which is the shape tests use — means the platform
+    # does not read projects on its own, so a test's Blender stays untouched until the
+    # test asks for something. `load_settings` turns it on for the real entry point.
+    scene_grounder = SceneGrounder(
+        repositories=repositories,
+        store=resolved_store,
+        selector=selector,
+        offer_job=gateway.offer,
+        timeout_seconds=settings.scene_grounding_timeout_seconds,
+        project_ids=tuple(settings.project_ids),
+    )
+    if settings.scene_grounding_timeout_seconds > 0:
+        design_chat.ground_scene = scene_grounder.ensure
+        # Read the projects as soon as a worker connects, so the first message a user
+        # sends is already grounded and no request has to wait for Blender.
+        gateway.observers.append(scene_grounder.observe)
 
     return AppDependencies(
         settings=settings,
@@ -214,6 +239,7 @@ def build_dependencies(
         design_provider=resolved_design_provider,
         design_chat=design_chat,
         scene_reporter=scene_reporter,
+        scene_grounder=scene_grounder,
         job_factory=job_factory,
     )
 

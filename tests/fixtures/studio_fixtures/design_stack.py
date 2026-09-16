@@ -245,6 +245,7 @@ def build_design_stack(
     llm: Optional[FakeLlmProvider] = None,
     backend: Optional[Any] = None,
     project_source: Optional[Path] = None,
+    scene_grounding_timeout: float = 0.0,
     connect: bool = True,
 ) -> Any:
     """Build and start the offline design stack. Use as a context manager::
@@ -311,6 +312,11 @@ def build_design_stack(
             # The design provider is injected below; naming the fake here as well keeps
             # the settings honest about which engine this app is running.
             design_provider="fake_llm",
+            # Zero by default: this harness pumps the worker BY HAND, so a chat
+            # request that waited for a scene report would be waiting for a pump the
+            # test has not performed yet. Tests about grounding pass a real budget
+            # and pump from another thread, which is what a real worker does.
+            scene_grounding_timeout_seconds=scene_grounding_timeout,
         )
         # One in-memory database per stack: isolated, and never touching the developer's
         # runtime directory.

@@ -138,6 +138,10 @@ class DesignChatService:
     ).isoformat())
     #: Injected so a test can assert behaviour without a worker.
     blender_available: Callable[[], bool] = field(default=lambda: True)
+    #: Reads the project before the FIRST turn about it, so the agent is never asked to
+    #: design blind. Returns whether a scene is available afterwards. Optional: without
+    #: it the turn still works, it just starts without a scene.
+    ground_scene: Optional[Callable[..., bool]] = None
 
     # -- the turn ----------------------------------------------------------
     def submit(
@@ -168,6 +172,22 @@ class DesignChatService:
 
         pending = self.repositories.clarifications.open_for_project(request.project_id)
 
+        # Read the project before reasoning about it. Only on the first turn about a
+        # project: after that the cache follows every job. Without this the model is told
+        # the project has not been read, and its most natural reply — "let me check the
+        # scene first" — is an answer, which changes nothing and strands the user.
+        blender_available = self.blender_available()
+        if (
+            self.ground_scene is not None
+            and blender_available
+            and self.repositories.scenes.get(request.project_id) is None
+        ):
+            self.ground_scene(
+                request.project_id,
+                session_id=request.session_id,
+                user_id=identity.user_id,
+            )
+
         agent_input = self.context_builder.build(
             user_text=request.message,
             user_id=identity.user_id,
@@ -176,7 +196,7 @@ class DesignChatService:
             attached_reference_ids=request.attached_reference_ids,
             selected_object_id=request.selected_object_id,
             scene=self._scene(request.project_id),
-            blender_available=self.blender_available(),
+            blender_available=blender_available,
         )
 
         outcome = self.provider.respond(agent_input)

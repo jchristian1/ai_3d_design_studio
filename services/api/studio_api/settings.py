@@ -65,7 +65,9 @@ DEFAULT_AGENT_PROVIDER = "rule_based"
 #: The design workspace defaults to Astra. Deterministic suites select
 #: "fake_llm" explicitly rather than relying on the default.
 DEFAULT_DESIGN_PROVIDER = "codex_astra"
-
+#: A local headless scene read takes a few seconds. This bound exists only for the case
+#: where a user's very first message beats the read that starts at worker registration.
+DEFAULT_SCENE_GROUNDING_TIMEOUT_SECONDS = 30.0
 #: Durable locations used by the production entry point. Plain path arithmetic, so
 #: importing this module never touches the filesystem.
 _RUNTIME_ROOT = Path(__file__).resolve().parents[3] / "runtime"
@@ -162,6 +164,15 @@ class Settings:
     #: through the local Codex client, "fake_llm" is the offline scripted provider, and
     #: any Spec 001 provider name still works through the legacy adapter.
     design_provider: str = "codex_astra"
+    #: How long a first design message may wait for Blender to report the project's
+    #: scene, so the agent is not asked to design blind.
+    #:
+    #: ZERO is the default for a directly constructed ``Settings`` — the shape tests
+    #: use — because a test that drives the worker by hand would otherwise block its own
+    #: request waiting for a report it has not pumped yet. ``load_settings`` supplies a
+    #: real budget, and in practice the wait never happens: the scene is read when the
+    #: worker connects, long before anyone types.
+    scene_grounding_timeout_seconds: float = 0.0
 
     @property
     def is_local(self) -> bool:
@@ -242,6 +253,9 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
         database_path=get(ENV_DATABASE_PATH) or str(DEFAULT_DATABASE_PATH),
         reference_root=get(ENV_REFERENCE_ROOT) or str(DEFAULT_REFERENCE_ROOT),
         design_provider=get(ENV_DESIGN_PROVIDER, DEFAULT_DESIGN_PROVIDER),
+        # A real budget here, because this is the production entry point. It should
+        # rarely be used: the scene is read when the worker connects.
+        scene_grounding_timeout_seconds=DEFAULT_SCENE_GROUNDING_TIMEOUT_SECONDS,
     )
 
 

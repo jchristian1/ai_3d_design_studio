@@ -59,6 +59,14 @@ RESPOND ONLY with the JSON shape you have been given. Choose exactly one kind:
   clear question in plain language and list the machine-readable names of what is missing.
 - "plan" when you can act. Provide ordered operations.
 
+YOU CANNOT LOOK AT ANYTHING BETWEEN TURNS. There is no step after your reply where you
+inspect something and continue. Everything you can see is already in this prompt,
+including the current scene. So NEVER say you will check, look at, inspect or verify
+something first — that is an "answer", it changes nothing, and it leaves the user waiting
+for work that will never happen. If you have what you need, send a "plan". If a
+measurement is genuinely missing, send a "clarification". If you truly need a fresh read
+of the project, make inspect_scene the FIRST operation of a plan.
+
 NEVER INVENT ARCHITECTURE. If a required dimension is missing, ask for it. Specifically:
 - If no ceiling height is known and you need one, ask for it.
 - If no scale is established from a plan, ask for one known real-world dimension.
@@ -117,7 +125,13 @@ Never mention Python, Blender operators, capability names, file paths or job ide
 
 def _describe_scene(scene: Optional[SceneSnapshot]) -> str:
     if scene is None:
-        return "The Blender project has not been read yet."
+        # Only happens when the design machine could not be read at all. Say what that
+        # means for this turn, so the model does not offer to go and look.
+        return (
+            "The Blender project could NOT be read for this turn, so you do not know what "
+            "is in it. Do not guess what exists. If the user asked for a change, say with "
+            'kind="answer" that the project could not be read right now.'
+        )
     if not scene.objects:
         return "The Blender project is currently empty."
     lines = [f"The project currently contains {len(scene.objects)} objects:"]

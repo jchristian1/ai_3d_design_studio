@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from studio_contracts import to_wire
+from studio_contracts.capabilities import is_mutating_capability
 from studio_contracts.jobs import validate_job
 
 from . import phases
@@ -280,7 +281,14 @@ class CapabilityPlanExecutor:
                 )
 
         # ---- one recovery point for the whole plan ----------------------
-        if not record.recovery:
+        # Only for a plan that can actually change the project. A read-only plan (the
+        # control plane grounding itself with inspect_scene) would otherwise copy the
+        # whole .blend every time a project is opened, for nothing to recover from.
+        mutates = any(
+            is_mutating_capability(str(operation.get("capability") or ""))
+            for operation in operations
+        )
+        if mutates and not record.recovery:
             recovery_path = self._create_recovery_copy(record, project_path)
             record.recovery = {
                 "path": str(recovery_path),
@@ -538,6 +546,11 @@ class CapabilityPlanExecutor:
         whose end state is expressible: if a step's desired state would have made it a
         no-op beforehand, then after running it that state must hold.
         """
+        if not is_mutating_capability(capability):
+            # A read changes nothing, so there is no end state to confirm. Asking
+            # "did the scene become what this step wanted?" of inspect_scene is a
+            # category error, and answering it with False failed the whole plan.
+            return True
         if capability in (names.EXECUTE_BLENDER_PYTHON, names.CREATE_OPENING, names.DUPLICATE_OBJECT):
             # No declared end state to check. The capability's own read-back inside
             # Blender is the only evidence available, and it already succeeded.

@@ -252,6 +252,21 @@ class WorkerConnectionManager:
             if self.liveness_of(worker_id) == HEALTHY
         )
 
+    def live_workers(self) -> list[str]:
+        """Registered and alive, INCLUDING busy ones.
+
+        The distinction matters to the user. ``available_workers`` answers "who can take
+        a job right now", which is a scheduling question. This answers "is the design
+        machine connected", which is what a person is told. Conflating them meant that
+        asking for a second change while the first was still running reported the machine
+        as offline.
+        """
+        return sorted(
+            worker_id
+            for worker_id in self.workers
+            if self.liveness_of(worker_id) in (HEALTHY, BUSY)
+        )
+
     def forget(self, worker_id: str) -> None:
         """Drop a worker, e.g. after its connection closes."""
         self.workers.pop(worker_id, None)
