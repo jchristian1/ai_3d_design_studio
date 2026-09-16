@@ -25,6 +25,7 @@ from studio_types import SceneSnapshot
 from ..agent_input import AgentInput
 from ..codex import (
     ASTRA_MODEL,
+    CAREFUL_REASONING_EFFORT,
     CONNECTED,
     CodexClient,
     CodexError,
@@ -352,6 +353,9 @@ class CodexAstraProvider:
             images,
             agent_input,
             self._metadata(),
+            # Think harder for the second attempt: the cheap setting already produced
+            # something that did not fit, and a third rejection ends the conversation.
+            reasoning_effort=CAREFUL_REASONING_EFFORT,
         )
         if _is_validation_error(corrected):
             _log.warning(
@@ -378,10 +382,13 @@ class CodexAstraProvider:
         images: list[Any],
         agent_input: AgentInput,
         metadata: ProviderMetadata,
+        reasoning_effort: Optional[str] = None,
     ) -> tuple[AgentOutcome, Any]:
         """One model call. Returns the outcome and the raw body it came from."""
         try:
-            raw = self.client.complete(prompt, schema=schema, images=images)
+            raw = self.client.complete(
+                prompt, schema=schema, images=images, reasoning_effort=reasoning_effort
+            )
         except CodexError as error:
             return (
                 AgentError(

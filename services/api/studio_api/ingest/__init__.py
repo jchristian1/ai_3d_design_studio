@@ -9,6 +9,7 @@ from .documents import (
     ingest_pdf,
     read_image_facts,
 )
+from .model_copies import MODEL_LONG_EDGE, ModelCopyMaker
 from .service import IngestResult, ReferenceIngestService, new_reference_id
 from .validation import (
     MAX_DOCUMENT_BYTES,
@@ -30,6 +31,8 @@ __all__ = [
     "MAX_DOCUMENT_BYTES",
     "MAX_IMAGE_BYTES",
     "MAX_PDF_BYTES",
+    "MODEL_LONG_EDGE",
+    "ModelCopyMaker",
     "PdfIngestion",
     "ReferenceIngestService",
     "RenderedPage",

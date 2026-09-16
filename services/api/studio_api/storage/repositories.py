@@ -135,6 +135,49 @@ class ProjectRepository:
         )
 
 
+class ReferenceDeliveryRepository:
+    """Which references the model has already been shown, per session.
+
+    Images are the most expensive thing in a prompt. Once a sketch has been sent and its
+    dimensions recorded as facts, sending it again on every later message buys nothing and
+    costs the user's allowance repeatedly — the difference between a cheap session and one
+    that "eats tokens without doing anything".
+
+    Scoped to a SESSION, not a project: a new session is a new conversation, and a model
+    that has never seen the drawing in this conversation needs to.
+    """
+
+    def __init__(self, database: StudioDatabase) -> None:
+        self._db = database
+
+    def record(self, project_id: str, session_id: str, reference_ids: Iterable[str]) -> None:
+        for reference_id in reference_ids:
+            self._db.execute(
+                """
+                INSERT INTO reference_deliveries
+                    (project_id, session_id, reference_id, delivered_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(project_id, session_id, reference_id) DO UPDATE SET
+                    delivered_at = excluded.delivered_at
+                """,
+                (project_id, session_id, reference_id, utc_now()),
+            )
+
+    def delivered_ids(self, project_id: str, session_id: str) -> set[str]:
+        rows = self._db.query_all(
+            "SELECT reference_id FROM reference_deliveries "
+            "WHERE project_id = ? AND session_id = ?",
+            (project_id, session_id),
+        )
+        return {row["reference_id"] for row in rows}
+
+    def forget(self, project_id: str, reference_id: str) -> None:
+        self._db.execute(
+            "DELETE FROM reference_deliveries WHERE project_id = ? AND reference_id = ?",
+            (project_id, reference_id),
+        )
+
+
 class ReferenceRepository:
     def __init__(self, database: StudioDatabase) -> None:
         self._db = database
@@ -684,6 +727,7 @@ class StudioRepositories:
         self.analyses = AnalysisCacheRepository(database)
         self.artifacts = ArtifactIndexRepository(database)
         self.scenes = SceneRepository(database)
+        self.deliveries = ReferenceDeliveryRepository(database)
 
     def close(self) -> None:
         self.database.close()

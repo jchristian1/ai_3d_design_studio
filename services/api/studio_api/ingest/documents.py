@@ -25,7 +25,11 @@ _log = logging.getLogger(__name__)
 
 #: Rendered pages are sized so a plan's dimension labels stay legible without the
 #: image becoming enormous. Measured against real A3 plans.
-TARGET_LONG_EDGE_PIXELS: Final = 2200
+#:
+#: Reduced from 2200: what is sent to the model is a downscaled copy (see
+#: `ingest.model_copies`), and the browser shows pages at strip size, so the extra pixels
+#: only cost render time and disk. 1600 still resolves handwritten dimensions.
+TARGET_LONG_EDGE_PIXELS: Final = 1600
 MIN_RENDER_SCALE: Final = 1.0
 MAX_RENDER_SCALE: Final = 4.0
 

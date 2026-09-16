@@ -113,23 +113,22 @@ def test_a_reference_mentioned_by_name_is_included_without_being_attached(parts)
     assert not any("sofa" in label for label in labels)
 
 
-def test_a_non_visual_message_about_an_existing_model_attaches_nothing(parts) -> None:
-    """Once there is a model, chatter does not re-send the plans.
+def test_a_reference_is_shown_once_and_not_on_every_later_message(parts) -> None:
+    """A file is worth its tokens the first time and not again.
 
-    Before there is one, it does — see
-    `test_a_project_with_nothing_built_yet_always_shows_its_references`. That asymmetry is
-    the point: while nothing is built, every message is still about the drawings.
+    What the model LEARNED from it persists as text — its own reply is in the transcript,
+    and anything it confirmed is a recorded fact — so re-sending the pixels buys nothing.
     """
     builder, ingest, _ = parts
     ingest.ingest(PROJECT, "floor-plan.pdf", pdf_bytes(pages=1))
-    agent_input = build(
-        builder,
-        user_text="thanks, that is all for today",
-        scene=_scene_with_one_wall(),
-    )
-    assert agent_input.images == ()
+
+    first = build(builder, user_text="build this")
+    assert len(first.images) == 1, "the model must see a new upload once"
+
+    later = build(builder, user_text="thanks, that is all for today")
+    assert later.images == ()
     # But the agent is still told the reference exists, so it can ask for it.
-    assert any("floor-plan.pdf" in summary for summary in agent_input.reference_summaries)
+    assert any("floor-plan.pdf" in summary for summary in later.reference_summaries)
 
 
 def test_a_visual_message_falls_back_to_recent_references(parts) -> None:
@@ -295,8 +294,8 @@ def test_a_bare_answer_to_an_open_question_still_sees_the_sketch(parts) -> None:
     assert context.images[0].label == "room-sketch.jpeg"
 
 
-def test_a_project_with_nothing_built_yet_always_shows_its_references(parts) -> None:
-    """Before anything exists, every message is still about the drawings."""
+def test_a_freshly_uploaded_sketch_is_shown_without_being_attached(parts) -> None:
+    """Drag a sketch in, type a message: it is sent, with no attaching to think about."""
     builder, ingest, _ = parts
     _sketch(ingest)
 
@@ -330,10 +329,14 @@ def test_the_newest_uploads_are_the_ones_offered(parts) -> None:
 
 
 def test_editing_an_existing_model_does_not_re_send_the_plans(parts) -> None:
-    """Images are the most expensive thing in a prompt, so they stop when they stop being
-    the subject: once a room exists, "make this taller" needs the scene, not the sketch."""
+    """Images are the most expensive thing in a prompt, so an edit does not carry them.
+
+    The sketch is shown once, when it arrives. After that the conversation carries what was
+    learned from it, and "make this taller" is about the scene.
+    """
     builder, ingest, _ = parts
     _sketch(ingest)
+    build(builder, user_text="build this")  # shown here, and only here
 
     context = builder.build(
         user_text="make this 20 cm taller",

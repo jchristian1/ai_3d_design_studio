@@ -140,12 +140,14 @@ export function workspaceReducer(
         approvals: turn.approval
           ? [...state.approvals.filter((a) => a.approval_id !== turn.approval!.approval_id), turn.approval]
           : state.approvals,
-        // Attachments STAY attached. They used to be cleared on send, to avoid spending
-        // credits re-sending the same images — but the effect was an assistant that
-        // forgot the sketch you were both talking about the moment you answered its
-        // question, and asked for it again. The composer shows a chip per attached file
-        // with an × on it, so what is being sent is visible and removing it is one click.
-        attachedReferenceIds: state.attachedReferenceIds,
+        // A sent message consumes its attachments. Keeping them attached would re-send the
+        // same images on every following message, and images are the most expensive thing
+        // in a prompt — that is how an allowance disappears during a conversation.
+        //
+        // Nothing is forgotten by doing this: the service shows a newly uploaded file
+        // automatically, re-sends one when the message asks to look at it again, and the
+        // file stays in the Files list with an Attach box for any other time.
+        attachedReferenceIds: turn.kind === "error" ? state.attachedReferenceIds : [],
       };
     }
 

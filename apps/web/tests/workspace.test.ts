@@ -268,26 +268,30 @@ describe("references and attachments", () => {
     assert.equal(attachedReferences(next).length, 1);
   });
 
-  it("an attachment stays attached across turns, and is removed by hand", () => {
-    // It used to be cleared on send, to avoid re-sending images and spending credits
-    // twice. The real cost was worse: Astra forgot the sketch the moment the user
-    // answered its question, and asked for it again — three times, in the session that
-    // prompted this. What is attached is shown as a chip with an ×, so it is visible and
-    // one click to drop.
+  it("sending consumes attachments, so the same images are not paid for twice", () => {
+    // Images are the most expensive thing in a prompt. Keeping them attached would re-send
+    // them on every following message — which is how an allowance disappears mid-
+    // conversation. The service still shows a NEW upload automatically and re-sends one
+    // when a message asks to look at it again, so nothing is forgotten by clearing here.
     const next = reduce(
       state(),
       { type: "upload_succeeded", id: "u1", reference: reference(), notice: null },
       { type: "message_sent", requestId: "req_1", text: "model this room" },
       { type: "turn_received", turn: turn() },
-      { type: "message_sent", requestId: "req_2", text: "117" },
+    );
+    assert.deepEqual(next.attachedReferenceIds, []);
+    // The file itself is still there, ready to attach again.
+    assert.equal(next.references.length, 1);
+  });
+
+  it("a failed turn keeps its attachments, so a retry still carries them", () => {
+    const next = reduce(
+      state(),
+      { type: "upload_succeeded", id: "u1", reference: reference(), notice: null },
+      { type: "message_sent", requestId: "req_1", text: "model this room" },
+      { type: "turn_received", turn: turn({ kind: "error", message: "no" }) },
     );
     assert.deepEqual(next.attachedReferenceIds, ["ref_a"]);
-
-    const detached = workspaceReducer(next, {
-      type: "attachment_toggled",
-      referenceId: "ref_a",
-    });
-    assert.deepEqual(detached.attachedReferenceIds, []);
   });
 
   it("attachment can be toggled off and on", () => {

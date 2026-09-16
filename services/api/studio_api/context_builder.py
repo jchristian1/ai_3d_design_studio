@@ -32,15 +32,19 @@ from studio_agent.agent_input import (
 )
 from studio_types import SceneSnapshot
 
+from .ingest.model_copies import ModelCopyMaker
 from .storage.files import ReferenceFileStore
 from .storage.models import PDF, PDF_PAGE, ReferenceRecord
 from .storage.repositories import StudioRepositories
 
 _log = logging.getLogger(__name__)
 
-#: How many images one turn may attach. Images dominate cost, so this is the tightest
-#: budget in the builder. Four is enough for "the plan and these two photos".
-MAX_IMAGES_PER_TURN = 6
+#: How many images one turn may attach. Images dominate cost by a wide margin — a page at
+#: 1700x2200 is twenty 512-px tiles — so this is the tightest budget in the builder, and it
+#: was lowered from six after a session burned through an allowance re-sending six pages on
+#: every message. Three is enough for "the plan and these two photos"; the user can always
+#: attach more explicitly.
+MAX_IMAGES_PER_TURN = 3
 #: How many characters of extracted document text one turn may carry.
 MAX_DOCUMENT_CHARACTERS = 24_000
 #: How many earlier turns to replay.
@@ -53,6 +57,9 @@ class ContextBuilder:
 
     repositories: StudioRepositories
     files: ReferenceFileStore
+    #: Makes the cheap copy of an image that is actually sent. Injected so a test can
+    #: assert what was sent without running an image codec.
+    model_copies: ModelCopyMaker = field(default_factory=ModelCopyMaker)
     max_images: int = MAX_IMAGES_PER_TURN
     max_document_characters: int = MAX_DOCUMENT_CHARACTERS
     max_recent_turns: int = MAX_RECENT_TURNS
@@ -78,10 +85,17 @@ class ContextBuilder:
             user_text,
             clarification_open=pending is not None,
             scene_is_empty=scene is None or not scene.objects,
+            already_shown=self.repositories.deliveries.delivered_ids(project_id, session_id),
+            new_since=self._last_spoke_at(project_id),
         )
 
         images = self._images(project_id, selected.images)
         documents = self._documents(selected.documents)
+        # Remember everything this turn covered, so the next message does not pay for it
+        # again. `included_ids` rather than the images alone: a PDF's parent record and its
+        # page images are one reference to a person, and recording only the pages would let
+        # the parent look unseen and drag the pages back in next turn.
+        self.repositories.deliveries.record(project_id, session_id, selected.included_ids)
         summaries = self._summaries(project_id, selected.included_ids)
 
         return AgentInput(
@@ -111,6 +125,20 @@ class ContextBuilder:
             missing_information=record.missing_information,
         )
 
+    def _last_spoke_at(self, project_id: str) -> Optional[str]:
+        """When the assistant last replied.
+
+        Anything uploaded after that is new to the conversation, which is how "drag a
+        sketch in and ask about it" works without the user attaching anything. Before the
+        first reply there is no cutoff, so a brand-new project's uploads all count as new.
+        """
+        for record in reversed(
+            self.repositories.conversation.recent(project_id, limit=self.max_recent_turns)
+        ):
+            if record.role == "assistant":
+                return record.created_at
+        return None
+
     def _recent_turns(self, project_id: str) -> tuple[ConversationTurn, ...]:
         records = self.repositories.conversation.recent(project_id, limit=self.max_recent_turns)
         return tuple(
@@ -131,7 +159,10 @@ class ContextBuilder:
             images.append(
                 ReferenceImage(
                     reference_id=record.reference_id,
-                    path=path,
+                    # The downscaled copy, not the original: a model reading a dimension
+                    # off a sketch does not need 1700x2200, and the difference is most of
+                    # what a turn costs.
+                    path=self.model_copies.copy_of(path),
                     media_type=record.media_type,
                     label=record.display_name,
                     page_number=record.page_number,
@@ -184,31 +215,32 @@ class ContextBuilder:
         *,
         clarification_open: bool = False,
         scene_is_empty: bool = True,
+        already_shown: Optional[set[str]] = None,
+        new_since: Optional[str] = None,
     ) -> "_Selection":
         """Choose what to send.
 
-        The rule, in order:
+        In order:
 
-        1. Everything the user explicitly attached, always. Expanding a PDF into its
-           page images, because a PDF the model cannot see is a PDF it will invent
-           details about.
-        2. If nothing was attached, references whose display name is mentioned in the
-           message.
-        3. If still nothing, the project's most recent references — as long as the turn
-           is plausibly about them (see :meth:`_should_offer_recent`).
+        1. Everything the user explicitly attached. A PDF expands into its page images,
+           because a PDF the model cannot see is a PDF it will invent details about.
+        2. References whose display name is mentioned in the message.
+        3. References the model has NOT been shown in this conversation and that arrived
+           since it last spoke — i.e. the files the user just dropped in. This is what makes
+           "drag a sketch in and ask" work without any attaching.
+        4. If the message actually asks for something to be looked at ("does this match the
+           plan?"), the newest references, even if they were shown before: the user asked.
 
-        Rule 3 used to require the MESSAGE to look visual, and to send only the last two
-        references. That failed in the most ordinary conversation there is:
+        Otherwise nothing. Two failures shaped this, one in each direction:
 
-            user:   "model this room"        + a sketch attached
-            Astra:  "what is the ceiling height?"
-            user:   "117"                    <- nothing attached, nothing visual
-            Astra:  "could you attach the sketch again?"
-
-        The answer to a question is a bare number, so every word-matching heuristic
-        missed, the sketch was withheld, and Astra asked for what it had never been shown
-        — three times. An open question is exactly when the references in play must stay
-        in play.
+        * Sending only what was attached, and clearing attachments on send, meant a bare
+          answer like "117" arrived with no drawing and Astra asked for the sketch again —
+          three times. Rule 3 fixes the common case, and what the model LEARNED from an
+          image persists as text in the transcript and as recorded facts.
+        * Sending the newest few whenever nothing was built yet meant every message paid
+          for images again, and successive turns walked down the whole library. Images are
+          twenty tiles a page; that is how an allowance disappears "without doing
+          anything".
         """
         selection = _Selection()
 
@@ -217,45 +249,36 @@ class ContextBuilder:
                 self._include(project_id, record, selection)
             return selection
 
+        records = list(self.repositories.references.list_for_project(project_id))
         lowered = user_text.lower()
         mentioned = [
             record
-            for record in self.repositories.references.list_for_project(project_id)
-            if record.display_name.lower() in lowered
-            or _stem(record.display_name) in lowered
+            for record in records
+            if record.display_name.lower() in lowered or _stem(record.display_name) in lowered
         ]
         if mentioned:
             for record in mentioned:
                 self._include(project_id, record, selection)
             return selection
 
-        if self._should_offer_recent(
-            lowered, clarification_open=clarification_open, scene_is_empty=scene_is_empty
-        ):
-            # Newest first, and bounded by the image budget: what a person means by "the
-            # sketch" is almost always the last thing they uploaded.
-            recent = list(self.repositories.references.list_for_project(project_id))[::-1]
-            for record in recent[: self.max_images]:
+        seen = already_shown or set()
+
+        arrived_since = [
+            record
+            for record in records
+            if record.reference_id not in seen
+            and (new_since is None or record.created_at > new_since)
+        ]
+        if arrived_since:
+            for record in arrived_since[::-1][: self.max_images]:
+                self._include(project_id, record, selection)
+            return selection
+
+        if _asks_to_look(lowered):
+            for record in records[::-1][: self.max_images]:
                 self._include(project_id, record, selection)
 
         return selection
-
-    def _should_offer_recent(
-        self, lowered_text: str, *, clarification_open: bool, scene_is_empty: bool
-    ) -> bool:
-        """Whether an un-attached reference is worth the tokens this turn.
-
-        Yes while the conversation is still ABOUT the references: a question is open, or
-        nothing has been built yet, or the message itself asks for something to be looked
-        at. No once there is a model and the user is editing it — "make this 20 cm taller"
-        does not need the floor plan re-sent, and images are the most expensive thing in
-        the prompt.
-        """
-        if clarification_open:
-            return True
-        if scene_is_empty:
-            return True
-        return _looks_visual(lowered_text)
 
     def _include(
         self, project_id: str, record: ReferenceRecord, selection: "_Selection"
@@ -286,27 +309,31 @@ def _stem(display_name: str) -> str:
     return display_name.rsplit(".", 1)[0].lower()
 
 
-#: Words that suggest the user wants the agent to look at something.
-_VISUAL_HINTS = (
-    "see",
-    "look",
-    "plan",
-    "drawing",
-    "photo",
-    "image",
-    "picture",
-    "reference",
-    "reconstruct",
-    "build",
-    "model",
-    "recreate",
-    "scale",
-    "dimension",
-    "layout",
-    "room",
-    "floor",
+#: Phrases that mean "look at the file again", as opposed to merely mentioning a room.
+#:
+#: Deliberately narrow. A broad list ("room", "build", "floor") matched almost every
+#: message in a design conversation, which turned "send when asked" into "send always" —
+#: and images are the most expensive thing in a prompt.
+_LOOK_HINTS = (
+    "look at",
+    "see the",
+    "see this",
+    "can you see",
+    "check the",
+    "read the",
+    "from the sketch",
+    "from the plan",
+    "from the drawing",
+    "in the sketch",
+    "in the plan",
+    "in the drawing",
+    "in the photo",
+    "in the picture",
+    "match the",
+    "compare",
+    "again",
 )
 
 
-def _looks_visual(lowered_text: str) -> bool:
-    return any(hint in lowered_text for hint in _VISUAL_HINTS)
+def _asks_to_look(lowered_text: str) -> bool:
+    return any(hint in lowered_text for hint in _LOOK_HINTS)

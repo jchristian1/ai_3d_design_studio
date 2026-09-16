@@ -44,6 +44,7 @@ from .models import (
 from .repositories import StudioRepositories
 
 __all__ = [
+    "ReferenceDeliveryRepository",
     "APPROVAL_DECISIONS",
     "APPROVED",
     "ApprovalRecord",

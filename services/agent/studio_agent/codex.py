@@ -49,6 +49,25 @@ MIN_CODEX_VERSION: Final = (0, 154, 0)
 DEFAULT_TIMEOUT_SECONDS: Final = 300.0
 DEFAULT_STATUS_TIMEOUT_SECONDS: Final = 20.0
 
+#: Reasoning effort for an ordinary turn. Reasoning tokens are invisible in the answer but
+#: billed all the same, and most turns here are "read this sketch" or "build these walls".
+#: A rejected answer is retried at ``CAREFUL_REASONING_EFFORT``, so the extra thinking is
+#: paid for only when the cheap attempt was not good enough.
+DEFAULT_REASONING_EFFORT: Final = "low"
+CAREFUL_REASONING_EFFORT: Final = "medium"
+
+#: The exact `-c` values for each effort, as literals.
+#:
+#: A lookup rather than a formatted string on purpose: nothing that reaches this command
+#: line is ever built from a variable, so no caller — and no model — can influence an
+#: argument. A layering test enforces that, and it caught the formatted version of this.
+REASONING_ARGUMENTS: Final = {
+    "minimal": 'model_reasoning_effort="minimal"',
+    "low": 'model_reasoning_effort="low"',
+    "medium": 'model_reasoning_effort="medium"',
+    "high": 'model_reasoning_effort="high"',
+}
+
 # --- connection states, mirrored by the browser ---------------------------
 NOT_INSTALLED: Final = "not_installed"
 UPDATE_REQUIRED: Final = "update_required"
@@ -199,6 +218,12 @@ class CodexClient:
 
     executable: Optional[str] = None
     model: str = ASTRA_MODEL
+    #: How hard the model thinks. Passed as `-c model_reasoning_effort=…`, which the CLI
+    #: honours and reports back. Reasoning tokens are invisible but billed, so a studio
+    #: that mostly does "read this sketch" and "build these walls" does not need the
+    #: highest setting by default — and a rejected answer is retried at a higher one, which
+    #: spends the extra tokens only when they are actually needed.
+    reasoning_effort: Optional[str] = DEFAULT_REASONING_EFFORT
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     status_timeout_seconds: float = DEFAULT_STATUS_TIMEOUT_SECONDS
     #: Overridable purely so tests can drive a fake CLI.
@@ -445,6 +470,7 @@ class CodexClient:
         schema: Mapping[str, Any],
         images: Iterable[Path] = (),
         timeout_seconds: Optional[float] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run one turn and return the model's schema-constrained JSON response.
 
@@ -477,6 +503,12 @@ class CodexClient:
                 "--cd",
                 str(workspace),
             ]
+            effort = reasoning_effort or self.reasoning_effort
+            setting = REASONING_ARGUMENTS.get(effort) if effort else None
+            if effort and setting is None:
+                _log.warning("ignoring unknown reasoning effort %r", effort)
+            if setting is not None:
+                arguments.extend(["-c", setting])
             for image in images:
                 arguments.extend(["--image", str(image)])
 

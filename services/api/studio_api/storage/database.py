@@ -214,6 +214,23 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             "ALTER TABLE projects ADD COLUMN last_opened_at TEXT",
         ),
     ),
+    (
+        6,
+        (
+            # Which references have already been SENT to the model in a session. Images
+            # dominate what a turn costs, so a sketch whose dimensions have already been
+            # read and recorded should not be paid for again on every later message.
+            """
+            CREATE TABLE IF NOT EXISTS reference_deliveries (
+                project_id   TEXT NOT NULL,
+                session_id   TEXT NOT NULL,
+                reference_id TEXT NOT NULL,
+                delivered_at TEXT NOT NULL,
+                PRIMARY KEY (project_id, session_id, reference_id)
+            )
+            """,
+        ),
+    ),
 )
 
 LATEST_VERSION = MIGRATIONS[-1][0]
