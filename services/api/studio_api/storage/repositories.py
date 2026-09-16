@@ -435,6 +435,18 @@ class ClarificationRepository:
         )
         return record
 
+    def count_for_project(self, project_id: str) -> int:
+        """How many questions have been asked about this project, ever.
+
+        Used to stop a conversation that is all questions and no building: after a couple
+        of them the platform tells the agent to choose and proceed.
+        """
+        row = self._db.query_one(
+            "SELECT count(*) AS total FROM clarifications WHERE project_id = ?",
+            (project_id,),
+        )
+        return int(row["total"]) if row else 0
+
     def open_for_project(self, project_id: str) -> Optional[ClarificationRecord]:
         row = self._db.query_one(
             "SELECT * FROM clarifications WHERE project_id = ? AND resolved_at IS NULL "

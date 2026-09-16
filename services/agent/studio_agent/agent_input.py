@@ -95,6 +95,10 @@ class AgentInput:
     #: True when the design machine is reachable. A disconnected Blender still allows
     #: analysis and discussion, so the agent needs to know which it is.
     blender_available: bool = True
+    #: How many questions have already been asked about this project. The platform uses it
+    #: to insist on progress: a conversation that is all questions and no model is a failed
+    #: conversation, however reasonable each individual question was.
+    questions_already_asked: int = 0
 
     @property
     def has_images(self) -> bool:

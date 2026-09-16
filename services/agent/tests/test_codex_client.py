@@ -365,10 +365,21 @@ def test_the_prompt_states_the_canonical_units() -> None:
     assert "+X is right" in prompt
 
 
-def test_the_prompt_forbids_inventing_dimensions() -> None:
+def test_the_prompt_asks_for_a_missing_scale_but_not_for_the_ordinary() -> None:
+    """The policy changed, deliberately, and this records what it is now.
+
+    It used to say "NEVER INVENT ARCHITECTURE — guessing a dimension is worse than asking".
+    In practice that produced three questions and no model for a user who had already said
+    "invent it but make it look great". Asking is now reserved for what genuinely cannot be
+    chosen — no scale at all, or contradictory numbers — and everything else has a standard
+    value to use and declare.
+    """
     prompt = build_prompt(_input())
-    assert "NEVER INVENT ARCHITECTURE" in prompt
-    assert "ceiling height" in prompt
+    assert "ASK RARELY, AND BUILD" in prompt
+    # Still asks when there is no way to know the real size of anything.
+    assert "no scale at all" in prompt
+    # And a declared assumption is the alternative to a question, not an excuse for silence.
+    assert '"assumptions"' in prompt
 
 
 def test_the_prompt_carries_confirmed_facts_so_astra_stops_asking() -> None:

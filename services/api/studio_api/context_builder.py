@@ -112,6 +112,9 @@ class ContextBuilder:
             pending_clarification=pending,
             recent_turns=self._recent_turns(project_id),
             blender_available=blender_available,
+            questions_already_asked=self.repositories.clarifications.count_for_project(
+                project_id
+            ),
         )
 
     # -- pieces ------------------------------------------------------------
@@ -275,6 +278,19 @@ class ContextBuilder:
             return selection
 
         if _asks_to_look(lowered):
+            for record in records[::-1][: self.max_images]:
+                self._include(project_id, record, selection)
+            return selection
+
+        # Nothing has been built yet, and this project has drawings: the conversation is
+        # still ABOUT them, so keep showing them even though they were shown before.
+        #
+        # This is where "shown once" is wrong. A real session went: upload a plan and ask
+        # for it to be modelled; "invent the door heights, make it look great"; and Astra —
+        # given no image that turn — replied "could you attach the floor plan?". The drawing
+        # is the subject until something exists to look at instead. It is bounded: the cost
+        # stops the moment the model is built, and each image is a downscaled copy.
+        if scene_is_empty and records:
             for record in records[::-1][: self.max_images]:
                 self._include(project_id, record, selection)
 

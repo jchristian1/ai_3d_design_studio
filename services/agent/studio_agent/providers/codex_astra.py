@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Final, Optional
 
 from studio_contracts import ChatError, load_schema
 from studio_contracts.capabilities import PROPOSABLE_CAPABILITIES
@@ -110,11 +110,28 @@ for work that will never happen. If you have what you need, send a "plan". If a
 measurement is genuinely missing, send a "clarification". If you truly need a fresh read
 of the project, make inspect_scene the FIRST operation of a plan.
 
-NEVER INVENT ARCHITECTURE. If a required dimension is missing, ask for it. Specifically:
-- If no ceiling height is known and you need one, ask for it.
-- If no scale is established from a plan, ask for one known real-world dimension.
-- If you cannot tell whether an opening is a door, a window, or an open passage, ask.
-Guessing a dimension is worse than asking.
+ASK RARELY, AND BUILD. A question costs the user a wait; a wrong-but-stated assumption costs
+them one sentence to correct. So ask ONLY when the answer changes the structure and you
+genuinely cannot choose — no scale at all on a plan, or numbers that contradict each other
+in a way you cannot resolve. Everything else: choose, build, and list what you chose in
+"assumptions".
+
+- If the user says to invent, choose, decide, "make it look great", "whatever you think" or
+  anything of that kind, you must NEVER ask about that again. Choose and declare.
+- If a drawing shows two conflicting figures, use the one consistent with the rest of the
+  drawing and say which you used.
+- If you have already asked for something and it is still missing, do not ask again. Use the
+  standard value below and declare it.
+- Prefer building something the user can correct over asking another question. "Make the
+  windows taller" is an easy next message; a fourth question is not.
+
+STANDARD VALUES, in metres, when the user has not said otherwise. Use these instead of
+asking:
+- interior door 0.90 wide x 2.03 high; exterior door 0.95 x 2.10
+- window head 2.10 above the floor, sill 0.90, so a typical window is 1.20 high
+- interior wall 0.12 thick; exterior wall 0.20
+- ceiling 2.40 for a flat, 2.70 for a house — but ALWAYS use the height the user gave
+- floor slab 0.20; internal floor level 0.00
 
 UNITS ARE CANONICAL AND NOT NEGOTIABLE:
 - All distances, positions and dimensions are in METRES. 50 cm is 0.5. 240 cm is 2.4.
@@ -171,6 +188,15 @@ plain language, so the user can correct you. For example "I assumed interior wal
 Your "message" is shown directly to the user. Keep it short, concrete and free of jargon.
 Never mention Python, Blender operators, capability names, file paths or job identifiers.
 """
+
+
+#: How many questions a project may cost before the platform insists on a plan. Two is
+#: enough for a genuinely ambiguous drawing; a third means the conversation has stalled.
+QUESTION_LIMIT: Final = 2
+
+
+def _nothing_built(agent_input: AgentInput) -> bool:
+    return agent_input.scene is None or not agent_input.scene.objects
 
 
 def _describe_scene(scene: Optional[SceneSnapshot]) -> str:
@@ -275,6 +301,19 @@ def build_prompt(agent_input: AgentInput) -> str:
             "YOU PREVIOUSLY ASKED: "
             f"{pending.question}\n"
             "The user's message below is most likely the answer. Use it and continue."
+        )
+
+    # A conversation that is all questions and no model is a failed conversation, however
+    # reasonable each question was on its own. After a couple, the platform stops leaving it
+    # to the model's judgement.
+    if agent_input.questions_already_asked >= QUESTION_LIMIT and _nothing_built(agent_input):
+        sections.append(
+            f"YOU HAVE ALREADY ASKED {agent_input.questions_already_asked} QUESTIONS ABOUT "
+            "THIS PROJECT AND NOTHING HAS BEEN BUILT YET. Do not ask another one. Choose "
+            "sensible values for whatever is still missing, using the standard values above, "
+            'send kind="plan" now, and list every choice you made in "assumptions" so the '
+            "user can correct it. A model they can correct is worth far more to them than "
+            "another question."
         )
 
     if agent_input.recent_turns:

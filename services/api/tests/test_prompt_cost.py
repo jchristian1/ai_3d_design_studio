@@ -148,8 +148,13 @@ def test_a_long_pdf_does_not_send_every_page(parts) -> None:
 # --- not twice ------------------------------------------------------------
 
 
-def test_a_sketch_is_not_re_sent_once_the_model_has_seen_it(parts) -> None:
-    """The expensive mistake: six pages re-sent on every message of a conversation."""
+def test_a_sketch_stops_being_sent_once_the_model_exists(parts) -> None:
+    """The expensive mistake was re-sending pages forever. This is where it stops.
+
+    While nothing is built the drawing is still the subject and keeps going (see
+    `test_a_reference_keeps_being_shown_until_something_is_built`). Once a room exists, an
+    edit is about the room, and the pixels stop.
+    """
     builder, ingest, repositories = parts
     ingest.ingest(PROJECT, "sketch.png", png_bytes(width=1200, height=900))
     repositories.clarifications.add(
@@ -163,12 +168,43 @@ def test_a_sketch_is_not_re_sent_once_the_model_has_seen_it(parts) -> None:
     )
 
     first = build(builder, "model this room")
-    assert len(first.images) == 1, "the model must see it once"
+    assert len(first.images) == 1, "the model must see it while it is the subject"
 
-    second = build(builder, "117")
-    assert second.images == (), "the same pixels must not be paid for twice"
-    # It is still described, so the agent knows it exists and what it was.
-    assert any("sketch.png" in summary for summary in second.reference_summaries)
+    built = build(builder, "make that wall 20 cm taller", scene=_scene_with_one_wall())
+    assert built.images == (), "an edit must not re-send the drawing"
+    # It is still described, so the agent knows it exists and can be asked for.
+    assert any("sketch.png" in summary for summary in built.reference_summaries)
+
+
+def _scene_with_one_wall():
+    from studio_types import (
+        EulerRadians,
+        Scale3,
+        SceneObject,
+        SceneSnapshot,
+        SceneUnits,
+        Vec3,
+    )
+
+    return SceneSnapshot(
+        project_id=PROJECT,
+        scene_version="sha256:" + "b" * 64,
+        captured_at="2026-01-01T00:00:00Z",
+        units=SceneUnits(unit_system="METRIC", length_unit="m", scale_length=1.0),
+        objects=(
+            SceneObject(
+                studio_object_id="obj_wall",
+                name="Wall_North",
+                object_type="MESH",
+                world_position_meters=Vec3(0.0, 0.0, 1.35),
+                dimensions_meters=Vec3(4.0, 0.12, 2.7),
+                rotation_euler_radians=EulerRadians(0.0, 0.0, 0.0),
+                scale=Scale3(1.0, 1.0, 1.0),
+                visible=True,
+                material=None,
+            ),
+        ),
+    )
 
 
 def test_attaching_it_again_sends_it_again(parts) -> None:

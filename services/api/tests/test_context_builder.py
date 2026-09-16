@@ -113,21 +113,30 @@ def test_a_reference_mentioned_by_name_is_included_without_being_attached(parts)
     assert not any("sofa" in label for label in labels)
 
 
-def test_a_reference_is_shown_once_and_not_on_every_later_message(parts) -> None:
-    """A file is worth its tokens the first time and not again.
+def test_a_reference_keeps_being_shown_until_something_is_built(parts) -> None:
+    """While there is nothing to look at, the drawing IS the subject.
 
-    What the model LEARNED from it persists as text — its own reply is in the transcript,
-    and anything it confirmed is a recorded fact — so re-sending the pixels buys nothing.
+    "Shown once" was too thrifty here. A real session went: upload a plan, ask for it to be
+    modelled, then "invent the door heights, make it look great" — and that turn arrived
+    with no image, so Astra asked for the plan to be attached again. The cost is bounded:
+    it stops the moment a model exists, and each image is a downscaled copy.
     """
     builder, ingest, _ = parts
     ingest.ingest(PROJECT, "floor-plan.pdf", pdf_bytes(pages=1))
 
     first = build(builder, user_text="build this")
-    assert len(first.images) == 1, "the model must see a new upload once"
+    assert len(first.images) == 1
 
-    later = build(builder, user_text="thanks, that is all for today")
+    still = build(builder, user_text="invent the door heights, make it look great")
+    assert len(still.images) == 1, "the plan must still be visible while nothing is built"
+
+    # Once there is a model, it stops: an edit is about the scene, not the drawing.
+    later = build(
+        builder,
+        user_text="thanks, that is all for today",
+        scene=_scene_with_one_wall(),
+    )
     assert later.images == ()
-    # But the agent is still told the reference exists, so it can ask for it.
     assert any("floor-plan.pdf" in summary for summary in later.reference_summaries)
 
 

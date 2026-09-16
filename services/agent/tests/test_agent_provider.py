@@ -701,3 +701,112 @@ def test_job_factory_refuses_an_unsupported_operation_type():
     )
     assert built.ok is False
     assert built.errors[0].code == "VALIDATION_ERROR"
+
+
+
+# ---------------------------------------------------------------------------
+# A conversation that is all questions is a failed conversation
+# ---------------------------------------------------------------------------
+#
+# From a real session with a floor plan attached:
+#
+#   user:   "create a model of this, ceiling is 2.9 metres"
+#   Astra:  "what door height, window height and sill height should I use?"
+#   user:   "invent it but make it look great."
+#   Astra:  "could you attach the floor plan?"
+#   user:   "i already attached it"
+#   Astra:  "which overall width should I use: 48'4" or 49'3"?"
+#
+# Three questions, nothing built, and the user had already said to invent the details. Two
+# separate causes: the plan stopped being sent (see the context builder), and the rules told
+# the model that guessing was worse than asking. Both are fixed; these assert the second.
+
+
+def _input(**overrides):
+    from studio_agent.agent_input import AgentInput
+
+    base = {
+        "user_text": "create a model of this",
+        "user_id": "user_1",
+        "project_id": "proj_1",
+        "session_id": "sess_1",
+    }
+    base.update(overrides)
+    return AgentInput(**base)
+
+
+def test_the_rules_tell_the_model_to_choose_rather_than_ask_again() -> None:
+    from studio_agent.providers.codex_astra import build_prompt
+
+    prompt = build_prompt(_input())
+
+    assert "ASK RARELY, AND BUILD" in prompt
+    # The exact instruction that was missing: an invitation to invent must end the asking.
+    assert "invent, choose, decide" in prompt
+    assert "NEVER ask about that again" in prompt
+    # And it is given values so it does not need to ask for the ordinary things.
+    assert "interior door 0.90 wide x 2.03 high" in prompt
+    assert "window head 2.10" in prompt
+    assert "interior wall 0.12 thick" in prompt
+
+
+def test_conflicting_figures_on_a_drawing_are_resolved_not_escalated() -> None:
+    """"48'4" or 49'3"?" is a question the model should answer itself."""
+    from studio_agent.providers.codex_astra import build_prompt
+
+    prompt = build_prompt(_input())
+    assert "two conflicting figures" in prompt
+    assert "say which you used" in prompt
+
+
+def test_after_two_questions_with_nothing_built_the_platform_insists_on_a_plan() -> None:
+    from studio_agent.providers.codex_astra import QUESTION_LIMIT, build_prompt
+
+    prompt = build_prompt(_input(questions_already_asked=QUESTION_LIMIT))
+
+    assert "Do not ask another one" in prompt
+    assert 'send kind="plan" now' in prompt
+    assert '"assumptions"' in prompt
+
+
+def test_the_insistence_is_not_added_before_it_is_earned() -> None:
+    from studio_agent.providers.codex_astra import build_prompt
+
+    prompt = build_prompt(_input(questions_already_asked=1))
+    assert "Do not ask another one" not in prompt
+
+
+def test_the_insistence_stops_once_something_exists_to_look_at() -> None:
+    """With a model on screen, a question is cheap: the user can see what is being asked."""
+    from studio_agent.providers.codex_astra import build_prompt
+    from studio_types import (
+        EulerRadians,
+        Scale3,
+        SceneObject,
+        SceneSnapshot,
+        SceneUnits,
+        Vec3,
+    )
+
+    scene = SceneSnapshot(
+        project_id="proj_1",
+        scene_version="sha256:" + "c" * 64,
+        captured_at="2026-01-01T00:00:00Z",
+        units=SceneUnits(unit_system="METRIC", length_unit="m", scale_length=1.0),
+        objects=(
+            SceneObject(
+                studio_object_id="obj_wall",
+                name="Wall",
+                object_type="MESH",
+                world_position_meters=Vec3(0.0, 0.0, 1.35),
+                dimensions_meters=Vec3(4.0, 0.12, 2.7),
+                rotation_euler_radians=EulerRadians(0.0, 0.0, 0.0),
+                scale=Scale3(1.0, 1.0, 1.0),
+                visible=True,
+                material=None,
+            ),
+        ),
+    )
+
+    prompt = build_prompt(_input(questions_already_asked=5, scene=scene))
+    assert "Do not ask another one" not in prompt
