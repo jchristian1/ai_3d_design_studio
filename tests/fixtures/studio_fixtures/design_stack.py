@@ -24,6 +24,7 @@ so, through the same code path ``python -m blender_worker`` runs.
 
 from __future__ import annotations
 
+import shutil
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -69,7 +70,9 @@ class DesignStack:
     server: ControlPlaneServer
     worker: WorkerLinkClient
     executor: DispatchingExecutor
-    backend: FakeBlenderCapabilityProvider
+    #: The capability backend. ``FakeBlenderCapabilityProvider`` offline; the OFFICIAL
+    #: Blender MCP backend in the ``-m mcp`` tier.
+    backend: Any
     llm: FakeLlmProvider
     artifacts: LocalArtifactStore
     database: StudioDatabase
@@ -240,23 +243,32 @@ def build_design_stack(
     token: str = DEFAULT_TOKEN,
     worker_id: str = DEFAULT_WORKER_ID,
     llm: Optional[FakeLlmProvider] = None,
-    backend: Optional[FakeBlenderCapabilityProvider] = None,
+    backend: Optional[Any] = None,
+    project_source: Optional[Path] = None,
     connect: bool = True,
 ) -> Any:
     """Build and start the offline design stack. Use as a context manager::
 
     with build_design_stack(tmp_path, objects={"Cube": FakeObject(name="Cube")}) as stack:
         ...
+
+    ``backend`` accepts any ``BlenderCapabilityProvider``, which is how the opt-in
+    ``-m mcp`` tier runs this same stack against the OFFICIAL Blender MCP and real
+    Blender. ``project_source`` is then copied in as the project's starting ``.blend``.
     """
 
     @contextmanager
     def _stack() -> Iterator[DesignStack]:
+        tmp_path.mkdir(parents=True, exist_ok=True)
         projects_root = tmp_path / "projects"
         projects_root.mkdir(exist_ok=True)
         project_path = projects_root / f"{project_id}.blend"
-        # The capability path never parses the file; it copies it to make a recovery
-        # point. Real bytes are the Blender tier's job (tests/mcp, tests/e2e).
-        project_path.write_bytes(b"offline design stack placeholder .blend")
+        if project_source is not None:
+            shutil.copy2(project_source, project_path)
+        else:
+            # The capability path never parses the file; it copies it to make a recovery
+            # point. Real bytes are the Blender tier's job (tests/mcp, tests/e2e).
+            project_path.write_bytes(b"offline design stack placeholder .blend")
 
         runtime_root = tmp_path / "runtime"
         artifact_root = tmp_path / "artifacts"
