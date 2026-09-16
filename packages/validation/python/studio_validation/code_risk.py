@@ -206,6 +206,35 @@ def _root_module(name: str) -> str:
     return name.split(".", 1)[0]
 
 
+#: Blender data collections whose `remove` / `clear` calls are ORDINARY SCENE WORK.
+#: `bpy.data.objects.remove(obj)` deletes an object from the scene; it has nothing to do
+#: with the filesystem, and asking the user to approve it would pester them on almost
+#: every plan that rebuilds something. `os.remove` and `shutil.rmtree` still flag,
+#: because the check is on where the call is rooted, not on the word.
+SCENE_DATA_ROOTS: Final = frozenset({"bpy", "bpy_data", "context", "scene"})
+
+#: Names on a Blender collection that only ever touch the scene.
+SCENE_DATA_METHODS: Final = frozenset({"remove", "clear", "rename", "replace"})
+
+
+def _is_scene_data_call(node: ast.Attribute) -> bool:
+    """True for ``bpy.…remove`` shaped attributes: scene edits, not host access.
+
+    Rooted at a name in :data:`SCENE_DATA_ROOTS` and reached through an attribute chain,
+    so ``bpy.data.objects.remove`` and ``bpy.data.materials.remove`` qualify while
+    ``os.remove``, ``shutil.rmtree`` and ``Path(p).unlink`` do not. A chain that starts
+    from a call (``Path(p).unlink``) is deliberately not treated as scene work.
+    """
+    if node.attr not in SCENE_DATA_METHODS:
+        return False
+    current: ast.AST = node.value
+    while isinstance(current, ast.Attribute):
+        current = current.value
+    if isinstance(current, ast.Name):
+        return current.id in SCENE_DATA_ROOTS
+    return False
+
+
 def _looks_absolute(value: str) -> bool:
     if not value:
         return False
@@ -267,7 +296,7 @@ class _Walker(ast.NodeVisitor):
 
     # --- attributes and names --------------------------------------------
     def visit_Attribute(self, node: ast.Attribute) -> None:
-        if node.attr in SENSITIVE_ATTRIBUTES:
+        if node.attr in SENSITIVE_ATTRIBUTES and not _is_scene_data_call(node):
             self._flag(REASON_ATTRIBUTE.format(name=node.attr), node)
         elif node.attr.startswith("__") and node.attr.endswith("__"):
             self._flag(REASON_DUNDER.format(name=node.attr), node)

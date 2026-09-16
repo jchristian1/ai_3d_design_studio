@@ -121,7 +121,12 @@ class DesignStack:
         attached_reference_ids: Sequence[str] = (),
         session_id: Optional[str] = None,
     ):
-        """POST /api/projects/{id}/design-chat with a browser-shaped body."""
+        """POST a message and return the FINISHED turn.
+
+        A design turn is started and then polled, because a real model takes far longer
+        than a browser will hold a request open. Tests care about the answer, not the
+        protocol, so the waiting lives here — the same thing the browser client does.
+        """
         body: dict[str, Any] = {
             "request_id": request_id,
             "session_id": session_id or self.session_id,
@@ -130,13 +135,37 @@ class DesignStack:
         }
         if selected_object_id is not None:
             body["selected_object_id"] = selected_object_id
-        return self.http.post(f"/api/projects/{self.project_id}/design-chat", json=body)
+        started = self.http.post(
+            f"/api/projects/{self.project_id}/design-chat", json=body
+        )
+        return self.await_turn(started)
+
+    def await_turn(self, started: Any, deadline_seconds: float = DEADLINE_SECONDS):
+        """Follow a started turn to its conclusion, returning the final response."""
+        if started.status_code >= 400:
+            return started
+        payload = started.json()
+        turn_id = payload.get("turn_id")
+        if not turn_id or payload.get("state") != "thinking":
+            return started
+
+        url = f"/api/projects/{self.project_id}/design-chat/{turn_id}"
+        end = time.monotonic() + deadline_seconds
+        while time.monotonic() < end:
+            polled = self.http.get(url)
+            if polled.status_code >= 400:
+                return polled
+            if polled.json().get("state") != "thinking":
+                return polled
+            time.sleep(0.02)
+        raise AssertionError(f"turn {turn_id} never finished")
 
     def decide(self, approval_id: str, *, approved: bool = True):
-        return self.http.post(
+        started = self.http.post(
             f"/api/projects/{self.project_id}/approvals/{approval_id}",
             json={"approved": approved, "session_id": self.session_id},
         )
+        return self.await_turn(started)
 
     def upload(self, filename: str, data: bytes, media_type: str = "application/pdf"):
         return self.http.post(

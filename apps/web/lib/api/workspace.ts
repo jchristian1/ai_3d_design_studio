@@ -118,6 +118,23 @@ export interface DesignTurnView {
   status_url: string | null;
 }
 
+/** A turn that has been started. `state` is "thinking" until the model has answered. */
+export interface TurnHandleView {
+  turn_id: string;
+  state: "thinking" | "ready";
+  request_id: string;
+  project_id: string;
+  poll_url: string;
+  message: string;
+}
+
+/** A started turn, or the finished turn when it was answered immediately. */
+export type StartedTurnView = TurnHandleView | DesignTurnView;
+
+export function isFinishedTurn(value: StartedTurnView): value is DesignTurnView {
+  return (value as DesignTurnView).kind !== undefined;
+}
+
 export interface WorkspaceView {
   project: { project_id?: string; display_name: string; blend_ready?: boolean };
   references: ReferenceView[];
@@ -199,13 +216,15 @@ export interface WorkspaceClient {
   uploadReference(projectId: string, file: File): Promise<ReferenceView>;
   deleteReference(projectId: string, referenceId: string): Promise<void>;
   referenceContentUrl(projectId: string, referenceId: string): string;
-  sendMessage(projectId: string, input: DesignChatInput): Promise<DesignTurnView>;
+  /** Starts a turn. The answer arrives through `getTurn`, not from this call. */
+  sendMessage(projectId: string, input: DesignChatInput): Promise<StartedTurnView>;
+  getTurn(projectId: string, turnId: string): Promise<StartedTurnView>;
   decideApproval(
     projectId: string,
     approvalId: string,
     approved: boolean,
     sessionId?: string,
-  ): Promise<DesignTurnView>;
+  ): Promise<StartedTurnView>;
   getScene(projectId: string): Promise<SceneView | null>;
   getLatestModel(projectId: string): Promise<ArtifactRefView | null>;
   getAstraStatus(): Promise<ConnectionStatusView>;
@@ -348,7 +367,7 @@ export function createWorkspaceClient(options: WorkspaceClientOptions = {}): Wor
     },
 
     sendMessage(projectId, input) {
-      return send<DesignTurnView>(
+      return send<StartedTurnView>(
         `/api/projects/${projectId}/design-chat`,
         json({
           request_id: input.requestId,
@@ -360,8 +379,12 @@ export function createWorkspaceClient(options: WorkspaceClientOptions = {}): Wor
       );
     },
 
+    getTurn(projectId, turnId) {
+      return send<StartedTurnView>(`/api/projects/${projectId}/design-chat/${turnId}`);
+    },
+
     decideApproval(projectId, approvalId, approved, sessionId) {
-      return send<DesignTurnView>(
+      return send<StartedTurnView>(
         `/api/projects/${projectId}/approvals/${approvalId}`,
         json({ approved, ...(sessionId ? { session_id: sessionId } : {}) }),
       );

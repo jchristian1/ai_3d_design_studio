@@ -43,6 +43,16 @@ export const REQUEST_TIMEOUT_MS = 15000;
 export const JOB_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
+ * How often to ask whether Astra has answered, and how long to keep asking.
+ *
+ * A design turn runs a real model: seconds for a question, minutes for a floor plan. The
+ * server hands back a turn id immediately and this is the cadence for collecting the
+ * answer, so no single request has to outlive `REQUEST_TIMEOUT_MS`.
+ */
+export const TURN_POLL_INTERVAL_MS = 1000;
+export const TURN_TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
  * Resolve the API base URL, trimming any trailing slash so URL joining is
  * unambiguous.
  */

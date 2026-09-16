@@ -56,6 +56,7 @@ from .reconciliation import JobReconciler
 from .scene_grounding import SceneGrounder
 from .scene_reporting import SceneReporter
 from .settings import Settings
+from .turns import TurnRunner
 from .storage import (
     ReferenceFileStore,
     SqliteJobRecordStore,
@@ -97,6 +98,8 @@ class AppDependencies:
     scene_reporter: SceneReporter
     #: Reads the project before the first turn about it.
     scene_grounder: SceneGrounder
+    #: Runs design turns in the background so no HTTP request waits for a model.
+    turns: TurnRunner
     job_factory: JobFactory = field(default_factory=JobFactory)
 
 
@@ -225,6 +228,12 @@ def build_dependencies(
         # sends is already grounded and no request has to wait for Blender.
         gateway.observers.append(scene_grounder.observe)
 
+    # The model is slow, so a turn is started and polled rather than awaited. The
+    # runner owns that; the chat service itself is unchanged.
+    turns = TurnRunner(
+        submit=design_chat.submit, decide=design_chat.decide_approval
+    )
+
     return AppDependencies(
         settings=settings,
         identity_resolver=identity_resolver or default_identity_resolver(settings),
@@ -245,6 +254,7 @@ def build_dependencies(
         design_chat=design_chat,
         scene_reporter=scene_reporter,
         scene_grounder=scene_grounder,
+        turns=turns,
         job_factory=job_factory,
     )
 

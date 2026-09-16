@@ -14,9 +14,15 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { ApiFailure } from "../lib/api/errors.ts";
 import type { ApiClient } from "../lib/api/index.ts";
 import { apiClient } from "../lib/api/index.ts";
-import type { ArtifactRefView, WorkspaceClient } from "../lib/api/workspace.ts";
-import { workspaceClient as defaultWorkspaceClient } from "../lib/api/workspace.ts";
-import { HEALTH_POLL_INTERVAL_MS, JOB_POLL_INTERVAL_MS, PROJECT_ID } from "../lib/config.ts";
+import type { ArtifactRefView, DesignTurnView, WorkspaceClient } from "../lib/api/workspace.ts";
+import { isFinishedTurn, workspaceClient as defaultWorkspaceClient } from "../lib/api/workspace.ts";
+import {
+  HEALTH_POLL_INTERVAL_MS,
+  JOB_POLL_INTERVAL_MS,
+  PROJECT_ID,
+  TURN_POLL_INTERVAL_MS,
+  TURN_TIMEOUT_MS,
+} from "../lib/config.ts";
 import { newRequestId, newSessionId, uuid } from "../lib/ids.ts";
 import { initialWorkspaceState, workspaceReducer } from "../lib/workspace/reducer.ts";
 import type { WorkspaceState } from "../lib/workspace/types.ts";
@@ -45,6 +51,8 @@ export interface UseWorkspaceOptions {
   /** Disable background polling in tests. */
   poll?: boolean;
   pollIntervalMs?: number;
+  /** How long to wait for a model answer before saying so. */
+  turnTimeoutMs?: number;
 }
 
 export interface WorkspaceSession {
@@ -219,6 +227,54 @@ export function useWorkspace(options: UseWorkspaceOptions = {}): WorkspaceSessio
   }, []);
 
   // --- actions -----------------------------------------------------------
+
+  /**
+   * Wait for a started turn to be answered.
+   *
+   * The model is slow — tens of seconds for a question, minutes for a floor plan — so the
+   * server hands back a turn id immediately and the answer is polled. Each poll is a
+   * short request, so nothing depends on one long-lived connection, and a reload can pick
+   * the answer up again.
+   */
+  const awaitTurn = useCallback(
+    async (projectId: string, turnId: string): Promise<DesignTurnView> => {
+      const interval = options.pollIntervalMs ?? TURN_POLL_INTERVAL_MS;
+      const deadline = Date.now() + (options.turnTimeoutMs ?? TURN_TIMEOUT_MS);
+
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, interval));
+        let update;
+        try {
+          update = await client.getTurn(projectId, turnId);
+        } catch (error) {
+          // A poll that fails is not a turn that failed. Keep asking through anything
+          // that looks like the connection rather than the answer: a dropped request, a
+          // timeout, or a gateway error with no canonical code from our API (a proxy
+          // hiccup, or the API restarting). A structured failure IS the answer, so it
+          // ends the wait.
+          const transportish =
+            error instanceof ApiFailure &&
+            (error.kind === "offline" ||
+              error.kind === "timeout" ||
+              (error.code === null && (error.status ?? 0) >= 502));
+          if (transportish) {
+            if (Date.now() > deadline) throw error;
+            continue;
+          }
+          throw error;
+        }
+        if (isFinishedTurn(update)) return update;
+        if (Date.now() > deadline) {
+          throw new ApiFailure(
+            "Astra is taking longer than expected. Your message is still being worked on — check back in a moment.",
+            "timeout",
+          );
+        }
+      }
+    },
+    [client, options.pollIntervalMs, options.turnTimeoutMs],
+  );
+
   const send = useCallback(
     async (message: string) => {
       const text = message.trim();
@@ -227,14 +283,32 @@ export function useWorkspace(options: UseWorkspaceOptions = {}): WorkspaceSessio
       dispatch({ type: "message_sent", requestId, text });
 
       try {
-        const turn = await client.sendMessage(projectId, {
+        const started = await client.sendMessage(projectId, {
           requestId,
           sessionId: sessionIdRef.current,
           message: text,
           attachedReferenceIds: state.attachedReferenceIds,
           selectedObjectId: state.selectedObjectId,
         });
-        dispatch({ type: "turn_received", turn });
+
+        const turn = isFinishedTurn(started)
+          ? started
+          : await (async () => {
+              dispatch({
+                type: "job_progress",
+                requestId,
+                label: "Astra is thinking…",
+                stepIndex: 0,
+                stepCount: 1,
+              });
+              return awaitTurn(projectId, started.turn_id);
+            })();
+
+        // Keyed by the id THIS message was sent with. One user message owns exactly one
+        // reply slot, and that must not depend on the server echoing the id back
+        // unchanged — a mismatch would leave the "thinking" line orphaned above the
+        // answer instead of being replaced by it.
+        dispatch({ type: "turn_received", turn: { ...turn, request_id: requestId } });
         if (turn.job_id) void track(requestId, turn.job_id);
       } catch (error) {
         dispatch({
@@ -245,7 +319,7 @@ export function useWorkspace(options: UseWorkspaceOptions = {}): WorkspaceSessio
         });
       }
     },
-    [client, projectId, state.attachedReferenceIds, state.selectedObjectId, track],
+    [awaitTurn, client, projectId, state.attachedReferenceIds, state.selectedObjectId, track],
   );
 
   const upload = useCallback(
@@ -294,13 +368,16 @@ export function useWorkspace(options: UseWorkspaceOptions = {}): WorkspaceSessio
   const decide = useCallback(
     async (approvalId: string, approved: boolean) => {
       try {
-        const turn = await client.decideApproval(
+        const started = await client.decideApproval(
           projectId,
           approvalId,
           approved,
           sessionIdRef.current,
         );
         dispatch({ type: "approval_resolved", approvalId });
+        const turn: DesignTurnView = isFinishedTurn(started)
+          ? started
+          : await awaitTurn(projectId, started.turn_id);
         dispatch({ type: "turn_received", turn });
         if (turn.job_id) void track(turn.request_id, turn.job_id);
       } catch (error) {
@@ -311,7 +388,7 @@ export function useWorkspace(options: UseWorkspaceOptions = {}): WorkspaceSessio
         });
       }
     },
-    [client, projectId, track],
+    [awaitTurn, client, projectId, track],
   );
 
   const saveFact = useCallback(

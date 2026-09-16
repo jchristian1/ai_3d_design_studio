@@ -179,3 +179,62 @@ def test_a_relative_path_write_is_not_flagged_and_this_is_a_known_gap() -> None:
 
     not_flagged = assess("import bpy\nname = 'notes.txt'\n")
     assert not_flagged.decision == classifier.AUTO
+
+
+
+# ---------------------------------------------------------------------------
+# Deleting an object is scene work, not filesystem access
+# ---------------------------------------------------------------------------
+#
+# From a real Astra turn: a plan that rebuilds a coffee table started by removing the
+# objects it was about to replace, with `bpy.data.objects.remove(obj)`. That stopped for
+# approval because the word "remove" was on the sensitive list. It is ordinary modelling —
+# and a gate that fires on almost every rebuild teaches people to approve without reading,
+# which is the one thing the gate must not do.
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "import bpy\nbpy.data.objects.remove(bpy.data.objects['Cube'], do_unlink=True)\n",
+        "import bpy\nbpy.data.materials.remove(bpy.data.materials['Old'])\n",
+        "import bpy\nbpy.data.meshes.remove(bpy.data.meshes['Mesh'])\n",
+        "import bpy\nbpy.data.collections.clear()\n",
+        "import bpy\nfor o in list(bpy.data.objects):\n    bpy.data.objects.remove(o, do_unlink=True)\n",
+    ],
+)
+def test_removing_blender_data_runs_without_asking(code: str) -> None:
+    assessment = classifier.classify_python(code)
+    assert assessment.may_run_unattended, assessment.reasons()
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "import os\nos.remove('/tmp/x')\n",
+        "import shutil\nshutil.rmtree('/tmp/x')\n",
+        "from pathlib import Path\nPath('/tmp/x').unlink()\n",
+        "import os\nos.rename('/tmp/a', '/tmp/b')\n",
+        # Not rooted at bpy, so the platform has no reason to believe it is scene work.
+        "import bpy\nhelper = get_helper()\nhelper.remove('/tmp/x')\n",
+    ],
+)
+def test_removing_anything_else_still_needs_approval(code: str) -> None:
+    assessment = classifier.classify_python(code)
+    assert assessment.requires_approval, assessment.reasons()
+
+
+def test_the_real_plan_that_prompted_this_now_runs_unattended() -> None:
+    """The shape Astra actually produced: clear by id, then rebuild."""
+    code = (
+        "import bpy, math\n"
+        "def clear_id(oid):\n"
+        "    for o in list(bpy.data.objects):\n"
+        "        if o.get('object_id') == oid:\n"
+        "            bpy.data.objects.remove(o, do_unlink=True)\n"
+        "clear_id('obj_tabletop')\n"
+        "bpy.ops.mesh.primitive_cylinder_add(vertices=96, radius=0.6, depth=0.08,"
+        " location=(0, 0, 0.41))\n"
+    )
+    assessment = classifier.classify_python(code)
+    assert assessment.may_run_unattended, assessment.reasons()

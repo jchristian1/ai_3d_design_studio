@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -44,13 +45,44 @@ def upload(client: TestClient, filename: str, data: bytes, media_type: str) -> A
 
 
 def chat(client: TestClient, message: str, **kwargs: Any) -> Any:
+    """Send a message and return the FINISHED turn.
+
+    A turn is started and then polled, because a real model takes far longer than a
+    browser will hold a request open. These tests are about the answer rather than the
+    protocol, so the polling lives here — the same thing the browser client does.
+    """
     body = {
         "request_id": kwargs.pop("request_id", "req_1"),
         "session_id": "sess_1",
         "message": message,
     }
     body.update(kwargs)
-    return client.post(f"/api/projects/{PROJECT}/design-chat", json=body)
+    return settle(client, client.post(f"/api/projects/{PROJECT}/design-chat", json=body))
+
+
+def decide(client: TestClient, approval_id: str, approved: bool) -> Any:
+    return settle(
+        client,
+        client.post(
+            f"/api/projects/{PROJECT}/approvals/{approval_id}", json={"approved": approved}
+        ),
+    )
+
+
+def settle(client: TestClient, started: Any, attempts: int = 400) -> Any:
+    """Follow a started turn until it finishes."""
+    if started.status_code >= 400:
+        return started
+    payload = started.json()
+    if payload.get("state") != "thinking":
+        return started
+    url = f"/api/projects/{PROJECT}/design-chat/{payload['turn_id']}"
+    for _ in range(attempts):
+        polled = client.get(url)
+        if polled.status_code >= 400 or polled.json().get("state") != "thinking":
+            return polled
+        time.sleep(0.01)
+    raise AssertionError("the turn never finished")
 
 
 # --- uploads --------------------------------------------------------------
@@ -297,9 +329,7 @@ def test_rejecting_an_approval_runs_nothing(connected) -> None:
     provider.queue_plan([operation("execute_blender_python", {"code": RISKY_CODE})])
     approval_id = chat(client, "tidy up").json()["approval"]["approval_id"]
 
-    response = client.post(
-        f"/api/projects/{PROJECT}/approvals/{approval_id}", json={"approved": False}
-    )
+    response = decide(client, approval_id, False)
     assert response.status_code == 200
     assert response.json()["kind"] == "answer"
     assert "did not run" in response.json()["message"]
@@ -311,18 +341,17 @@ def test_an_approval_cannot_be_decided_twice(connected) -> None:
     provider.queue_plan([operation("execute_blender_python", {"code": RISKY_CODE})])
     approval_id = chat(client, "tidy up").json()["approval"]["approval_id"]
 
-    client.post(f"/api/projects/{PROJECT}/approvals/{approval_id}", json={"approved": False})
-    again = client.post(
-        f"/api/projects/{PROJECT}/approvals/{approval_id}", json={"approved": True}
-    )
-    assert again.status_code == 409
+    decide(client, approval_id, False)
+    # Deciding again is refused. The refusal arrives through the turn, like every other
+    # outcome of a decision — starting one is accepted, the decision itself conflicts.
+    again = decide(client, approval_id, True)
+    assert again.status_code == 409, again.text
+    assert again.json()["error"]["code"] == "PRECONDITION_MISMATCH"
 
 
 def test_an_unknown_approval_is_refused(harness) -> None:
     client, _, _ = harness
-    response = client.post(
-        f"/api/projects/{PROJECT}/approvals/apr_nothing", json={"approved": True}
-    )
+    response = decide(client, "apr_nothing", True)
     assert response.status_code == 404
 
 

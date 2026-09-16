@@ -19,6 +19,7 @@ from ..design_chat import DesignChatRequest
 from ..identity import TrustedIdentity
 from ..ingest import SUPPORTED_DESCRIPTION, UploadRejected
 from ..storage import ReferenceStorageError
+from ..turns import thinking_snapshot
 from .support import ControlPlaneHTTPError, get_dependencies, get_identity
 
 _log = logging.getLogger(__name__)
@@ -189,7 +190,7 @@ def reference_content(
 # --- the conversation -----------------------------------------------------
 
 
-@router.post("/{project_id}/design-chat")
+@router.post("/{project_id}/design-chat", status_code=202)
 def design_chat(
     project_id: str,
     body: DesignChatBody,
@@ -197,30 +198,88 @@ def design_chat(
     response: Response,
     identity: TrustedIdentity = Depends(get_identity),
 ) -> dict[str, Any]:
+    """Start a turn. The answer is collected by polling, not by waiting here.
+
+    A real model takes tens of seconds to think, and minutes to plan a floor plan. A
+    browser will not hold a request open that long — and if it tries, a reload throws the
+    answer away and the model's work is orphaned.
+    """
     dependencies = get_dependencies(request)
     _require_project(dependencies, project_id)
 
-    turn = dependencies.design_chat.submit(
-        DesignChatRequest(
-            request_id=body.request_id,
-            project_id=project_id,
-            session_id=body.session_id,
-            message=body.message,
-            attached_reference_ids=tuple(body.attached_reference_ids),
-            selected_object_id=body.selected_object_id,
-        ),
-        identity,
+    chat_request = DesignChatRequest(
+        request_id=body.request_id,
+        project_id=project_id,
+        session_id=body.session_id,
+        message=body.message,
+        attached_reference_ids=tuple(body.attached_reference_ids),
+        selected_object_id=body.selected_object_id,
     )
+    state = dependencies.turns.start(chat_request, identity)
+
+    # A turn that finished before the first poll (a cached answer, a refusal) is returned
+    # immediately: making the browser poll for something already known is pointless.
+    if state.finished:
+        return _finished_turn(project_id, state, response)
+
+    return thinking_snapshot(state, poll_url=_turn_url(project_id, state.turn_id))
+
+
+@router.get("/{project_id}/design-chat/{turn_id}")
+def design_turn(
+    project_id: str,
+    turn_id: str,
+    request: Request,
+    response: Response,
+    identity: TrustedIdentity = Depends(get_identity),
+) -> dict[str, Any]:
+    """Where a turn has got to, and its result once there is one."""
+    dependencies = get_dependencies(request)
+    _require_project(dependencies, project_id)
+
+    state = dependencies.turns.get(project_id, turn_id)
+    if state is None:
+        failure = errors.failure(
+            errors.UNKNOWN_PROJECT,
+            "VALIDATION_ERROR",
+            "That message is no longer being tracked. Send it again.",
+        )
+        raise ControlPlaneHTTPError(failure.http_status, failure.body())
+
+    if not state.finished:
+        return thinking_snapshot(state, poll_url=_turn_url(project_id, state.turn_id))
+
+    return _finished_turn(project_id, state, response)
+
+
+def _finished_turn(project_id: str, state: Any, response: Response) -> dict[str, Any]:
+    """Render a completed turn, failures included, exactly as the old route did."""
+    if state.error is not None:
+        raise ControlPlaneHTTPError(
+            state.error.http_status, state.error.body(request_id=state.request_id)
+        )
+
+    turn = state.result
+    if turn is None:  # pragma: no cover - finished implies one or the other
+        failure = errors.failure(
+            errors.INTERNAL, "INTERNAL_ERROR", "That turn produced no result."
+        )
+        raise ControlPlaneHTTPError(failure.http_status, failure.body())
+
     if turn.failure is not None:
         raise ControlPlaneHTTPError(
             turn.failure.http_status, turn.failure.body(request_id=turn.request_id)
         )
 
     response.status_code = turn.http_status
-    return turn.snapshot(status_url=_status_url(project_id, turn.job_id))
+    return {
+        **turn.snapshot(status_url=_status_url(project_id, turn.job_id)),
+        "turn_id": state.turn_id,
+        "state": "ready",
+    }
 
 
-@router.post("/{project_id}/approvals/{approval_id}")
+@router.post("/{project_id}/approvals/{approval_id}", status_code=202)
 def decide_approval(
     project_id: str,
     approval_id: str,
@@ -229,23 +288,27 @@ def decide_approval(
     response: Response,
     identity: TrustedIdentity = Depends(get_identity),
 ) -> dict[str, Any]:
-    """Approve or reject one model-authored step. Rejected code never runs."""
+    """Approve or reject one model-authored step. Rejected code never runs.
+
+    Polled like a message: approving runs the plan, which involves Blender.
+    """
     dependencies = get_dependencies(request)
     _require_project(dependencies, project_id)
 
-    turn = dependencies.design_chat.decide_approval(
+    state = dependencies.turns.start_decision(
         project_id,
         approval_id,
         approved=body.approved,
         identity=identity,
         session_id=body.session_id,
     )
-    if turn.failure is not None:
-        raise ControlPlaneHTTPError(
-            turn.failure.http_status, turn.failure.body(request_id=approval_id)
-        )
-    response.status_code = turn.http_status
-    return turn.snapshot(status_url=_status_url(project_id, turn.job_id))
+    if state.finished:
+        return _finished_turn(project_id, state, response)
+    return thinking_snapshot(state, poll_url=_turn_url(project_id, state.turn_id))
+
+
+def _turn_url(project_id: str, turn_id: str) -> str:
+    return f"/api/projects/{project_id}/design-chat/{turn_id}"
 
 
 @router.get("/{project_id}/approvals")
