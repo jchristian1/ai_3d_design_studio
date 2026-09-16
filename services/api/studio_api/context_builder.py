@@ -72,7 +72,13 @@ class ContextBuilder:
         facts = self.repositories.facts.as_mapping(project_id)
         pending = self._pending_clarification(project_id)
         attached = self.repositories.references.resolve_many(project_id, attached_reference_ids)
-        selected = self._select_references(project_id, attached, user_text)
+        selected = self._select_references(
+            project_id,
+            attached,
+            user_text,
+            clarification_open=pending is not None,
+            scene_is_empty=scene is None or not scene.objects,
+        )
 
         images = self._images(project_id, selected.images)
         documents = self._documents(selected.documents)
@@ -175,6 +181,9 @@ class ContextBuilder:
         project_id: str,
         attached: Sequence[ReferenceRecord],
         user_text: str,
+        *,
+        clarification_open: bool = False,
+        scene_is_empty: bool = True,
     ) -> "_Selection":
         """Choose what to send.
 
@@ -185,12 +194,21 @@ class ContextBuilder:
            details about.
         2. If nothing was attached, references whose display name is mentioned in the
            message.
-        3. If still nothing and the message plausibly needs to look at something, the
-           most recently uploaded references.
+        3. If still nothing, the project's most recent references — as long as the turn
+           is plausibly about them (see :meth:`_should_offer_recent`).
 
-        Deliberately simple, and deliberately not a vector search: with a handful of
-        plans per project, name matching plus recency is both cheaper and easier to
-        predict than an embedding, and a wrong guess here costs credits.
+        Rule 3 used to require the MESSAGE to look visual, and to send only the last two
+        references. That failed in the most ordinary conversation there is:
+
+            user:   "model this room"        + a sketch attached
+            Astra:  "what is the ceiling height?"
+            user:   "117"                    <- nothing attached, nothing visual
+            Astra:  "could you attach the sketch again?"
+
+        The answer to a question is a bare number, so every word-matching heuristic
+        missed, the sketch was withheld, and Astra asked for what it had never been shown
+        — three times. An open question is exactly when the references in play must stay
+        in play.
         """
         selection = _Selection()
 
@@ -211,12 +229,33 @@ class ContextBuilder:
                 self._include(project_id, record, selection)
             return selection
 
-        if _looks_visual(lowered):
-            recent = self.repositories.references.list_for_project(project_id)[-2:]
-            for record in recent:
+        if self._should_offer_recent(
+            lowered, clarification_open=clarification_open, scene_is_empty=scene_is_empty
+        ):
+            # Newest first, and bounded by the image budget: what a person means by "the
+            # sketch" is almost always the last thing they uploaded.
+            recent = list(self.repositories.references.list_for_project(project_id))[::-1]
+            for record in recent[: self.max_images]:
                 self._include(project_id, record, selection)
 
         return selection
+
+    def _should_offer_recent(
+        self, lowered_text: str, *, clarification_open: bool, scene_is_empty: bool
+    ) -> bool:
+        """Whether an un-attached reference is worth the tokens this turn.
+
+        Yes while the conversation is still ABOUT the references: a question is open, or
+        nothing has been built yet, or the message itself asks for something to be looked
+        at. No once there is a model and the user is editing it — "make this 20 cm taller"
+        does not need the floor plan re-sent, and images are the most expensive thing in
+        the prompt.
+        """
+        if clarification_open:
+            return True
+        if scene_is_empty:
+            return True
+        return _looks_visual(lowered_text)
 
     def _include(
         self, project_id: str, record: ReferenceRecord, selection: "_Selection"

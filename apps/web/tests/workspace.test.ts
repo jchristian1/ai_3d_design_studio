@@ -268,14 +268,26 @@ describe("references and attachments", () => {
     assert.equal(attachedReferences(next).length, 1);
   });
 
-  it("sending clears attachments so images are not silently re-sent", () => {
+  it("an attachment stays attached across turns, and is removed by hand", () => {
+    // It used to be cleared on send, to avoid re-sending images and spending credits
+    // twice. The real cost was worse: Astra forgot the sketch the moment the user
+    // answered its question, and asked for it again — three times, in the session that
+    // prompted this. What is attached is shown as a chip with an ×, so it is visible and
+    // one click to drop.
     const next = reduce(
       state(),
       { type: "upload_succeeded", id: "u1", reference: reference(), notice: null },
-      { type: "message_sent", requestId: "req_1", text: "what do you see?" },
+      { type: "message_sent", requestId: "req_1", text: "model this room" },
       { type: "turn_received", turn: turn() },
+      { type: "message_sent", requestId: "req_2", text: "117" },
     );
-    assert.deepEqual(next.attachedReferenceIds, []);
+    assert.deepEqual(next.attachedReferenceIds, ["ref_a"]);
+
+    const detached = workspaceReducer(next, {
+      type: "attachment_toggled",
+      referenceId: "ref_a",
+    });
+    assert.deepEqual(detached.attachedReferenceIds, []);
   });
 
   it("attachment can be toggled off and on", () => {

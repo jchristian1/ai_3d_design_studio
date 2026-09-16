@@ -11,6 +11,7 @@ from studio_agent.providers.codex_astra import build_prompt
 from studio_api.context_builder import ContextBuilder
 from studio_api.ingest import ReferenceIngestService
 from studio_api.storage import ReferenceFileStore, StudioDatabase, StudioRepositories
+from studio_api.storage.models import ClarificationRecord
 
 from studio_fixtures.sample_files import jpeg_bytes, pdf_bytes, png_bytes
 
@@ -112,10 +113,20 @@ def test_a_reference_mentioned_by_name_is_included_without_being_attached(parts)
     assert not any("sofa" in label for label in labels)
 
 
-def test_a_non_visual_message_attaches_nothing(parts) -> None:
+def test_a_non_visual_message_about_an_existing_model_attaches_nothing(parts) -> None:
+    """Once there is a model, chatter does not re-send the plans.
+
+    Before there is one, it does — see
+    `test_a_project_with_nothing_built_yet_always_shows_its_references`. That asymmetry is
+    the point: while nothing is built, every message is still about the drawings.
+    """
     builder, ingest, _ = parts
     ingest.ingest(PROJECT, "floor-plan.pdf", pdf_bytes(pages=1))
-    agent_input = build(builder, user_text="thanks, that is all for today")
+    agent_input = build(
+        builder,
+        user_text="thanks, that is all for today",
+        scene=_scene_with_one_wall(),
+    )
     assert agent_input.images == ()
     # But the agent is still told the reference exists, so it can ask for it.
     assert any("floor-plan.pdf" in summary for summary in agent_input.reference_summaries)
@@ -221,3 +232,181 @@ def test_the_agent_input_carries_no_other_projects_data(parts) -> None:
     )
     assert "secret_fact" not in serialized
     assert "other.png" not in serialized
+
+
+
+# ---------------------------------------------------------------------------
+# Answering a question must not lose the drawing the question was about
+# ---------------------------------------------------------------------------
+#
+# From a real session, and the reason these tests exist:
+#
+#   user:   "i want you to model this room"     + a sketch attached
+#   Astra:  "what are the inside dimensions and the ceiling height?"
+#   user:   "inches"
+#   Astra:  "could you attach the room sketch again?"
+#   user:   "117"
+#   Astra:  "could you attach the dimensioned sketch again?"
+#
+# The sketch was stored the whole time. It was withheld because the follow-up messages
+# carried no attachment and contained no word that looked visual, so Astra was shown a
+# LIST OF FILENAMES and asked for what it had never seen — three times.
+
+
+_sketch_size = 10
+
+
+def _sketch(ingest, name: str = "room-sketch.jpeg"):
+    """Upload one image the way the browser does, and return its record.
+
+    Each one gets distinct bytes: identical bytes are DEDUPLICATED into a single
+    reference, which would quietly make a multi-file test a one-file test.
+    """
+    global _sketch_size
+    _sketch_size += 1
+    return ingest.ingest(PROJECT, name, jpeg_bytes(width=_sketch_size, height=_sketch_size)).reference
+
+
+def test_a_bare_answer_to_an_open_question_still_sees_the_sketch(parts) -> None:
+    builder, ingest, repositories = parts
+    _sketch(ingest)
+
+    # Astra asked something, so a question is open.
+    repositories.clarifications.add(
+        ClarificationRecord(
+            clarification_id="clr_1",
+            project_id=PROJECT,
+            session_id="sess_1",
+            question="What is the floor-to-ceiling height?",
+            missing_information=("ceiling_height",),
+        )
+    )
+
+    # The user answers with a bare number, and attaches nothing.
+    context = builder.build(
+        user_text="117",
+        user_id="user_1",
+        project_id=PROJECT,
+        session_id="sess_1",
+        attached_reference_ids=(),
+    )
+
+    assert len(context.images) == 1, "the sketch was withheld while its question was open"
+    assert context.images[0].label == "room-sketch.jpeg"
+
+
+def test_a_project_with_nothing_built_yet_always_shows_its_references(parts) -> None:
+    """Before anything exists, every message is still about the drawings."""
+    builder, ingest, _ = parts
+    _sketch(ingest)
+
+    context = builder.build(
+        user_text="inches",
+        user_id="user_1",
+        project_id=PROJECT,
+        session_id="sess_1",
+    )
+
+    assert len(context.images) == 1
+
+
+def test_the_newest_uploads_are_the_ones_offered(parts) -> None:
+    """"The sketch" means the last thing the user uploaded."""
+    builder, ingest, _ = parts
+    builder.max_images = 2
+    for index in range(4):
+        _sketch(ingest, f"sketch-{index}.jpeg")
+
+    context = builder.build(
+        user_text="117",
+        user_id="user_1",
+        project_id=PROJECT,
+        session_id="sess_1",
+    )
+
+    labels = [image.label for image in context.images]
+    assert len(labels) == 2, "the image budget must still be respected"
+    assert labels == ["sketch-3.jpeg", "sketch-2.jpeg"], labels
+
+
+def test_editing_an_existing_model_does_not_re_send_the_plans(parts) -> None:
+    """Images are the most expensive thing in a prompt, so they stop when they stop being
+    the subject: once a room exists, "make this taller" needs the scene, not the sketch."""
+    builder, ingest, _ = parts
+    _sketch(ingest)
+
+    context = builder.build(
+        user_text="make this 20 cm taller",
+        user_id="user_1",
+        project_id=PROJECT,
+        session_id="sess_1",
+        scene=_scene_with_one_wall(),
+    )
+
+    assert context.images == ()
+    # And the agent is still told the reference exists.
+    assert any("room-sketch" in summary for summary in context.reference_summaries)
+
+
+def test_asking_about_a_drawing_still_works_once_a_model_exists(parts) -> None:
+    builder, ingest, _ = parts
+    _sketch(ingest)
+
+    context = builder.build(
+        user_text="does this match the floor plan I sent?",
+        user_id="user_1",
+        project_id=PROJECT,
+        session_id="sess_1",
+        scene=_scene_with_one_wall(),
+    )
+
+    assert len(context.images) == 1
+
+
+def test_an_explicit_attachment_always_wins(parts) -> None:
+    """Whatever the heuristics think, what the user attached is what gets sent."""
+    builder, ingest, _ = parts
+    first = _sketch(ingest, "old.jpeg")
+    _sketch(ingest, "new.jpeg")
+
+    context = builder.build(
+        user_text="make this 20 cm taller",
+        user_id="user_1",
+        project_id=PROJECT,
+        session_id="sess_1",
+        attached_reference_ids=(first.reference_id,),
+        scene=_scene_with_one_wall(),
+    )
+
+    assert [image.label for image in context.images] == ["old.jpeg"]
+
+
+def _scene_with_one_wall():
+    from studio_types import (
+        EulerRadians,
+        Scale3,
+        SceneObject,
+        SceneSnapshot,
+        SceneUnits,
+        Vec3,
+    )
+
+    return SceneSnapshot(
+        project_id=PROJECT,
+        scene_version="sha256:" + "a" * 64,
+        captured_at="2026-01-01T00:00:00Z",
+        units=SceneUnits(unit_system="METRIC", length_unit="m", scale_length=1.0),
+        objects=(
+            SceneObject(
+                studio_object_id="obj_wall",
+                name="Wall_North",
+                object_type="MESH",
+                world_position_meters=Vec3(0.0, 0.0, 1.35),
+                dimensions_meters=Vec3(4.0, 0.12, 2.7),
+                rotation_euler_radians=EulerRadians(0.0, 0.0, 0.0),
+                scale=Scale3(1.0, 1.0, 1.0),
+                visible=True,
+                material=None,
+            ),
+        ),
+    )
