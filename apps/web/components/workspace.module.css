@@ -157,11 +157,15 @@
   background: var(--surface-1);
 }
 
+/* A single-cell grid, because a grid item stretches in both axes by default. A flex row
+   sized the viewer from its content, and its content is absolutely positioned. */
 .stage {
   min-width: 0;
   min-height: 0;
   padding: 0.9rem;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .inspectorSlot {

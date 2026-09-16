@@ -197,6 +197,31 @@ export function ModelViewer({
 }
 
 /**
+ * The size to render at.
+ *
+ * A viewer that renders at 0×0 is indistinguishable from a broken one, and the container's
+ * size depends on CSS that lives somewhere else — which is exactly how a good model ended up
+ * in an invisible canvas. So the size is taken from the mount if it has one, otherwise from
+ * the nearest ancestor that does, and only then from a default. Belt and braces on purpose:
+ * the CSS is also fixed, and a stylesheet test guards it, but neither should be the only
+ * thing standing between the user and a blank screen.
+ */
+export function measureForTest(mount: HTMLElement): { width: number; height: number } {
+  return measure(mount);
+}
+
+function measure(mount: HTMLElement): { width: number; height: number } {
+  let element: HTMLElement | null = mount;
+  for (let depth = 0; element && depth < 6; depth += 1) {
+    const width = element.clientWidth;
+    const height = element.clientHeight;
+    if (width >= 2 && height >= 2) return { width, height };
+    element = element.parentElement;
+  }
+  return { width: 800, height: 600 };
+}
+
+/**
  * Create the WebGL scene. Throws when Three.js or WebGL is unavailable, which is what
  * drives the honest fallback above.
  */
@@ -214,8 +239,9 @@ async function createScene(
   } catch {
     throw new Error("WebGL is not available in this browser.");
   }
+  const initial = measure(mount);
   renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio ?? 1, 2));
-  renderer.setSize(mount.clientWidth || 800, mount.clientHeight || 600);
+  renderer.setSize(initial.width, initial.height);
   mount.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -223,7 +249,7 @@ async function createScene(
 
   const camera = new THREE.PerspectiveCamera(
     50,
-    (mount.clientWidth || 800) / (mount.clientHeight || 600),
+    initial.width / initial.height,
     0.05,
     500,
   );
@@ -265,8 +291,12 @@ async function createScene(
   animate();
 
   const resize = () => {
-    const width = mount.clientWidth || 800;
-    const height = mount.clientHeight || 600;
+    const { width, height } = measure(mount);
+    // A zero measurement happens while the panel is being laid out, and while a collapsed
+    // column animates. `measure` never returns zero, and the renderer is only resized when
+    // the size actually changed, so a stream of observations costs nothing.
+    const current = renderer.getSize(new THREE.Vector2());
+    if (Math.abs(current.x - width) < 1 && Math.abs(current.y - height) < 1) return;
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
