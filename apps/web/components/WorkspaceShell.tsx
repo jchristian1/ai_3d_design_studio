@@ -3,78 +3,79 @@
 /**
  * The design workspace.
  *
- *   ┌ toolbar: project · Astra · Blender · model status ─────────────────┐
- *   ├ references │            3D model            │ inspector ──────────┤
- *   ├ conversation, expanding upward, independently scrollable ──────────┤
- *   └ composer, anchored to the bottom ──────────────────────────────────┘
+ *   ┌ top bar: project · Astra · Blender · model ────────────────────────┐
+ *   │ conversation │                                    │  inspector    │
+ *   │  + files     │            3D model                │  scene        │
+ *   │  + composer  │                                    │  facts        │
+ *   └──────────────┴────────────────────────────────────┴───────────────┘
  *
- * The model keeps the largest share of the screen and stays visible while you talk,
- * because looking at the design is the point of the tool. Both sidebars collapse, and
- * the centre takes the space they give up.
+ * Chat on the LEFT, in one column, with the composer pinned to the bottom of that
+ * column: talking and looking happen side by side, and the model keeps a large, stable
+ * area rather than being squeezed by a transcript that grows across the whole width.
+ *
+ * Both side columns collapse and the model takes the space they give up.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { SUPPORTED_UPLOAD_ACCEPT } from "../lib/config.ts";
 import { useWorkspace, type UseWorkspaceOptions } from "../hooks/useWorkspace.ts";
 import { pendingApproval, selectedObject, attachedReferences } from "../lib/workspace/types.ts";
 import { AstraConnect } from "./AstraConnect.tsx";
-import { Composer } from "./Composer.tsx";
-import { ConversationPanel } from "./ConversationPanel.tsx";
+import { ChatColumn } from "./ChatColumn.tsx";
 import { InspectorPanel, friendlyName } from "./InspectorPanel.tsx";
 import { ModelViewer } from "./ModelViewer.tsx";
-import { ReferencesPanel } from "./ReferencesPanel.tsx";
 import styles from "./workspace.module.css";
 
 export interface WorkspaceShellProps {
   /** Injected by tests to supply stub clients; unused in the app. */
   sessionOptions?: UseWorkspaceOptions;
+  /** Shown in the top bar. Falls back to whatever the workspace reports. */
+  projectName?: string;
+  /** Rendered inside the top bar: the project switcher, when there is one. */
+  projectControl?: React.ReactNode;
 }
 
-export function WorkspaceShell({ sessionOptions }: WorkspaceShellProps) {
+export function WorkspaceShell({
+  sessionOptions,
+  projectName,
+  projectControl,
+}: WorkspaceShellProps) {
   const session = useWorkspace(sessionOptions ?? {});
   const { state } = session;
 
-  const [referencesOpen, setReferencesOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [historyCollapsed, setHistoryCollapsed] = useState(false);
-  const uploadTrigger = useRef<HTMLDivElement | null>(null);
 
   const selected = selectedObject(state);
   const approval = pendingApproval(state);
+  const attached = useMemo(() => attachedReferences(state), [state]);
 
-  const requestAttach = useCallback(() => {
-    // The file input lives in the references panel, which owns upload UI. Opening the
-    // panel and clicking through keeps one implementation rather than two.
-    setReferencesOpen(true);
-    const input = uploadTrigger.current?.querySelector<HTMLInputElement>(
-      "#reference-upload",
-    );
-    input?.click();
-  }, []);
-
-  const modelStatus = describeModelStatus(state.phase, Boolean(state.model));
+  const clearSelection = useCallback(() => session.selectObject(null), [session]);
 
   return (
     <div
-      className={`${styles.shell} ${referencesOpen ? "" : styles.noLeft} ${
-        inspectorOpen ? "" : styles.noRight
+      className={`${styles.shell} ${chatOpen ? "" : styles.noChat} ${
+        inspectorOpen ? "" : styles.noInspector
       }`}
     >
-      <header className={styles.toolbar}>
-        <div className={styles.toolbarGroup}>
+      <header className={styles.topBar}>
+        <div className={styles.topLeft}>
           <button
             type="button"
             className={styles.toggle}
-            aria-pressed={referencesOpen}
-            onClick={() => setReferencesOpen((open) => !open)}
+            aria-pressed={chatOpen}
+            onClick={() => setChatOpen((open) => !open)}
+            title="Show or hide the conversation"
           >
-            References
+            Chat
           </button>
-          <h1 className={styles.projectName}>{state.displayName}</h1>
+          {projectControl ?? (
+            <h1 className={styles.projectName}>{projectName ?? state.displayName}</h1>
+          )}
         </div>
 
-        <div className={styles.toolbarGroup}>
+        <div className={styles.topRight}>
           <StatusPill
             label={state.astra?.label ?? "Astra via Codex"}
             message={state.astra?.message ?? "Checking…"}
@@ -87,12 +88,15 @@ export function WorkspaceShell({ sessionOptions }: WorkspaceShellProps) {
             connected={state.blender?.connected ?? false}
             action={null}
           />
-          <span className={styles.modelStatus}>{modelStatus}</span>
+          <span className={styles.modelStatus}>
+            {describeModelStatus(state.phase, Boolean(state.model))}
+          </span>
           <button
             type="button"
             className={styles.toggle}
             aria-pressed={inspectorOpen}
             onClick={() => setInspectorOpen((open) => !open)}
+            title="Show or hide the inspector"
           >
             Inspector
           </button>
@@ -102,40 +106,53 @@ export function WorkspaceShell({ sessionOptions }: WorkspaceShellProps) {
       {state.notice ? (
         <div className={styles.notice} role="status">
           <span>{state.notice}</span>
-          <button type="button" className={styles.smallButton} onClick={session.dismissNotice}>
+          <button type="button" className={styles.ghostButton} onClick={session.dismissNotice}>
             Dismiss
           </button>
         </div>
       ) : null}
 
-      {state.astra && !state.astra.connected ? (
-        <AstraConnect
-          client={session.client}
-          status={state.astra}
-          onConnected={() => {
-            void session.refreshStatus();
-            void session.refresh();
-          }}
-        />
-      ) : null}
+      <div className={styles.body}>
+        {chatOpen ? (
+          <div className={styles.chatSlot}>
+            {state.astra && !state.astra.connected ? (
+              <AstraConnect
+                client={session.client}
+                status={state.astra}
+                onConnected={() => {
+                  void session.refreshStatus();
+                  void session.refresh();
+                }}
+              />
+            ) : null}
 
-      <main className={styles.main}>
-        {referencesOpen ? (
-          <div className={styles.left} ref={uploadTrigger}>
-            <ReferencesPanel
+            <ChatColumn
+              entries={state.entries}
               references={state.references}
               attachedIds={state.attachedReferenceIds}
+              attached={attached}
               uploads={state.uploads}
+              accept={SUPPORTED_UPLOAD_ACCEPT}
+              busy={session.busy}
+              selectedLabel={selected ? friendlyName(selected.name) : null}
+              hint={composerHint(
+                state.astra?.connected,
+                state.blender?.connected,
+                approval !== null,
+              )}
+              canSubmit={session.canSubmit}
+              onSubmit={session.send}
               onUpload={session.upload}
               onToggleAttachment={session.toggleAttachment}
-              onRemove={session.removeReference}
+              onRemoveReference={session.removeReference}
               referenceUrl={session.referenceUrl}
-              accept={SUPPORTED_UPLOAD_ACCEPT}
+              onDecide={session.decide}
+              onClearSelection={clearSelection}
             />
           </div>
         ) : null}
 
-        <div className={styles.centre}>
+        <main className={styles.stage}>
           <ModelViewer
             modelUrl={session.modelUrl}
             previewUrl={session.previewUrl}
@@ -143,39 +160,19 @@ export function WorkspaceShell({ sessionOptions }: WorkspaceShellProps) {
             onSelect={session.selectObject}
             busy={session.busy}
           />
-        </div>
+        </main>
 
         {inspectorOpen ? (
-          <div className={styles.right}>
+          <div className={styles.inspectorSlot}>
             <InspectorPanel
               scene={state.scene}
               selected={selected}
               facts={state.facts}
               onSaveFact={session.saveFact}
+              onSelect={session.selectObject}
             />
           </div>
         ) : null}
-      </main>
-
-      <div className={styles.bottom}>
-        <ConversationPanel
-          entries={state.entries}
-          collapsed={historyCollapsed}
-          onToggleCollapsed={() => setHistoryCollapsed((collapsed) => !collapsed)}
-          onDecide={session.decide}
-          deciding={session.busy}
-        />
-        <Composer
-          canSubmit={session.canSubmit}
-          onSubmit={session.send}
-          onAttachClick={requestAttach}
-          attached={attachedReferences(state)}
-          onDetach={session.toggleAttachment}
-          selectedLabel={selected ? friendlyName(selected.name) : null}
-          onClearSelection={() => session.selectObject(null)}
-          busy={session.busy}
-          hint={composerHint(state.astra?.connected, state.blender?.connected, approval !== null)}
-        />
       </div>
     </div>
   );
@@ -221,7 +218,7 @@ function composerHint(
 ): string | undefined {
   if (awaitingApproval) return "A step above is waiting for your approval.";
   if (astraConnected === false) {
-    return "Astra is not connected yet — uploads still work, and the toolbar shows what to run.";
+    return "Astra is not connected yet — uploads still work, and the panel above shows how to sign in.";
   }
   if (blenderConnected === false) {
     return "Blender is not connected, so Astra can discuss your plans but not model them yet.";

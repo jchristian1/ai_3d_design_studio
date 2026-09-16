@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Launcher icon for AI 3D Design Studio.
+
+  A wireframe cube (the 3D scene) with a chat bubble cut into it (the way you talk to
+  it). Flat, high contrast, and legible at 24 px, which is the size that actually
+  matters in a dock.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2334"/>
+      <stop offset="1" stop-color="#0b0d11"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8fb6ff"/>
+      <stop offset="1" stop-color="#5b86e0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)"/>
+  <rect x="8.5" y="8.5" width="239" height="239" rx="51.5" fill="none"
+        stroke="#2c3648" stroke-width="1"/>
+
+  <!-- isometric cube -->
+  <g fill="none" stroke="url(#edge)" stroke-width="9"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M128 54 200 96 200 172 128 214 56 172 56 96Z"/>
+    <path d="M56 96 128 138 200 96"/>
+    <path d="M128 138 128 214"/>
+  </g>
+
+  <!-- chat bubble, sitting in the cube's top face -->
+  <g>
+    <path d="M96 92h64a16 16 0 0 1 16 16v22a16 16 0 0 1-16 16h-30l-20 16v-16h-14a16 16 0 0 1-16-16v-22a16 16 0 0 1 16-16Z"
+          fill="#0b0d11" stroke="#0b0d11" stroke-width="10"/>
+    <path d="M96 92h64a16 16 0 0 1 16 16v22a16 16 0 0 1-16 16h-30l-20 16v-16h-14a16 16 0 0 1-16-16v-22a16 16 0 0 1 16-16Z"
+          fill="#e9ebee"/>
+    <g fill="#1b2334">
+      <circle cx="112" cy="119" r="6"/>
+      <circle cx="128" cy="119" r="6"/>
+      <circle cx="144" cy="119" r="6"/>
+    </g>
+  </g>
+</svg>

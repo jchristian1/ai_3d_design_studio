@@ -154,13 +154,39 @@ describe("the workspace", () => {
     assert.match(document.body.textContent ?? "", /Shift\+Enter/);
   });
 
-  it("offers collapsible references and inspector panels", async () => {
+  it("puts the conversation in a left column with files above it", async () => {
     const { screen, waitFor } = await renderShell(stubs());
-    await waitFor(() => screen.getByRole("heading", { name: "References" }));
+    await waitFor(() => screen.getByRole("heading", { name: "Files" }));
 
+    // The three columns: chat, model, inspector. Chat and inspector both collapse.
+    const chatToggle = screen.getByRole("button", { name: "Chat" });
+    assert.equal(chatToggle.getAttribute("aria-pressed"), "true");
+    const inspectorToggle = screen.getByRole("button", { name: "Inspector" });
+    assert.equal(inspectorToggle.getAttribute("aria-pressed"), "true");
     assert.ok(screen.getByRole("heading", { name: "Inspector" }));
-    const toggle = screen.getByRole("button", { name: "References" });
-    assert.equal(toggle.getAttribute("aria-pressed"), "true");
+
+    // The composer sits at the bottom of the chat column, after the transcript.
+    const column = screen.getByRole("region", { name: "Conversation" });
+    const transcript = screen.getByRole("list", { name: "Messages" });
+    const composer = screen.getByLabelText("Message Astra");
+    assert.ok(column.contains(transcript), "the transcript belongs to the chat column");
+    assert.ok(column.contains(composer), "the composer belongs to the chat column");
+    assert.ok(
+      transcript.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING,
+      "the composer must come after the transcript",
+    );
+  });
+
+  it("collapsing the chat leaves the model on screen", async () => {
+    const { screen, waitFor } = await renderShell(stubs());
+    const { fireEvent } = await import("@testing-library/react");
+    await waitFor(() => screen.getByRole("button", { name: "Chat" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
+
+    assert.equal(screen.getByRole("button", { name: "Chat" }).getAttribute("aria-pressed"), "false");
+    assert.equal(screen.queryByLabelText("Message Astra"), null);
+    assert.ok(screen.getByRole("heading", { name: "Inspector" }));
   });
 
   it("falls back honestly when the 3D view cannot run", async () => {
@@ -193,10 +219,10 @@ describe("the workspace", () => {
     // The reply text appears twice on purpose: once visibly, and once inside the
     // aria-live region that announces only the latest line. Scope to the transcript.
     await waitFor(() => {
-      const list = screen.getByRole("list");
+      const list = screen.getByRole("list", { name: "Messages" });
       assert.match(list.textContent ?? "", /There is nothing in the scene yet\./);
     });
-    const list = screen.getByRole("list");
+    const list = screen.getByRole("list", { name: "Messages" });
     assert.match(list.textContent ?? "", /what is in my project\?/);
     assert.equal(screen.getAllByText("You").length, 1);
     assert.equal(screen.getAllByText("Astra").length, 1);
@@ -240,7 +266,7 @@ describe("the workspace", () => {
     await waitFor(() => screen.getByRole("heading", { name: "Inspector" }));
 
     // Nothing selected yet: the inspector invites a click rather than showing nothing.
-    assert.match(document.body.textContent ?? "", /Click something in the model/);
+    assert.match(document.body.textContent ?? "", /Click something in the 3D view/);
   });
 
   it("shows project facts and offers to change them", async () => {
@@ -257,7 +283,7 @@ describe("the workspace", () => {
     const { screen, waitFor } = await renderShell(transport);
     await waitFor(() => screen.getByText("Ceiling height"));
     assert.ok(screen.getByText("2.4"));
-    assert.ok(screen.getByRole("button", { name: "Change" }));
+    assert.ok(screen.getByRole("button", { name: "Change Ceiling height" }));
   });
 
   it("restores a conversation on load", async () => {
@@ -273,10 +299,10 @@ describe("the workspace", () => {
     });
     const { screen, waitFor } = await renderShell(transport);
     await waitFor(() => {
-      assert.match(screen.getByRole("list").textContent ?? "", /reconstruct this plan/);
+      assert.match(screen.getByRole("list", { name: "Messages" }).textContent ?? "", /reconstruct this plan/);
     });
     assert.match(
-      screen.getByRole("list").textContent ?? "",
+      screen.getByRole("list", { name: "Messages" }).textContent ?? "",
       /What is the ceiling height\?/,
     );
   });
@@ -368,7 +394,7 @@ describe("the workspace", () => {
     });
     const { screen, waitFor } = await renderShell(transport);
     await waitFor(() => {
-      assert.match(screen.getByRole("list").textContent ?? "", /3 changes applied/);
+      assert.match(screen.getByRole("list", { name: "Messages" }).textContent ?? "", /3 changes applied/);
     });
 
     const text = document.body.textContent ?? "";

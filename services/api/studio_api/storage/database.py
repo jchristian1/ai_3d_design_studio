@@ -205,6 +205,15 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             "ALTER TABLE job_records ADD COLUMN progress TEXT",
         ),
     ),
+    (
+        5,
+        (
+            # When the user last opened a project, so the studio can reopen the one they
+            # were working on. Distinct from updated_at, which moves whenever anything
+            # about the project changes — including work done by a background read.
+            "ALTER TABLE projects ADD COLUMN last_opened_at TEXT",
+        ),
+    ),
 )
 
 LATEST_VERSION = MIGRATIONS[-1][0]

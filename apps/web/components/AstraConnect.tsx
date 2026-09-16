@@ -121,12 +121,12 @@ export function AstraConnect({
   if (connected) return null;
 
   return (
-    <section className={styles.connectPanel} aria-labelledby="astra-connect-heading">
-      <div className={styles.connectHeader}>
+    <section className={styles.connect} aria-labelledby="astra-connect-heading">
+      <div className={styles.cardHeader}>
         <h2 id="astra-connect-heading" className={styles.connectTitle}>
           Connect Astra
         </h2>
-        <p className={styles.connectMessage}>
+        <p className={styles.connectBody}>
           {status?.message ?? "Checking whether Codex is signed in…"}
         </p>
       </div>
@@ -135,7 +135,7 @@ export function AstraConnect({
       {status && (status.state === "not_installed" || status.state === "update_required") ? (
         <p className={styles.connectBody}>
           Run this in a terminal, then reload:{" "}
-          <code className={styles.connectCode}>{status.action}</code>
+          <code className={styles.code}>{status.action}</code>
         </p>
       ) : null}
 
@@ -151,7 +151,7 @@ export function AstraConnect({
           </button>
           <button
             type="button"
-            className={styles.smallButton}
+            className={styles.ghostButton}
             disabled={starting}
             onClick={() => start(true)}
           >
@@ -161,7 +161,7 @@ export function AstraConnect({
       ) : null}
 
       {waiting ? (
-        <div className={styles.connectWaiting} role="status">
+        <div className={styles.connectHint} role="status">
           {session?.user_code ? (
             <>
               <p className={styles.connectBody}>
@@ -176,9 +176,9 @@ export function AstraConnect({
                 </a>
               </p>
               <p className={styles.connectBody}>2. Enter this one-time code:</p>
-              <div className={styles.codeRow}>
-                <code className={styles.oneTimeCode}>{session.user_code}</code>
-                <button type="button" className={styles.smallButton} onClick={copyCode}>
+              <div className={styles.connectActions}>
+                <code className={styles.userCode}>{session.user_code}</code>
+                <button type="button" className={styles.ghostButton} onClick={copyCode}>
                   {copied ? "Copied" : "Copy"}
                 </button>
               </div>
@@ -201,7 +201,7 @@ export function AstraConnect({
           <p className={styles.connectHint}>
             Waiting for you to authorise… this page updates itself when you are done.
           </p>
-          <button type="button" className={styles.smallButton} onClick={cancel}>
+          <button type="button" className={styles.ghostButton} onClick={cancel}>
             Cancel
           </button>
         </div>

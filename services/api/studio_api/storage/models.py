@@ -51,6 +51,9 @@ class ProjectRecord:
     #: Set once the project has a Blender file the worker knows how to reach.
     blend_ready: bool = False
     latest_scene_version: Optional[str] = None
+    #: When the user last opened this project in the browser. Drives "reopen what I was
+    #: working on", so it is set by opening — never by background work on the project.
+    last_opened_at: Optional[str] = None
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -59,6 +62,8 @@ class ProjectRecord:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "blend_ready": self.blend_ready,
+            "last_opened_at": self.last_opened_at,
+            "latest_scene_version": self.latest_scene_version,
         }
 
 

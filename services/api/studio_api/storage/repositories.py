@@ -98,6 +98,30 @@ class ProjectRepository:
             (1 if ready else 0, utc_now(), project_id),
         )
 
+    def mark_opened(self, project_id: str) -> None:
+        """Record that the user opened this project, for "reopen what I was working on"."""
+        self._db.execute(
+            "UPDATE projects SET last_opened_at = ? WHERE project_id = ?",
+            (utc_now(), project_id),
+        )
+
+    def rename(self, project_id: str, display_name: str) -> Optional[ProjectRecord]:
+        if self.get(project_id) is None:
+            return None
+        self._db.execute(
+            "UPDATE projects SET display_name = ?, updated_at = ? WHERE project_id = ?",
+            (display_name, utc_now(), project_id),
+        )
+        return self.get(project_id)
+
+    def most_recently_opened(self) -> Optional[ProjectRecord]:
+        """The project to reopen on startup, or None when nothing has been opened."""
+        row = self._db.query_one(
+            "SELECT * FROM projects WHERE last_opened_at IS NOT NULL "
+            "ORDER BY last_opened_at DESC LIMIT 1"
+        )
+        return self._from_row(row) if row else None
+
     @staticmethod
     def _from_row(row: Mapping[str, Any]) -> ProjectRecord:
         return ProjectRecord(
@@ -107,6 +131,7 @@ class ProjectRepository:
             updated_at=row["updated_at"],
             blend_ready=bool(row["blend_ready"]),
             latest_scene_version=row["latest_scene_version"],
+            last_opened_at=row["last_opened_at"],
         )
 
 

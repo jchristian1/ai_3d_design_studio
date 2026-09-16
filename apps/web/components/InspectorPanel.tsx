@@ -1,15 +1,22 @@
 "use client";
 
 /**
- * The inspector: what is selected, and what the project knows.
+ * The inspector: what is selected, what is in the scene, and what the project knows.
+ *
+ * Three stacked cards rather than one long list, because they answer different questions
+ * and get read at different moments.
+ *
+ * Layout note, learned the hard way: every row here is a two-line block (label above
+ * value) instead of a label/value grid with fixed columns. A long fact key like
+ * "coffee table decor" and a long value like "Simple modern setup, large beige floor
+ * plane…" cannot be made to fit side by side in a narrow panel, and the previous grid
+ * let them overlap. Stacking wraps instead of colliding, at any width.
  *
  * Measurements are shown in the unit a designer thinks in (centimetres under a metre,
- * metres above), while everything crossing a boundary stays canonical metres. The stable
- * `studio_object_id` is available but tucked into a developer detail, because it is
- * plumbing rather than something a designer should have to read.
+ * metres above), while everything crossing a boundary stays canonical metres.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { linearChannelToSrgbEncoded } from "@studio/spatial";
 
@@ -21,149 +28,230 @@ export interface InspectorPanelProps {
   selected: SceneObjectView | null;
   facts: FactView[];
   onSaveFact(key: string, value: string): void;
+  /** Selecting from the scene list, for anyone who would rather not click in 3D. */
+  onSelect?(objectId: string | null): void;
 }
 
-export function InspectorPanel({ scene, selected, facts, onSaveFact }: InspectorPanelProps) {
+export function InspectorPanel({
+  scene,
+  selected,
+  facts,
+  onSaveFact,
+  onSelect,
+}: InspectorPanelProps) {
   return (
-    <section className={styles.sidePanel} aria-labelledby="inspector-heading">
-      <header className={styles.sideHeader}>
-        <h2 id="inspector-heading" className={styles.sideTitle}>
+    <section className={styles.inspector} aria-labelledby="inspector-heading">
+      <header className={styles.panelHeader}>
+        <h2 id="inspector-heading" className={styles.panelTitle}>
           Inspector
         </h2>
       </header>
 
-      {selected ? (
-        <dl className={styles.propertyList}>
-          <div className={styles.property}>
-            <dt>Name</dt>
-            <dd>{friendlyName(selected.name)}</dd>
-          </div>
-          <div className={styles.property}>
-            <dt>Type</dt>
-            <dd>{friendlyType(selected)}</dd>
-          </div>
-          <div className={styles.property}>
-            <dt>Size</dt>
-            <dd>
-              {formatLength(selected.dimensions_meters.x)} ×{" "}
-              {formatLength(selected.dimensions_meters.y)} ×{" "}
-              {formatLength(selected.dimensions_meters.z)}
-            </dd>
-          </div>
-          <div className={styles.property}>
-            <dt>Position</dt>
-            <dd>
-              {formatLength(selected.world_position_meters.x)},{" "}
-              {formatLength(selected.world_position_meters.y)},{" "}
-              {formatLength(selected.world_position_meters.z)}
-            </dd>
-          </div>
-          {selected.material?.base_color ? (
-            <div className={styles.property}>
-              <dt>Colour</dt>
-              <dd className={styles.colourRow}>
+      <div className={styles.panelScroll}>
+        <Card title={selected ? friendlyName(selected.name) : "Selection"}>
+          {selected ? (
+            <SelectedObject selected={selected} onClear={() => onSelect?.(null)} />
+          ) : (
+            <p className={styles.cardHint}>
+              {scene && scene.objects.length
+                ? "Click something in the 3D view, or pick it from the scene below."
+                : "Nothing in the model yet."}
+            </p>
+          )}
+        </Card>
+
+        {scene && scene.objects.length ? (
+          <Card title="Scene" badge={`${scene.objects.length}`}>
+            <ul className={styles.objectList}>
+              {scene.objects.map((object) => {
+                const id = object.studio_object_id;
+                const isSelected =
+                  selected != null &&
+                  ((id != null && id === selected.studio_object_id) ||
+                    object.name === selected.name);
+                return (
+                  <li key={object.name}>
+                    <button
+                      type="button"
+                      className={`${styles.objectRow} ${isSelected ? styles.objectRowOn : ""}`}
+                      aria-pressed={isSelected}
+                      disabled={!onSelect || !id}
+                      onClick={() => id && onSelect?.(id)}
+                    >
+                      <span className={styles.objectName}>{friendlyName(object.name)}</span>
+                      <span className={styles.objectType}>{friendlyType(object)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        ) : null}
+
+        <Card title="Project facts" badge={facts.length ? `${facts.length}` : undefined}>
+          {facts.length === 0 ? (
+            <p className={styles.cardHint}>
+              Anything you confirm — a ceiling height, a material — is remembered here.
+            </p>
+          ) : (
+            <ul className={styles.factList}>
+              {facts.map((fact) => (
+                <FactRow key={fact.key} fact={fact} onSave={onSaveFact} />
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+    </section>
+  );
+}
+
+function Card({
+  title,
+  badge,
+  children,
+}: {
+  title: string;
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={styles.card}>
+      <header className={styles.cardHeader}>
+        <h3 className={styles.cardTitle}>{title}</h3>
+        {badge ? <span className={styles.count}>{badge}</span> : null}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function SelectedObject({
+  selected,
+  onClear,
+}: {
+  selected: SceneObjectView;
+  onClear(): void;
+}) {
+  const position = selected.world_position_meters;
+  const size = selected.dimensions_meters;
+  return (
+    <>
+      <div className={styles.rows}>
+        <Row label="Type" value={friendlyType(selected)} />
+        <Row
+          label="Size (w × d × h)"
+          value={`${formatLength(size.x)} × ${formatLength(size.y)} × ${formatLength(size.z)}`}
+        />
+        <Row
+          label="Position"
+          value={`${formatLength(position.x)} right · ${formatLength(position.y)} forward · ${formatLength(
+            position.z,
+          )} up`}
+        />
+        {selected.material?.base_color ? (
+          <Row
+            label="Colour"
+            value={
+              <span className={styles.swatchRow}>
                 <span
                   className={styles.swatch}
                   style={{ background: cssColour(selected.material.base_color) }}
                   aria-hidden="true"
                 />
-                {describeColour(selected.material.base_color)}
-              </dd>
-            </div>
-          ) : null}
-          {selected.studio_object_id ? (
-            <details className={styles.developerDetails}>
-              <summary>Developer details</summary>
-              <p className={styles.monospace}>{selected.studio_object_id}</p>
-              <p className={styles.developerNote}>Blender name: {selected.name}</p>
-            </details>
-          ) : null}
-        </dl>
-      ) : (
-        <p className={styles.emptyNote}>
-          {scene && scene.objects.length > 0
-            ? "Click something in the model to see its measurements, then ask Astra to change it."
-            : "Nothing in the model yet."}
-        </p>
-      )}
-
-      <h3 className={styles.sideSubtitle}>Project facts</h3>
-      {facts.length === 0 ? (
-        <p className={styles.emptyNote}>
-          Astra records confirmed measurements here, like ceiling height, so it never
-          asks twice.
-        </p>
-      ) : (
-        <ul className={styles.factList}>
-          {facts.map((fact) => (
-            <FactRow key={fact.key} fact={fact} onSave={onSaveFact} />
-          ))}
-        </ul>
-      )}
-    </section>
+                {cssColour(selected.material.base_color)}
+              </span>
+            }
+          />
+        ) : null}
+        {selected.visible ? null : <Row label="Visibility" value="Hidden in Blender" />}
+      </div>
+      <button type="button" className={styles.ghostButton} onClick={onClear}>
+        Clear selection
+      </button>
+    </>
   );
 }
 
-function FactRow({ fact, onSave }: { fact: FactView; onSave(key: string, value: string): void }) {
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className={styles.row}>
+      <span className={styles.rowLabel}>{label}</span>
+      <span className={styles.rowValue}>{value}</span>
+    </div>
+  );
+}
+
+function FactRow({
+  fact,
+  onSave,
+}: {
+  fact: FactView;
+  onSave(key: string, value: string): void;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(fact.value);
-  const inputId = `fact-${fact.key}`;
 
-  if (!editing) {
-    return (
-      <li className={styles.factItem}>
-        <span className={styles.factKey}>{humaniseKey(fact.key)}</span>
-        <span className={styles.factValue}>{fact.value}</span>
-        <button
-          type="button"
-          className={styles.linkButton}
-          onClick={() => {
-            setDraft(fact.value);
-            setEditing(true);
-          }}
-        >
-          Change
-        </button>
-      </li>
-    );
-  }
+  // If the fact changes underneath (Astra learned something new), follow it rather than
+  // showing a stale draft.
+  useEffect(() => {
+    if (!editing) setDraft(fact.value);
+  }, [fact.value, editing]);
 
   return (
-    <li className={styles.factItem}>
-      <label className={styles.factKey} htmlFor={inputId}>
-        {humaniseKey(fact.key)}
-      </label>
-      <input
-        id={inputId}
-        className={styles.factInput}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            onSave(fact.key, draft.trim());
+    <li className={styles.factRow}>
+      <span className={styles.rowLabel}>{humaniseKey(fact.key)}</span>
+      {editing ? (
+        <form
+          className={styles.factEdit}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave(fact.key, draft.trim() || fact.value);
             setEditing(false);
-          }
-          if (event.key === "Escape") setEditing(false);
-        }}
-        autoFocus
-      />
-      <button
-        type="button"
-        className={styles.linkButton}
-        onClick={() => {
-          onSave(fact.key, draft.trim());
-          setEditing(false);
-        }}
-      >
-        Save
-      </button>
+          }}
+        >
+          <input
+            className={styles.factInput}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            aria-label={`${humaniseKey(fact.key)} value`}
+            autoFocus
+          />
+          <button type="submit" className={styles.ghostButton}>
+            Save
+          </button>
+          <button
+            type="button"
+            className={styles.ghostButton}
+            onClick={() => {
+              setDraft(fact.value);
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <span className={styles.factValueRow}>
+          <span className={styles.rowValue}>{fact.value}</span>
+          <button
+            type="button"
+            className={styles.ghostButton}
+            onClick={() => setEditing(true)}
+            aria-label={`Change ${humaniseKey(fact.key)}`}
+          >
+            Change
+          </button>
+        </span>
+      )}
     </li>
   );
 }
 
-/** Strip the stable-id suffix Blender names carry, so "Wall_North" reads as written. */
+/** "Wall_North_obj_8d83f" reads as "Wall North" to a person. */
 export function friendlyName(name: string): string {
-  return name.replace(/_obj_[0-9a-f]{4,}$/i, "").replace(/_/g, " ");
+  const withoutId = name.replace(/_?obj_[a-z0-9]{4,}$/i, "");
+  return withoutId.replace(/[_-]+/g, " ").trim() || name;
 }
 
 function friendlyType(object: SceneObjectView): string {
@@ -173,6 +261,9 @@ function friendlyType(object: SceneObjectView): string {
   if (name.includes("ceiling")) return "Ceiling";
   if (name.includes("door")) return "Door";
   if (name.includes("window")) return "Window";
+  if (name.includes("table")) return "Table";
+  if (name.includes("camera")) return "Camera";
+  if (name.includes("light") || name.includes("lamp")) return "Light";
   return object.object_type === "MESH" ? "Object" : titleCase(object.object_type);
 }
 
@@ -193,10 +284,6 @@ function cssColour(colour: { r: number; g: number; b: number }): string {
     return Math.round((encoded ?? 0) * 255);
   };
   return `rgb(${encode(colour.r)}, ${encode(colour.g)}, ${encode(colour.b)})`;
-}
-
-function describeColour(colour: { r: number; g: number; b: number }): string {
-  return cssColour(colour);
 }
 
 function humaniseKey(key: string): string {

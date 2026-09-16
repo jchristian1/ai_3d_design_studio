@@ -13,28 +13,42 @@
 :root {
   color-scheme: dark;
 
-  --surface-0: #0e1013;
-  --surface-1: #15181d;
-  --surface-2: #1b1f26;
-  --surface-3: #232833;
+  --surface-0: #0b0d11;
+  --surface-1: #12151a;
+  --surface-2: #181c23;
+  --surface-3: #20252e;
 
-  --border: #2a303a;
-  --border-strong: #38404d;
+  --border: #262b34;
+  --border-strong: #333a46;
+  /* Aliases used by the studio surfaces. Same values, clearer names at the call site. */
+  --line: var(--border);
+  --line-strong: var(--border-strong);
 
-  --text: #e8eaed;
-  --text-muted: #9aa3b0;
-  --text-subtle: #6b7482;
+  --text: #e9ebee;
+  --text-muted: #a2aab6;
+  --text-subtle: #6d7684;
+  --text-dim: var(--text-subtle);
 
-  --accent: #5b9cff;
+  --accent: #6ea2ff;
+  --accent-soft: rgba(110, 162, 255, 0.14);
   --accent-contrast: #06111f;
+  --accent-ink: var(--accent-contrast);
 
-  --ok: #4ec98b;
-  --warn: #e6b455;
-  --error: #f0716f;
+  --ok: #40c484;
+  --warn: #e2a54a;
+  --error: #ef7370;
   --idle: #5a6472;
+
+  --danger-fill: rgba(239, 115, 112, 0.1);
+  --danger-line: rgba(239, 115, 112, 0.32);
+  --danger-ink: #ffb9b7;
 
   --radius: 10px;
   --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.28);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;

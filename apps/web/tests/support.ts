@@ -25,6 +25,8 @@ export interface RecordedCall {
   url: string;
   method: string;
   body: unknown;
+  /** Files sent as multipart, by field name. Empty for a JSON call. */
+  files?: { field: string; name: string; type: string }[];
 }
 
 export interface StubRoute {
@@ -81,8 +83,7 @@ export class StubTransport {
       const raw = typeof input === "string" ? input : String(input);
       const path = raw.startsWith(API_BASE) ? raw.slice(API_BASE.length) : raw;
       const method = (init?.method ?? "GET").toUpperCase();
-      const body = init?.body ? JSON.parse(String(init.body)) : null;
-      const call: RecordedCall = { url: path, method, body };
+      const call: RecordedCall = { url: path, method, ...describeBody(init?.body) };
       this.calls.push(call);
 
       const handler = this.handlers.find((h) => h.match(path, method));
@@ -104,6 +105,36 @@ function jsonResponse(status: number, body: unknown): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Record a request body without assuming it is JSON.
+ *
+ * Uploads are multipart: the client sends `FormData`, which has no JSON form. Parsing
+ * everything as JSON used to throw here, and the failure surfaced in the UI as "can't
+ * reach the design studio service" — a stub limitation dressed up as a product bug.
+ */
+function describeBody(body: BodyInit | null | undefined): Pick<RecordedCall, "body" | "files"> {
+  if (!body) return { body: null };
+
+  if (typeof FormData !== "undefined" && body instanceof FormData) {
+    const files: { field: string; name: string; type: string }[] = [];
+    const fields: Record<string, string> = {};
+    for (const [field, value] of body.entries()) {
+      if (typeof value === "string") fields[field] = value;
+      else files.push({ field, name: value.name, type: value.type });
+    }
+    return { body: fields, files };
+  }
+
+  if (typeof body === "string") {
+    try {
+      return { body: JSON.parse(body) };
+    } catch {
+      return { body };
+    }
+  }
+  return { body };
 }
 
 function textResponse(status: number, body: string): Response {

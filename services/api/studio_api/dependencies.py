@@ -51,7 +51,7 @@ from .design_chat import DesignChatService
 from .ingest import ReferenceIngestService
 from .identity import IdentityResolver, default_identity_resolver
 from .job_records import InMemoryJobRecordStore, JobRecordStore
-from .projects import ProjectRegistry, registry_from_ids
+from .projects import DatabaseProjectRegistry, ProjectRegistry
 from .reconciliation import JobReconciler
 from .scene_grounding import SceneGrounder
 from .scene_reporting import SceneReporter
@@ -117,8 +117,6 @@ def build_dependencies(
     Each collaborator can be overridden, which is how the integration tests inject
     a shared worker manager or a stub provider without touching the wiring.
     """
-    resolved_projects = projects or registry_from_ids(settings.project_ids)
-
     # Durable workspace state. An unset database_path means EPHEMERAL, so a directly
     # constructed Settings (how tests build an app) gets an isolated in-memory database
     # rather than sharing one file on disk. `load_settings` supplies the durable path,
@@ -128,6 +126,13 @@ def build_dependencies(
     )
     repositories = StudioRepositories(resolved_database)
     resolved_store = store or SqliteJobRecordStore(resolved_database)
+
+    # Projects live in the database so the user can create them at runtime, with the
+    # configured ids adopted on first use. An explicitly injected registry still wins,
+    # which is how the Spec 001 tests pin a fixed set.
+    resolved_projects = projects or DatabaseProjectRegistry(
+        repositories.projects, settings.project_ids
+    )
 
     # The root is server-chosen configuration; a request can never influence it.
     resolved_artifacts = artifacts or LocalArtifactStore(

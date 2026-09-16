@@ -138,21 +138,23 @@ def build_executor(
     from .backends.official.backend import OfficialBlenderLabBackend
     from .capability_executor import CapabilityPlanExecutor
     from .dispatch import DispatchingExecutor
+    from .provisioning import ProvisioningProjectRegistry
 
     projects = discover_projects(projects_root)
-    if not projects:
-        raise SystemExit(
-            f"no project files found in {projects_root}.\n"
-            f"Place a .blend there named after its project id, for example "
-            f"{projects_root / ('proj_seed' + PROJECT_SUFFIX)}.\n"
-            f"For local development:  python -m scripts.bootstrap_local_project"
+    if projects:
+        logger.info("existing projects: %s", ", ".join(sorted(projects)))
+    else:
+        logger.info(
+            "no project files yet in %s; one will be created when a project is first used",
+            projects_root,
         )
-
-    logger.info("serving projects: %s", ", ".join(sorted(projects)))
 
     store = FileSystemExecutionStore(runtime_root)
     locks = FileLockProvider(runtime_root)
-    registry = MappingProjectRegistry(projects_root, projects)
+    # Creates <root>/<project_id>.blend on first use, so a project the user made in the
+    # browser needs no manual setup and no worker restart. The control plane decides which
+    # projects exist; the worker only locates and creates.
+    registry = ProvisioningProjectRegistry(projects_root)
     artifacts = LocalArtifactStore(artifact_root)
     previews = BlenderPreviewGenerator()
     recovery_root = runtime_root / "recovery"

@@ -60,13 +60,13 @@ export function Composer({
       }}
     >
       {attached.length > 0 || selectedLabel ? (
-        <div className={styles.chipRow}>
+        <div className={styles.chips}>
           {selectedLabel ? (
-            <span className={`${styles.chip} ${styles.selectionChip}`}>
+            <span className={`${styles.chip} ${styles.chipText}`}>
               Editing: {selectedLabel}
               <button
                 type="button"
-                className={styles.chipClose}
+                className={styles.chipButton}
                 onClick={onClearSelection}
                 aria-label="Clear the selected object"
               >
@@ -79,7 +79,7 @@ export function Composer({
               {reference.display_name}
               <button
                 type="button"
-                className={styles.chipClose}
+                className={styles.chipButton}
                 onClick={() => onDetach(reference.reference_id)}
                 aria-label={`Do not send ${reference.display_name}`}
               >
@@ -106,7 +106,7 @@ export function Composer({
         </label>
         <textarea
           id="composer-input"
-          className={styles.textarea}
+          className={styles.input}
           value={draft}
           rows={1}
           placeholder={placeholder}
@@ -131,7 +131,7 @@ export function Composer({
       </div>
 
       {hint ? (
-        <p id="composer-hint" className={styles.composerHint}>
+        <p id="composer-hint" className={styles.hint}>
           {hint}
         </p>
       ) : null}

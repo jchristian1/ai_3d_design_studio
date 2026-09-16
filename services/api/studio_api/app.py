@@ -58,7 +58,17 @@ from fastapi.responses import JSONResponse
 
 from .dependencies import AppDependencies, build_dependencies
 from .errors import error_body, internal_error_body
-from .routes import artifacts, chat, health, jobs, status, worker_ws, workers, workspace
+from .routes import (
+    artifacts,
+    chat,
+    health,
+    jobs,
+    projects,
+    status,
+    worker_ws,
+    workers,
+    workspace,
+)
 from .routes.support import ControlPlaneHTTPError
 from .settings import Settings, load_settings
 
@@ -105,6 +115,9 @@ def create_app(
     app.include_router(jobs.router)
     app.include_router(workers.router)
     app.include_router(artifacts.router)
+    # Registered BEFORE the workspace router: both live under /api/projects, and the
+    # collection routes must not be shadowed by the project-scoped ones.
+    app.include_router(projects.router)
     app.include_router(workspace.router)
     app.include_router(status.router)
     app.include_router(worker_ws.router)

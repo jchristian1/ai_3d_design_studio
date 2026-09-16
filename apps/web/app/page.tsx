@@ -1,13 +1,13 @@
-import { WorkspaceShell } from "../components/WorkspaceShell.tsx";
+import { StudioApp } from "../components/StudioApp.tsx";
 
 /**
  * The studio.
  *
- * Spec 001 has exactly one project, so there is no project picker yet and this
- * route is the whole application. When multiple projects exist this becomes
- * `/projects/[projectId]`, and the shell takes its project from the route rather
- * than from configuration.
+ * One route on purpose. Which project is open is application state, not a URL: the studio
+ * reopens what you were working on, and a project id in the address bar would be a
+ * technical detail the user never asked to see. When projects become shareable that
+ * changes, and this becomes `/projects/[projectId]`.
  */
 export default function Page() {
-  return <WorkspaceShell />;
+  return <StudioApp />;
 }

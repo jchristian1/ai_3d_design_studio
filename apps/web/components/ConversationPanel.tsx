@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * The conversation, and the approval card.
+ * The transcript, and the approval card.
  *
  * One user message owns exactly one Studio reply, which updates in place as work
- * progresses. The transcript expands upward from the composer and is independently
- * scrollable, so the model stays visible while you talk.
+ * progresses — a plan of nine walls is one reply that counts up, not nine bubbles. The
+ * list scrolls inside the chat column and sticks to the newest message.
  *
  * The approval card is the one place model-authored code is shown, deliberately and in
  * full: seeing exactly what would run is the entire point of asking.
@@ -19,19 +19,11 @@ import styles from "./workspace.module.css";
 
 export interface ConversationPanelProps {
   entries: TranscriptEntry[];
-  collapsed: boolean;
-  onToggleCollapsed(): void;
   onDecide(approvalId: string, approved: boolean): void;
   deciding: boolean;
 }
 
-export function ConversationPanel({
-  entries,
-  collapsed,
-  onToggleCollapsed,
-  onDecide,
-  deciding,
-}: ConversationPanelProps) {
+export function ConversationPanel({ entries, onDecide, deciding }: ConversationPanelProps) {
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -41,72 +33,66 @@ export function ConversationPanel({
   const latestStudio = [...entries].reverse().find((entry) => entry.author === "studio");
 
   return (
-    <section className={styles.conversation} aria-labelledby="conversation-heading">
-      <header className={styles.conversationHeader}>
-        <h2 id="conversation-heading" className={styles.sideTitle}>
-          Conversation
-        </h2>
-        <button type="button" className={styles.smallButton} onClick={onToggleCollapsed}>
-          {collapsed ? "Show history" : "Hide history"}
-        </button>
-      </header>
-
+    <div className={styles.conversation} aria-label="Transcript">
       {/* Screen readers hear only the latest Studio line, not the whole history. */}
       <div className="visuallyHidden" aria-live="polite" aria-atomic="true">
         {latestStudio ? progressText(latestStudio) : ""}
       </div>
 
-      {collapsed ? null : (
-        <ol className={styles.entryList}>
-          {entries.length === 0 ? (
-            <li className={styles.emptyNote}>
-              Ask Astra what it sees in your plans, or describe what you want built.
-            </li>
-          ) : null}
+      <ol className={styles.entryList} aria-label="Messages">
+        {entries.length === 0 ? (
+          <li className={styles.cardHint}>
+            Describe what you want built, or drag a floor plan in here and ask about it.
+          </li>
+        ) : null}
 
-          {entries.map((entry) => (
-            <li key={entry.id} className={`${styles.entry} ${styles[entry.author]}`}>
-              <span className={styles.entryAuthor}>
-                {entry.author === "user" ? "You" : "Astra"}
-              </span>
-              <div className={`${styles.entryBody} ${styles[entry.tone]}`}>
-                <p className={styles.entryText}>{progressText(entry)}</p>
+        {entries.map((entry) => (
+          <li
+            key={entry.id}
+            className={`${styles.entry} ${entry.author === "user" ? styles.entryUser : ""}`}
+          >
+            <span className={styles.entryMeta}>{entry.author === "user" ? "You" : "Astra"}</span>
 
-                {entry.progress && entry.progress.stepCount > 1 ? (
-                  <progress
-                    className={styles.progressBar}
-                    value={entry.progress.stepIndex + 1}
-                    max={entry.progress.stepCount}
-                  />
-                ) : null}
+            <div
+              className={`${styles.bubble} ${
+                entry.author === "user"
+                  ? styles.bubbleUser
+                  : entry.tone === "error"
+                    ? styles.bubbleError
+                    : ""
+              }`}
+            >
+              {entry.progress ? (
+                <p className={styles.progress}>
+                  <span className={styles.spinner} aria-hidden="true" />
+                  {progressText(entry)}
+                </p>
+              ) : (
+                <p style={{ margin: 0 }}>{entry.text}</p>
+              )}
 
-                {entry.assumptions?.length ? (
-                  <div className={styles.assumptions}>
-                    <p className={styles.assumptionsTitle}>
-                      I assumed the following — tell me if any of it is wrong:
-                    </p>
-                    <ul>
-                      {entry.assumptions.map((assumption) => (
-                        <li key={assumption}>{assumption}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
+              {entry.assumptions?.length ? (
+                <>
+                  <p className={styles.entryMeta} style={{ marginBottom: 0 }}>
+                    I assumed the following — tell me if any of it is wrong:
+                  </p>
+                  <ul className={styles.assumptions}>
+                    {entry.assumptions.map((assumption) => (
+                      <li key={assumption}>{assumption}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
 
-                {entry.approval ? (
-                  <ApprovalCard
-                    approval={entry.approval}
-                    busy={deciding}
-                    onDecide={onDecide}
-                  />
-                ) : null}
-              </div>
-            </li>
-          ))}
-          <div ref={endRef} />
-        </ol>
-      )}
-    </section>
+              {entry.approval ? (
+                <ApprovalCard approval={entry.approval} busy={deciding} onDecide={onDecide} />
+              ) : null}
+            </div>
+          </li>
+        ))}
+        <div ref={endRef} />
+      </ol>
+    </div>
   );
 }
 
@@ -121,7 +107,7 @@ export function ApprovalCard({
 }) {
   const headingId = `approval-${approval.approval_id}`;
   return (
-    <div className={styles.approvalCard} role="group" aria-labelledby={headingId}>
+    <div className={styles.approval} role="group" aria-labelledby={headingId}>
       <p id={headingId} className={styles.approvalTitle}>
         This step needs your approval
       </p>
@@ -130,16 +116,16 @@ export function ApprovalCard({
           <li key={reason}>{reason}</li>
         ))}
       </ul>
-      <pre className={styles.approvalCode}>
+      <pre className={styles.code}>
         <code>{approval.code}</code>
       </pre>
-      <p className={styles.approvalNote}>
+      <p className={styles.entryMeta}>
         Nothing runs until you decide. Approving allows this exact code, once.
       </p>
       <div className={styles.approvalActions}>
         <button
           type="button"
-          className={styles.approveButton}
+          className={styles.primaryButton}
           disabled={busy}
           onClick={() => onDecide(approval.approval_id, true)}
         >
@@ -147,7 +133,7 @@ export function ApprovalCard({
         </button>
         <button
           type="button"
-          className={styles.rejectButton}
+          className={styles.ghostButton}
           disabled={busy}
           onClick={() => onDecide(approval.approval_id, false)}
         >

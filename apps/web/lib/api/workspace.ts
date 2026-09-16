@@ -168,8 +168,32 @@ export interface DesignChatInput {
   selectedObjectId?: string | null;
 }
 
+/** One project, as the project screen and the switcher show it. */
+export interface ProjectSummaryView {
+  project_id: string;
+  display_name: string;
+  created_at: string;
+  updated_at: string;
+  last_opened_at: string | null;
+  blend_ready: boolean;
+  latest_scene_version: string | null;
+  reference_count: number;
+  message_count: number;
+  has_model: boolean;
+}
+
+export interface ProjectListView {
+  projects: ProjectSummaryView[];
+  /** Which project to reopen, or null on a fresh install. */
+  last_opened_project_id: string | null;
+}
+
 export interface WorkspaceClient {
   readonly baseUrl: string;
+  listProjects(): Promise<ProjectListView>;
+  createProject(displayName: string): Promise<ProjectSummaryView>;
+  openProject(projectId: string): Promise<ProjectSummaryView>;
+  renameProject(projectId: string, displayName: string): Promise<ProjectSummaryView>;
   getWorkspace(projectId: string): Promise<WorkspaceView>;
   listReferences(projectId: string): Promise<ReferenceView[]>;
   uploadReference(projectId: string, file: File): Promise<ReferenceView>;
@@ -262,6 +286,34 @@ export function createWorkspaceClient(options: WorkspaceClientOptions = {}): Wor
 
   return {
     baseUrl,
+
+    listProjects() {
+      return send<ProjectListView>("/api/projects");
+    },
+
+    async createProject(displayName) {
+      const body = await send<{ project: ProjectSummaryView }>(
+        "/api/projects",
+        json({ display_name: displayName }),
+      );
+      return body.project;
+    },
+
+    async openProject(projectId) {
+      const body = await send<{ project: ProjectSummaryView }>(
+        `/api/projects/${projectId}/open`,
+        { method: "POST" },
+      );
+      return body.project;
+    },
+
+    async renameProject(projectId, displayName) {
+      const body = await send<{ project: ProjectSummaryView }>(
+        `/api/projects/${projectId}/rename`,
+        json({ display_name: displayName }),
+      );
+      return body.project;
+    },
 
     getWorkspace(projectId) {
       return send<WorkspaceView>(`/api/projects/${projectId}/workspace`);
