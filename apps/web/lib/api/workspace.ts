@@ -242,6 +242,22 @@ export interface WorkspaceClientOptions {
   timeoutMs?: number;
 }
 
+/**
+ * Whether a server message is safe to show as-is.
+ *
+ * Ordinary prose only: anything with a path, an identifier, a code shape or a stack frame
+ * falls back to the generic message for its error code. This is what keeps "no jargon, no
+ * paths, no stack traces" true even when the sentence comes from the service.
+ */
+function looksLikeASentence(message: string): boolean {
+  if (message.length < 8 || message.length > 400) return false;
+  if (!/^[A-Z\u201c"']/.test(message)) return false;
+  if (/[/\\]|https?:|Traceback|[A-Z_]{4,}|\bjob_|\bproj_|\bobj_|\{|\}/.test(message)) {
+    return false;
+  }
+  return /[.!?]$/.test(message.trim());
+}
+
 function joinUrl(baseUrl: string, path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
   return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
@@ -278,13 +294,25 @@ export function createWorkspaceClient(options: WorkspaceClientOptions = {}): Wor
 
     if (!response.ok) {
       let code: string | null = null;
+      let detail: string | null = null;
       try {
-        const body = (await response.json()) as { error?: { code?: string } };
+        const body = (await response.json()) as {
+          error?: { code?: string; message?: string };
+        };
         code = body?.error?.code ?? null;
+        detail = body?.error?.message ?? null;
       } catch {
         code = null;
       }
-      throw failureFromCode(code, response.status);
+      const failure = failureFromCode(code, response.status);
+      // A turn's failure is EXPLAINED by the service — "Astra proposed something I could
+      // not build", "the project changed since this was planned" — and those sentences are
+      // written for the user. The generic message per code is a fallback for everything
+      // else, and stays in place: what is never shown is a status, a stack or a code.
+      if (detail && looksLikeASentence(detail)) {
+        throw new ApiFailure(detail, failure.kind, failure.code, failure.status);
+      }
+      throw failure;
     }
 
     if (response.status === 204) return undefined as T;

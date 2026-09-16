@@ -220,6 +220,15 @@ class DesignChatService:
         recorded: tuple[str, ...],
     ) -> DesignTurnResult:
         if isinstance(outcome, AgentError):
+            # Logged because nobody could otherwise find out WHY a turn was rejected: the
+            # user gets a sentence, and this was previously invisible even in the log.
+            _log.warning(
+                "turn %s for %s failed: %s: %s",
+                request.request_id,
+                request.project_id,
+                outcome.error.code,
+                outcome.error.message,
+            )
             failure = errors.failure_from_error(outcome.error)
             return self._failed(request, failure, provider_name=outcome.metadata.provider_name)
 

@@ -414,3 +414,162 @@ def test_the_prompt_lists_only_proposable_capabilities() -> None:
     # Platform-initiated artifact capabilities are not offered.
     assert "export_glb" not in prompt
     assert "render_preview" not in prompt
+
+
+
+# ---------------------------------------------------------------------------
+# Correcting the model's own mistake
+# ---------------------------------------------------------------------------
+#
+# From a real session: after ten turns of collecting dimensions, the reply was "That
+# request couldn't be processed, so nothing was changed." The model had returned something
+# that did not fit the capability contract — a MODEL mistake the user cannot act on, and a
+# dead end after all that work. The provider now quotes the rejection back and asks once
+# more, which is what a tool loop is for.
+
+
+def _connected_runner(responses):
+    """A Codex stand-in that is signed in and returns queued response bodies."""
+    import json as _json
+
+    calls: list[str] = []
+
+    def runner(arguments, *, stdin=None, timeout=None, cwd=None):
+        joined = " ".join(arguments)
+        if "--version" in joined:
+            return _completed(0, "codex-cli 0.154.0")
+        if "login" in joined and "status" in joined:
+            return _completed(0, "Logged in using ChatGPT")
+        calls.append(stdin or "")
+        body = responses.pop(0)
+        destination = _output_path(arguments)
+        Path(destination).write_text(_json.dumps(body), encoding="utf-8")
+        return _completed(0, "")
+
+    return runner, calls
+
+
+def _output_path(arguments) -> str:
+    for index, value in enumerate(arguments):
+        if value in ("-o", "--output-last-message"):
+            return arguments[index + 1]
+    raise AssertionError("no output file was requested")
+
+
+def _completed(code: int, stdout: str):
+    import subprocess
+
+    return subprocess.CompletedProcess(args=["codex"], returncode=code, stdout=stdout, stderr="")
+
+
+def _answer(text: str) -> dict:
+    return {
+        "kind": "answer",
+        "message": text,
+        "question": "",
+        "missing_information": [],
+        "operations": [],
+        "design_facts": [],
+        "assumptions": [],
+    }
+
+
+def _bad_plan() -> dict:
+    """A plan naming a capability the platform does not have."""
+    return {
+        "kind": "plan",
+        "message": "Building the room.",
+        "question": "",
+        "missing_information": [],
+        "operations": [
+            {"capability": "create_room", "label": "build the room", "arguments_json": "{}"}
+        ],
+        "design_facts": [],
+        "assumptions": [],
+    }
+
+
+def _agent_input():
+    from studio_agent.agent_input import AgentInput
+
+    return AgentInput(
+        user_text="door height 83.5, window width 80",
+        user_id="user_1",
+        project_id="proj_1",
+        session_id="sess_1",
+    )
+
+
+def test_a_rejected_response_is_corrected_without_bothering_the_user() -> None:
+    from studio_agent.codex import CodexClient
+    from studio_agent.outcome import Answer
+    from studio_agent.providers.codex_astra import CodexAstraProvider
+
+    runner, prompts = _connected_runner([_bad_plan(), _answer("Understood.")])
+    provider = CodexAstraProvider(client=CodexClient(executable="/usr/bin/true", runner=runner))
+
+    outcome = provider.respond(_agent_input())
+
+    assert isinstance(outcome, Answer), outcome
+    assert len(prompts) == 2, "the model should have been asked to correct itself"
+    # The second prompt quotes the actual reason, which is what makes a correction land.
+    assert "REJECTED" in prompts[1]
+    assert "create_room" in prompts[1]
+
+
+def test_a_second_rejection_is_reported_in_plain_language() -> None:
+    from studio_agent.codex import CodexClient
+    from studio_agent.outcome import AgentError
+    from studio_agent.providers.codex_astra import CodexAstraProvider
+
+    runner, prompts = _connected_runner([_bad_plan(), _bad_plan()])
+    provider = CodexAstraProvider(client=CodexClient(executable="/usr/bin/true", runner=runner))
+
+    outcome = provider.respond(_agent_input())
+
+    assert isinstance(outcome, AgentError)
+    assert len(prompts) == 2, "one correction attempt, not an unbounded loop"
+    message = outcome.error.message
+    assert "could not build" in message
+    # Written for the user: no capability names, no codes, no paths.
+    assert "create_room" not in message
+    assert "VALIDATION_ERROR" not in message
+
+
+def test_a_good_response_is_not_asked_twice() -> None:
+    from studio_agent.codex import CodexClient
+    from studio_agent.outcome import Answer
+    from studio_agent.providers.codex_astra import CodexAstraProvider
+
+    runner, prompts = _connected_runner([_answer("There is one cube.")])
+    provider = CodexAstraProvider(client=CodexClient(executable="/usr/bin/true", runner=runner))
+
+    outcome = provider.respond(_agent_input())
+
+    assert isinstance(outcome, Answer)
+    assert len(prompts) == 1, "a valid answer must cost exactly one call"
+
+
+def test_codex_being_unavailable_is_not_retried_as_a_model_mistake() -> None:
+    """Retrying is for the model's output. A broken Codex is reported straight away."""
+    from studio_agent.codex import CodexClient
+    from studio_agent.outcome import AgentError
+    from studio_agent.providers.codex_astra import CodexAstraProvider
+
+    calls: list[str] = []
+
+    def runner(arguments, *, stdin=None, timeout=None, cwd=None):
+        joined = " ".join(arguments)
+        if "--version" in joined:
+            return _completed(0, "codex-cli 0.154.0")
+        if "login" in joined and "status" in joined:
+            return _completed(0, "Logged in using ChatGPT")
+        calls.append(stdin or "")
+        return _completed(1, "codex exploded")
+
+    provider = CodexAstraProvider(client=CodexClient(executable="/usr/bin/true", runner=runner))
+    outcome = provider.respond(_agent_input())
+
+    assert isinstance(outcome, AgentError)
+    assert outcome.error.code == "PROVIDER_UNAVAILABLE"
+    assert len(calls) == 1

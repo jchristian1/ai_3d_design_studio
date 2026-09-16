@@ -201,9 +201,22 @@ def _coerce(kind: str, value: Any, field: str) -> Any:
             raise ArgumentError(f"{field} is too long")
         return value
     if kind in (VEC2, VEC3):
+        axes = ("x", "y") if kind == VEC2 else ("x", "y", "z")
+        # A list is accepted as well as an object, because [x, y] is the single most
+        # common shape a model reaches for and its meaning is unambiguous in an ordered
+        # axis convention. It is canonicalised to the object form immediately, so
+        # everything downstream — jobs, journals, Blender scripts — still sees one shape.
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, Mapping)):
+            if len(value) != len(axes):
+                raise ArgumentError(
+                    f"{field} must have {len(axes)} numbers ({', '.join(axes)})"
+                )
+            return {
+                axis: _finite(component, f"{field}.{axis}")
+                for axis, component in zip(axes, value)
+            }
         if not isinstance(value, Mapping):
             raise ArgumentError(f"{field} must be an object")
-        axes = ("x", "y") if kind == VEC2 else ("x", "y", "z")
         unexpected = set(value) - set(axes)
         if unexpected:
             raise ArgumentError(f"{field} has unexpected keys: {sorted(unexpected)}")
@@ -229,6 +242,52 @@ def _coerce(kind: str, value: Any, field: str) -> Any:
             raise ArgumentError(f"{field} needs at least three points")
         return [_coerce(VEC2, point, f"{field}[{index}]") for index, point in enumerate(value)]
     raise ArgumentError(f"unknown argument kind {kind}")  # pragma: no cover
+
+
+#: How each argument kind reads to the model. Generated INTO the prompt from the same table
+#: the validator uses, so the two cannot drift — the reason this exists is that the prompt
+#: listed capability names only, the model had to guess argument names, and it guessed
+#: `vertices_meters` for a floor's `footprint_meters`. Every rejected turn like that costs
+#: the user a wait and costs their allowance twice.
+_KIND_DESCRIPTIONS: Mapping[str, str] = {
+    # No unit here: every field carries its own unit in its NAME (`_meters`,
+    # `_radians`), and saying "metres" for `rotation_z_radians` would be a lie.
+    NUMBER: "number",
+    POSITIVE: "number > 0",
+    TEXT: "text",
+    CODE: "python source",
+    VEC2: '{"x":m,"y":m}',
+    VEC3: '{"x":m,"y":m,"z":m}',
+    RGBA: '{"r":0-1,"g":0-1,"b":0-1,"a":0-1} linear sRGB',
+    POLYGON: 'list of at least 3 {"x":m,"y":m}',
+}
+
+
+def describe_capabilities(capabilities: Sequence[str]) -> str:
+    """Document each capability's exact arguments, for the model's prompt.
+
+    Derived from :data:`SPECS`, which is what the platform validates against. A change to
+    the contract therefore changes the instructions in the same commit, and there is no
+    second copy to forget.
+    """
+    lines: list[str] = []
+    for name in capabilities:
+        spec = SPECS.get(name)
+        if spec is None:  # pragma: no cover - a capability with no argument contract
+            lines.append(f"- {name}")
+            continue
+        parts: list[str] = []
+        if spec.identity:
+            parts.append(
+                "identify the object with "
+                + " or ".join(f"{field} (text)" for field in spec.identity)
+            )
+        for field, kind in spec.required:
+            parts.append(f"{field} ({_KIND_DESCRIPTIONS.get(kind, kind)})")
+        for field, kind in spec.optional:
+            parts.append(f"optional {field} ({_KIND_DESCRIPTIONS.get(kind, kind)})")
+        lines.append(f"- {name}: " + ("; ".join(parts) if parts else "no arguments"))
+    return "\n".join(lines)
 
 
 def validate_arguments(capability: str, raw: Mapping[str, Any]) -> dict[str, Any]:

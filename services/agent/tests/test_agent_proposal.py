@@ -309,3 +309,112 @@ def test_model_authored_code_is_accepted_as_data_not_executed() -> None:
     assert step.is_model_authored_code
     assert step.code() == dangerous
     # Classification and approval happen at the capability boundary, not here.
+
+
+
+# ---------------------------------------------------------------------------
+# Telling the model what the arguments ARE
+# ---------------------------------------------------------------------------
+#
+# The prompt used to list capability NAMES only, so the model had to invent argument names.
+# In a real session it sent `vertices_meters` for a floor's `footprint_meters`, was
+# rejected, then sent `start_meters` as a two-element list and was rejected again — after
+# ten turns of the user patiently reading dimensions off a sketch. The instructions are now
+# generated from the validator's own table, and vectors accept the list form.
+
+
+def test_every_proposable_capability_documents_its_arguments() -> None:
+    from studio_agent.proposal import SPECS, describe_capabilities
+    from studio_contracts.capabilities import PROPOSABLE_CAPABILITIES
+
+    text = describe_capabilities(PROPOSABLE_CAPABILITIES)
+
+    for capability in PROPOSABLE_CAPABILITIES:
+        assert f"- {capability}:" in text, f"{capability} is not documented"
+        spec = SPECS[capability]
+        for field, _kind in (*spec.required, *spec.optional):
+            assert field in text, f"{capability}.{field} is not named in the prompt"
+        for field in spec.identity:
+            assert field in text
+
+
+def test_the_argument_names_in_the_prompt_are_the_ones_that_validate() -> None:
+    """The bug was a prompt that disagreed with the validator. This is that assertion."""
+    from studio_agent.proposal import describe_capabilities, validate_arguments
+
+    text = describe_capabilities(("create_floor",))
+    assert "footprint_meters" in text
+    assert "vertices_meters" not in text
+
+    # And the documented name is accepted while the invented one is refused.
+    validate_arguments(
+        "create_floor",
+        {
+            "display_name": "Floor",
+            "footprint_meters": [
+                {"x": 0.0, "y": 0.0},
+                {"x": 4.0, "y": 0.0},
+                {"x": 4.0, "y": 3.0},
+            ],
+            "thickness_meters": 0.2,
+        },
+    )
+    with pytest.raises(ArgumentError, match="unexpected"):
+        validate_arguments(
+            "create_floor",
+            {
+                "display_name": "Floor",
+                "vertices_meters": [{"x": 0.0, "y": 0.0}],
+                "thickness_meters": 0.2,
+            },
+        )
+
+
+def test_a_vector_may_arrive_as_a_list() -> None:
+    """[x, y] is the shape models reach for, and it is unambiguous, so it is accepted."""
+    from studio_agent.proposal import validate_arguments
+
+    arguments = validate_arguments(
+        "create_wall",
+        {
+            "display_name": "Wall_North",
+            "start_meters": [0.0, 1.5],
+            "end_meters": {"x": 4.0, "y": 1.5},
+            "height_meters": 2.7,
+            "thickness_meters": 0.12,
+        },
+    )
+    # Canonicalised immediately, so everything downstream sees one shape.
+    assert arguments["start_meters"] == {"x": 0.0, "y": 1.5}
+    assert arguments["end_meters"] == {"x": 4.0, "y": 1.5}
+
+
+def test_a_three_component_vector_may_arrive_as_a_list() -> None:
+    from studio_agent.proposal import validate_arguments
+
+    arguments = validate_arguments(
+        "move_object",
+        {"object_id": "obj_cube", "desired_position_meters": [0.5, 0.0, 1.0]},
+    )
+    assert arguments["desired_position_meters"] == {"x": 0.5, "y": 0.0, "z": 1.0}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [[0.0], [0.0, 1.0, 2.0], [], ["a", "b"], [0.0, float("nan")]],
+)
+def test_a_list_of_the_wrong_length_or_contents_is_still_refused(value) -> None:
+    """Tolerance is for the SHAPE, not for the contents."""
+    from studio_agent.proposal import validate_arguments
+
+    with pytest.raises(ArgumentError):
+        validate_arguments(
+            "create_wall",
+            {
+                "display_name": "Wall",
+                "start_meters": value,
+                "end_meters": {"x": 1.0, "y": 0.0},
+                "height_meters": 2.4,
+                "thickness_meters": 0.12,
+            },
+        )

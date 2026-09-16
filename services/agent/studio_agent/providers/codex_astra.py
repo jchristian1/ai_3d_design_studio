@@ -35,7 +35,7 @@ from ..outcome import (
     AgentOutcome,
     ProviderMetadata,
 )
-from ..proposal import RESPONSE_SCHEMA, parse_agent_response
+from ..proposal import RESPONSE_SCHEMA, describe_capabilities, parse_agent_response
 
 _log = logging.getLogger(__name__)
 
@@ -43,6 +43,48 @@ PROVIDER_NAME = "codex_astra"
 PROVIDER_VERSION = "mvp.1"
 
 PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+VALIDATION_ERROR = "VALIDATION_ERROR"
+
+#: Appended to the prompt when the model's own answer was rejected. It quotes the exact
+#: validation reason, because a model corrects a specific complaint far more reliably than
+#: a general instruction to try again.
+_CORRECTION = """\
+YOUR PREVIOUS RESPONSE WAS REJECTED BY THE PLATFORM AND NOTHING WAS DONE.
+
+Reason: {reason}
+
+This is what you sent:
+{rejected}
+
+Send a corrected response now. Keep everything that was fine and fix only what the reason
+names. Remember: every capability's arguments are fixed — metres, radians, linear sRGB —
+and a capability that is not in the list above does not exist. If you cannot express the
+change with the available capabilities, use execute_blender_python instead of inventing a
+capability, or ask a clarification if a measurement is genuinely missing."""
+
+#: How much of the rejected response to quote back. Enough to see the offending operation,
+#: short enough not to double the cost of the turn.
+MAX_REJECTED_CHARACTERS = 4_000
+
+
+def _excerpt(raw: Any) -> str:
+    """The rejected response, as text the model can read back."""
+    if raw is None:
+        return "(the response could not be read at all)"
+    try:
+        import json as _json
+
+        text = _json.dumps(raw, indent=2, ensure_ascii=False)
+    except (TypeError, ValueError):
+        text = str(raw)
+    if len(text) > MAX_REJECTED_CHARACTERS:
+        return text[:MAX_REJECTED_CHARACTERS] + "\n… (truncated)"
+    return text
+
+
+def _is_validation_error(outcome: AgentOutcome) -> bool:
+    """A rejection of the model's OWN output, as opposed to Codex being unavailable."""
+    return isinstance(outcome, AgentError) and outcome.error.code == VALIDATION_ERROR
 
 #: The rules Astra works under. Written as instructions rather than prose because the
 #: model's output is a contract, not a conversation.
@@ -165,9 +207,14 @@ def build_prompt(agent_input: AgentInput) -> str:
     """Assemble the full turn. Contains no filesystem path and no credential."""
     sections: list[str] = [SYSTEM_RULES]
 
+    # WITH their exact arguments. Names alone are not enough: the model then has to guess
+    # the argument names, and a guess like `vertices_meters` for a floor's
+    # `footprint_meters` is rejected by the platform, which costs the user a wait for
+    # nothing. The text is generated from the validator's own table.
     sections.append(
-        "AVAILABLE CAPABILITIES:\n"
-        + "\n".join(f"- {name}" for name in PROPOSABLE_CAPABILITIES)
+        "AVAILABLE CAPABILITIES, with the exact arguments each one takes. Use these names\n"
+        "and shapes literally; anything else is rejected and nothing happens:\n"
+        + describe_capabilities(PROPOSABLE_CAPABILITIES)
     )
 
     if agent_input.project_facts:
@@ -284,17 +331,65 @@ class CodexAstraProvider:
             )
 
         prompt = build_prompt(agent_input)
-        try:
-            raw = self.client.complete(
-                prompt,
-                schema=load_schema(RESPONSE_SCHEMA),
-                images=[image.path for image in agent_input.images],
+        schema = load_schema(RESPONSE_SCHEMA)
+        images = [image.path for image in agent_input.images]
+
+        outcome, raw = self._ask(prompt, schema, images, agent_input, metadata)
+        if not _is_validation_error(outcome):
+            return outcome
+
+        # The model's answer did not fit the contract. That is a MODEL mistake, not a user
+        # mistake, and the user cannot act on it — so ask once more, quoting the exact
+        # reason AND the response that was rejected. Showing it what it sent is what makes
+        # a correction reliable: a schema complaint like "value not in enum" is much easier
+        # to act on next to the value that caused it. One extra call is far cheaper than a
+        # dead end that ends the conversation.
+        reason = outcome.error.message  # type: ignore[union-attr]
+        _log.warning("Astra's response was rejected, asking it to correct: %s", reason)
+        corrected, _ = self._ask(
+            f"{prompt}\n\n{_CORRECTION.format(reason=reason, rejected=_excerpt(raw))}",
+            schema,
+            images,
+            agent_input,
+            self._metadata(),
+        )
+        if _is_validation_error(corrected):
+            _log.warning(
+                "Astra's corrected response was rejected too: %s",
+                corrected.error.message,  # type: ignore[union-attr]
             )
-        except CodexError as error:
             return AgentError(
-                error=ChatError(code=PROVIDER_UNAVAILABLE, message=str(error)),
+                error=ChatError(
+                    code=VALIDATION_ERROR,
+                    message=(
+                        "Astra proposed something I could not build, twice, so nothing was "
+                        "changed. Try describing the change in a different way, or in "
+                        "smaller steps."
+                    ),
+                ),
                 metadata=metadata,
+            )
+        return corrected
+
+    def _ask(
+        self,
+        prompt: str,
+        schema: Any,
+        images: list[Any],
+        agent_input: AgentInput,
+        metadata: ProviderMetadata,
+    ) -> tuple[AgentOutcome, Any]:
+        """One model call. Returns the outcome and the raw body it came from."""
+        try:
+            raw = self.client.complete(prompt, schema=schema, images=images)
+        except CodexError as error:
+            return (
+                AgentError(
+                    error=ChatError(code=PROVIDER_UNAVAILABLE, message=str(error)),
+                    metadata=metadata,
+                ),
+                None,
             )
 
         scene_version = agent_input.scene.scene_version if agent_input.scene else None
-        return parse_agent_response(raw, metadata, scene_version=scene_version)
+        return parse_agent_response(raw, metadata, scene_version=scene_version), raw
