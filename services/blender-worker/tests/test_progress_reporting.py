@@ -40,8 +40,13 @@ def executor(tmp_path: Path) -> DispatchingExecutor:
     blend.parent.mkdir(parents=True, exist_ok=True)
     blend.write_bytes(b"BLENDER-fake")
 
+    # ONE journal, shared by both paths, exactly as `python -m blender_worker` wires it.
+    # The dispatching executor enforces this: a second journal would hold results that
+    # reconciliation never resends.
+    store = FileSystemExecutionStore(tmp_path / "journal")
+
     capabilities = CapabilityPlanExecutor(
-        store=FileSystemExecutionStore(tmp_path / "journal"),
+        store=store,
         locks=FileLockProvider(tmp_path / "locks"),
         projects=MappingProjectRegistry(tmp_path / "projects", {PROJECT: blend}),
         provider=FakeBlenderCapabilityProvider(),
@@ -49,6 +54,8 @@ def executor(tmp_path: Path) -> DispatchingExecutor:
     )
 
     class Legacy:
+        store = capabilities.store
+
         def execute(self, job):  # pragma: no cover - not exercised here
             raise AssertionError("the legacy path should not be used")
 

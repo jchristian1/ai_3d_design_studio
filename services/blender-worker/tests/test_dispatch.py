@@ -21,8 +21,11 @@ PROJECT = "proj_test"
 class RecordingLegacy:
     """Stands in for the Spec 001 executor."""
 
-    def __init__(self) -> None:
+    def __init__(self, store) -> None:
         self.seen: list[dict] = []
+        #: Both paths share ONE journal in the real wiring, and the dispatcher enforces
+        #: it, so the stand-in carries the same store.
+        self.store = store
 
     def execute(self, job):
         self.seen.append(job)
@@ -42,15 +45,16 @@ def dispatcher(tmp_path: Path):
     blend.parent.mkdir(parents=True, exist_ok=True)
     blend.write_bytes(b"BLENDER-fake")
 
+    store = FileSystemExecutionStore(tmp_path / "journal")
     provider = FakeBlenderCapabilityProvider()
     capabilities = CapabilityPlanExecutor(
-        store=FileSystemExecutionStore(tmp_path / "journal"),
+        store=store,
         locks=FileLockProvider(tmp_path / "locks"),
         projects=MappingProjectRegistry(tmp_path / "projects", {PROJECT: blend}),
         provider=provider,
         recovery_root=tmp_path / "recovery",
     )
-    legacy = RecordingLegacy()
+    legacy = RecordingLegacy(store)
     return DispatchingExecutor(legacy=legacy, capabilities=capabilities), legacy, provider
 
 
@@ -128,3 +132,70 @@ def test_a_failed_plan_reports_the_error_through_the_same_shape(dispatcher) -> N
     assert outcome.job_status == "failed"
     assert outcome.error["code"] == "MUTATION_FAILED"
     assert outcome.preview is None
+
+
+
+# ---------------------------------------------------------------------------
+# The journal must remain reachable through the dispatcher
+# ---------------------------------------------------------------------------
+#
+# These two tests exist because of a real bug. The worker link client marks delivery
+# and reconciles undelivered results through ``executor.store``. When the dispatching
+# executor replaced the Spec 001 executor at the top level it did not expose one, so
+# ``reconcile()`` raised AttributeError and ``_mark_delivery`` — which swallows
+# exceptions to protect the link — silently stopped recording delivery. Both failures
+# only appear after a report is lost, which is exactly when they matter.
+
+
+def test_the_dispatcher_exposes_the_shared_journal(dispatcher) -> None:
+    """The link client reconciles through ``executor.store``, so it must exist."""
+    executor, legacy, _ = dispatcher
+    assert executor.store is legacy.store
+    assert executor.store is executor.capabilities.store
+
+
+def test_two_journals_are_refused_at_construction(tmp_path: Path) -> None:
+    """A second journal would hold results that nothing ever resends."""
+    blend = tmp_path / "projects" / f"{PROJECT}.blend"
+    blend.parent.mkdir(parents=True, exist_ok=True)
+    blend.write_bytes(b"BLENDER-fake")
+
+    capabilities = CapabilityPlanExecutor(
+        store=FileSystemExecutionStore(tmp_path / "journal_a"),
+        locks=FileLockProvider(tmp_path / "locks"),
+        projects=MappingProjectRegistry(tmp_path / "projects", {PROJECT: blend}),
+        provider=FakeBlenderCapabilityProvider(),
+        recovery_root=tmp_path / "recovery",
+    )
+
+    with pytest.raises(ValueError, match="share one execution store"):
+        DispatchingExecutor(
+            legacy=RecordingLegacy(FileSystemExecutionStore(tmp_path / "journal_b")),
+            capabilities=capabilities,
+        )
+
+
+def test_a_resent_result_carries_the_scene_and_the_model(dispatcher, tmp_path: Path) -> None:
+    """A report lost in transit must come back COMPLETE, not as a bare success.
+
+    The scene and the GLB are journalled in their own fields, so the record has to be
+    asked what to report rather than handing over ``result`` alone. Before this, a
+    reconciled success left the browser with no updated model and the agent with no
+    scene to reason about.
+    """
+    executor, _, _ = dispatcher
+    from studio_preview.artifacts import LocalArtifactStore
+
+    executor.capabilities.artifacts = LocalArtifactStore(tmp_path / "artifacts")
+
+    live = executor.execute(capability_job())
+    assert live.result is not None
+
+    record = executor.store.load(PROJECT, "job_req_1_0")
+    assert record is not None
+    resent = record.result_for_report()
+
+    assert resent is not None
+    assert resent["scene"] == live.result["scene"]
+    assert resent["model"] == live.result["model"]
+    assert resent["applied"] == live.result["applied"]

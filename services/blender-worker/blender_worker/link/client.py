@@ -371,7 +371,13 @@ class WorkerLinkClient:
         """Record delivery in the durable journal so reconnect can reconcile."""
         try:
             record = self.executor.store.load(outcome.project_id, outcome.job_id)
-        except Exception:  # pragma: no cover - journal errors surface elsewhere
+        except Exception as error:
+            # Never break the link over bookkeeping — but never do it silently either.
+            # An executor that does not expose its journal would otherwise disable
+            # redelivery invisibly, which is exactly what redelivery exists to prevent.
+            logger.warning(
+                "could not record delivery for job %s: %s", outcome.job_id, error
+            )
             return
         if record is None:
             return
@@ -392,7 +398,10 @@ class WorkerLinkClient:
                 job_id=record.job_id,
                 project_id=record.project_id,
                 job_status=status,
-                result=record.result,
+                # The record's own view of what to report: the scene and model artifact
+                # travel with it, so a resent result carries exactly what the original
+                # would have carried.
+                result=record.result_for_report(),
                 error=record.error,
                 execution_phase=record.phase,
                 # The stored preview reference travels with the stored result, so

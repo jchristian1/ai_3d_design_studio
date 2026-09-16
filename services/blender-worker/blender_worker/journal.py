@@ -34,7 +34,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Protocol
+from typing import Any, Mapping, Optional, Protocol
 
 from . import phases
 
@@ -62,6 +62,66 @@ class JournalCorruptError(JournalError):
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+#: Step states, mirrored from ``capability_executor``. Duplicated as literals rather
+#: than imported to keep the journal free of a dependency on the executor.
+_APPLIED = "applied"
+_ALREADY_APPLIED = "already_applied"
+
+
+def merge_report_result(
+    result: Optional[dict[str, Any]],
+    *,
+    scene: Optional[dict[str, Any]] = None,
+    model: Optional[dict[str, Any]] = None,
+    model_error: Optional[dict[str, Any]] = None,
+    steps: Optional[Mapping[str, Any]] = None,
+    applied: Optional[int] = None,
+    already_applied: Optional[int] = None,
+) -> Optional[dict[str, Any]]:
+    """Combine an operation result with the scene and artifacts that accompany it.
+
+    ``result`` is unconstrained at the contract level, which is the sanctioned place for
+    operation-specific output. The scene travels there so the control plane can ground the
+    next agent turn without a second Blender read, and the model artifact travels there so
+    the browser learns about a new GLB through the job it already polls.
+
+    ONE implementation, used by both the live report and any resent one, so a reconciled
+    result cannot carry less than the original.
+    """
+    if applied is None or already_applied is None:
+        counted = _count_steps(steps or {})
+        applied = counted[0] if applied is None else applied
+        already_applied = counted[1] if already_applied is None else already_applied
+
+    if result is None and scene is None and model is None:
+        return None
+
+    merged = dict(result or {})
+    if scene is not None:
+        merged["scene"] = scene
+    if model is not None:
+        merged["model"] = model
+    if model_error is not None:
+        merged["model_error"] = model_error
+    if applied or already_applied:
+        merged.setdefault("applied", applied)
+        merged.setdefault("already_applied", already_applied)
+    return merged
+
+
+def _count_steps(steps: Mapping[str, Any]) -> tuple[int, int]:
+    applied = 0
+    already = 0
+    for entry in steps.values():
+        if not isinstance(entry, Mapping):
+            continue
+        if entry.get("status") == _APPLIED:
+            applied += 1
+        elif entry.get("status") == _ALREADY_APPLIED:
+            already += 1
+    return applied, already
 
 
 @dataclass
@@ -125,6 +185,26 @@ class ExecutionRecord:
 
     def to_wire(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
+
+    def result_for_report(self) -> Optional[dict[str, Any]]:
+        """The result as the CONTROL PLANE should receive it.
+
+        The scene and the model artifact are journalled in their own fields, because a
+        retry needs them independently of the operation result. When the result is
+        reported, though, they belong on it — that is how the control plane learns the
+        new scene and the new GLB.
+
+        This exists so a RESENT result carries the same information as the original one.
+        Without it, a report lost to a dropped connection would come back as a bare
+        success and the browser would never see the model it just produced.
+        """
+        return merge_report_result(
+            self.result,
+            scene=self.scene,
+            model=self.model,
+            model_error=self.model_error,
+            steps=self.steps,
+        )
 
     @classmethod
     def from_wire(cls, wire: dict[str, Any]) -> "ExecutionRecord":

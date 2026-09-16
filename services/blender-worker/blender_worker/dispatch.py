@@ -36,6 +36,27 @@ class DispatchingExecutor:
     legacy: WorkerExecutor
     capabilities: CapabilityPlanExecutor
 
+    def __post_init__(self) -> None:
+        # The two paths MUST share one journal. The link client reconciles undelivered
+        # results from `executor.store`, so a second journal would be a set of results
+        # nothing ever resends.
+        if self.legacy.store is not self.capabilities.store:
+            raise ValueError(
+                "the legacy and capability executors must share one execution store, "
+                "otherwise results recorded by one are invisible to reconciliation"
+            )
+
+    @property
+    def store(self) -> Any:
+        """The shared execution journal.
+
+        Exposed because the worker link client marks delivery and reconciles
+        undelivered results through ``executor.store``. Without this the dispatching
+        executor would satisfy ``execute`` but silently break redelivery, which is the
+        one thing that stops a lost report from losing a mutation.
+        """
+        return self.legacy.store
+
     @property
     def supported_job_types(self) -> tuple[str, ...]:
         from .executor import SUPPORTED_JOB_TYPES
@@ -92,21 +113,17 @@ def _as_worker_outcome(outcome: PlanOutcome) -> WorkerOutcome:
 def _result_with_scene(outcome: PlanOutcome) -> Optional[dict[str, Any]]:
     """Carry the scene and model alongside the result.
 
-    ``result`` is unconstrained at the contract level, which is the sanctioned place for
-    operation-specific output. The scene travels here so the control plane can ground the
-    next agent turn without a second read, and the model artifact travels here so the
-    browser learns about a new GLB through the job it already polls.
+    Delegates to the journal's merge so a LIVE report and a RESENT one are assembled by
+    the same code. They used to differ, and the difference was invisible: a report lost
+    to a dropped connection came back as a bare success with no scene and no model.
     """
-    if outcome.result is None and outcome.scene is None and outcome.model is None:
-        return None
-    result = dict(outcome.result or {})
-    if outcome.scene is not None:
-        result["scene"] = outcome.scene
-    if outcome.model is not None:
-        result["model"] = outcome.model
-    if outcome.model_error is not None:
-        result["model_error"] = outcome.model_error
-    if outcome.applied_steps or outcome.skipped_steps:
-        result.setdefault("applied", outcome.applied_steps)
-        result.setdefault("already_applied", outcome.skipped_steps)
-    return result
+    from .journal import merge_report_result
+
+    return merge_report_result(
+        outcome.result,
+        scene=outcome.scene,
+        model=outcome.model,
+        model_error=outcome.model_error,
+        applied=outcome.applied_steps,
+        already_applied=outcome.skipped_steps,
+    )
