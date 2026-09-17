@@ -258,3 +258,4 @@ from local configuration. A job can never carry a filesystem path.
 
 Generated runtime state (execution journal, locks, recovery snapshots, and preview
 artifacts under `runtime/artifacts/`) lives in the git-ignored `runtime/` directory.
+# ai_3d_design_studio
