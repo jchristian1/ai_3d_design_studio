@@ -65,6 +65,7 @@ export interface WorkspaceState {
   phase: WorkspacePhase;
   astra: ConnectionStatusView | null;
   blender: ConnectionStatusView | null;
+  gpu: ConnectionStatusView | null;
   uploads: UploadState[];
   /** A transient message about the workspace itself, not part of the conversation. */
   notice: string | null;
@@ -88,7 +89,7 @@ export type WorkspaceEvent =
   | { type: "attachment_toggled"; referenceId: string }
   | { type: "attachments_cleared" }
   | { type: "object_selected"; objectId: string | null }
-  | { type: "status_updated"; astra?: ConnectionStatusView; blender?: ConnectionStatusView }
+  | { type: "status_updated"; astra?: ConnectionStatusView; blender?: ConnectionStatusView; gpu?: ConnectionStatusView }
   | { type: "approval_resolved"; approvalId: string }
   | { type: "notice"; message: string | null };
 

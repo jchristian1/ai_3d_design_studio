@@ -48,9 +48,13 @@ export const JOB_TIMEOUT_MS = 10 * 60 * 1000;
  * A design turn runs a real model: seconds for a question, minutes for a floor plan. The
  * server hands back a turn id immediately and this is the cadence for collecting the
  * answer, so no single request has to outlive `REQUEST_TIMEOUT_MS`.
+ *
+ * The ceiling is kept in step with the server-side `STUDIO_CODEX_TIMEOUT_SECONDS`
+ * (default 1500 s = 25 min). If the browser gave up first, an answer the model actually
+ * produced would be thrown away, so this must be >= the server timeout.
  */
 export const TURN_POLL_INTERVAL_MS = 1000;
-export const TURN_TIMEOUT_MS = 15 * 60 * 1000;
+export const TURN_TIMEOUT_MS = 25 * 60 * 1000;
 
 /**
  * Resolve the API base URL, trimming any trailing slash so URL joining is

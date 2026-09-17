@@ -88,6 +88,12 @@ export function WorkspaceShell({
             connected={state.blender?.connected ?? false}
             action={null}
           />
+          <StatusPill
+            label={state.gpu?.label ?? "GPU"}
+            message={state.gpu?.message ?? "Checking…"}
+            connected={state.gpu?.connected ?? false}
+            action={null}
+          />
           <span className={styles.modelStatus}>
             {describeModelStatus(state.phase, Boolean(state.model))}
           </span>

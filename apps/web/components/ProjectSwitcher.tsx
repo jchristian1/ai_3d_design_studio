@@ -19,6 +19,7 @@ export interface ProjectSwitcherProps {
   projects: ProjectSummaryView[];
   onOpen(projectId: string): void;
   onRename(projectId: string, displayName: string): void;
+  onDelete(): void;
   onClose(): void;
   fallbackName?: string;
 }
@@ -28,6 +29,7 @@ export function ProjectSwitcher({
   projects,
   onOpen,
   onRename,
+  onDelete,
   onClose,
   fallbackName = "Project",
 }: ProjectSwitcherProps) {
@@ -142,6 +144,18 @@ export function ProjectSwitcher({
           >
             All projects…
             <span className={styles.menuMeta}>Open another, or start a new one</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`${styles.menuItem} ${styles.menuItemDanger}`}
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+          >
+            Delete this project…
+            <span className={styles.menuMeta}>Permanent; asks you to type the name</span>
           </button>
 
           {others.length ? (

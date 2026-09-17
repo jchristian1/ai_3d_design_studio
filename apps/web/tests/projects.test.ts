@@ -89,14 +89,25 @@ function memoryStorage(initial: Record<string, string> = {}) {
 }
 
 describe("opening the studio", () => {
+  let cleanupDom: () => void;
+
   before(() => {
-    globalJsdom(undefined, { pretendToBeVisual: true, url: "http://localhost:3000" });
+    cleanupDom = globalJsdom(undefined, { pretendToBeVisual: true, url: "http://localhost:3000" });
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
   after(async () => {
     const { cleanup } = await import("@testing-library/react");
     cleanup();
+    // Unmounting queues work on React's scheduler, which runs on a setImmediate. Let it
+    // drain BEFORE the window goes away: react-dom dereferences `window` when that work
+    // runs, so tearing jsdom down first surfaces an uncaught "window is not defined"
+    // blamed on whichever test happened to be active.
+    await new Promise((resolve) => setImmediate(resolve));
+    // Tear down the jsdom window/document installed on the global. Without this
+    // the whole environment leaks for the life of the process, which is what
+    // let a full test run accumulate enough heap to be OOM-killed.
+    cleanupDom?.();
   });
 
   beforeEach(async () => {
@@ -140,10 +151,10 @@ describe("opening the studio", () => {
     await waitFor(() => screen.getByRole("heading", { name: "What are we designing?" }));
 
     // The existing project is offered rather than opened.
-    assert.ok(screen.getByRole("button", { name: /Beach House Kitchen/ }));
+    assert.ok(screen.getByRole("button", { name: "Open Beach House Kitchen" }));
     assert.ok(screen.getByRole("button", { name: "Create project" }));
     // And no workspace is mounted, so nothing was loaded behind the screen.
-    assert.equal(screen.queryByLabelText("Message Astra"), null);
+    assert.ok(screen.queryByLabelText("Message Astra") === null);
   });
 
   it("invites a first project when there are none", async () => {
@@ -172,8 +183,10 @@ describe("opening the studio", () => {
     const { screen, waitFor } = await renderApp(transport);
 
     await waitFor(() => screen.getByLabelText("Message Astra"));
+    // In the workspace the project name is the switcher in the top bar; the project
+    // screen's "Open …" button only exists when no project is open.
     assert.ok(screen.getByRole("button", { name: /Beach House Kitchen/ }));
-    assert.equal(screen.queryByRole("heading", { name: "What are we designing?" }), null);
+    assert.ok(screen.queryByRole("heading", { name: "What are we designing?" }) === null);
   });
 
   it("prefers what this browser remembers", async () => {
@@ -258,9 +271,9 @@ describe("opening the studio", () => {
     });
 
     const { screen, waitFor, fireEvent, storage } = await renderApp(transport);
-    await waitFor(() => screen.getByRole("button", { name: /Beach House Kitchen/ }));
+    await waitFor(() => screen.getByRole("button", { name: "Open Beach House Kitchen" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /Beach House Kitchen/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Beach House Kitchen" }));
 
     await waitFor(() => screen.getByLabelText("Message Astra"));
     assert.equal(storage.values.get("studio.lastProjectId"), SEED);

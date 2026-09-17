@@ -41,6 +41,7 @@ export function initialWorkspaceState(options: InitialWorkspaceOptions): Workspa
     phase: "idle",
     astra: null,
     blender: null,
+    gpu: null,
     uploads: [],
     notice: null,
     activeJobId: null,
@@ -280,6 +281,7 @@ export function workspaceReducer(
         ...state,
         astra: event.astra ?? state.astra,
         blender: event.blender ?? state.blender,
+        gpu: event.gpu ?? state.gpu,
       };
 
     case "approval_resolved":

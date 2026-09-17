@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from .database import StudioDatabase
@@ -725,6 +726,29 @@ class SceneRepository:
         self._db.execute("DELETE FROM project_scenes WHERE project_id = ?", (project_id,))
 
 
+@dataclass(frozen=True)
+class ProjectDeletion:
+    """What deleting one project removed. Returned so the user can be told plainly."""
+
+    project_id: str
+    display_name: str
+    references: int
+    messages: int
+    facts: int
+    artifacts: int
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "project_id": self.project_id,
+            "display_name": self.display_name,
+            "deleted": True,
+            "references": self.references,
+            "messages": self.messages,
+            "facts": self.facts,
+            "artifacts": self.artifacts,
+        }
+
+
 class StudioRepositories:
     """One handle carrying every repository, so wiring stays a single argument."""
 
@@ -743,3 +767,51 @@ class StudioRepositories:
 
     def close(self) -> None:
         self.database.close()
+
+    # -- deletion ----------------------------------------------------------
+    #: Every table that holds something belonging to a project. Listed here rather than
+    #: spread across the repositories so that "delete a project" cannot quietly miss one:
+    #: a new table with a project_id column is added to this tuple in the same commit, and
+    #: a test walks the schema to prove nothing is forgotten.
+    PROJECT_TABLES: tuple[str, ...] = (
+        "project_references",
+        "design_facts",
+        "conversation_turns",
+        "clarifications",
+        "approvals",
+        "reference_analyses",
+        "job_records",
+        "project_artifacts",
+        "project_scenes",
+        "reference_deliveries",
+        "projects",
+    )
+
+    def delete_project(self, project_id: str) -> Optional[ProjectDeletion]:
+        """Remove a project and everything the database holds for it.
+
+        Files are NOT this method's business: the caller deletes uploads and artifacts,
+        because those live in stores the database knows nothing about. One transaction, so a
+        failure half way leaves the project intact rather than partly erased.
+        """
+        record = self.projects.get(project_id)
+        if record is None:
+            return None
+
+        counted = ProjectDeletion(
+            project_id=project_id,
+            display_name=record.display_name,
+            references=len(self.references.list_for_project(project_id, include_pages=True)),
+            messages=self.conversation.count(project_id),
+            facts=len(self.facts.all_for_project(project_id)),
+            artifacts=len(self.artifacts.list_for_project(project_id)),
+        )
+
+        with self.database.transaction() as connection:
+            for table in self.PROJECT_TABLES:
+                # The table names come from PROJECT_TABLES, never from a caller, so this
+                # interpolation cannot carry anything a request influenced.
+                connection.execute(
+                    f"DELETE FROM {table} WHERE project_id = ?", (project_id,)
+                )
+        return counted

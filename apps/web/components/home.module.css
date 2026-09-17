@@ -242,3 +242,30 @@
   color: var(--text-dim);
   white-space: nowrap;
 }
+
+/* A project card and its delete button share a row: the destructive action is present
+   but never on the path to opening a project. */
+.projectRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.deleteButton {
+  padding: 0 0.8rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.deleteButton:hover {
+  color: var(--danger-ink);
+  border-color: var(--danger-line);
+  background: var(--danger-fill);
+}

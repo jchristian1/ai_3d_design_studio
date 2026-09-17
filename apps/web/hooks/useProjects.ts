@@ -40,6 +40,10 @@ export interface ProjectsSession {
   open(projectId: string): Promise<void>;
   create(displayName: string): Promise<ProjectSummaryView | null>;
   rename(projectId: string, displayName: string): Promise<void>;
+  /** Irreversible. The typed name must match, and the server checks it too. */
+  remove(projectId: string, confirmDisplayName: string): Promise<boolean>;
+  /** Dismiss the current error, so a failed attempt does not outlive the dialog it came from. */
+  clearError(): void;
   close(): void;
   refresh(): Promise<void>;
 }
@@ -177,10 +181,36 @@ export function useProjects(options: UseProjectsOptions = {}): ProjectsSession {
     [client],
   );
 
+  const remove = useCallback(
+    async (projectId: string, confirmDisplayName: string) => {
+      try {
+        await client.deleteProject(projectId, confirmDisplayName);
+      } catch (failure) {
+        setError(
+          failure instanceof ApiFailure ? failure.message : "That project could not be deleted.",
+        );
+        return false;
+      }
+      setProjects((existing) => existing.filter((entry) => entry.project_id !== projectId));
+      setError(null);
+      if (currentId === projectId) {
+        // Deleting the project you are in returns you to the project screen: there is
+        // nothing left to show, and a workspace pointed at a deleted project would fail
+        // every request it made.
+        setCurrentId(null);
+        remember(null);
+      }
+      return true;
+    },
+    [client, currentId, remember],
+  );
+
   const close = useCallback(() => {
     setCurrentId(null);
     remember(null);
   }, [remember]);
+
+  const clearError = useCallback(() => setError(null), []);
 
   return {
     projects,
@@ -191,6 +221,8 @@ export function useProjects(options: UseProjectsOptions = {}): ProjectsSession {
     open,
     create,
     rename,
+    remove,
+    clearError,
     close,
     refresh: () => load(false),
   };

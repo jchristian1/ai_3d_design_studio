@@ -329,14 +329,46 @@ async function createScene(
   }
   renderer.domElement.addEventListener("click", onClick);
 
+  /**
+   * Free everything the GPU is holding for a material: the material itself and every
+   * texture it references. Three.js does NOT dispose textures when a material is disposed,
+   * so a viewer that reloads models (every reconstruction does) leaks texture memory until
+   * the WebGL context is lost and the tab dies. This is the belt that stops that.
+   */
+  function disposeMaterial(material: unknown) {
+    if (!material) return;
+    // Never dispose the shared highlight material here — it is reused across loads and is
+    // only released in the handle's dispose(). A selected mesh carries it as its material.
+    if (material === highlight) return;
+    const mat = material as Record<string, unknown> & { dispose?: () => void };
+    for (const value of Object.values(mat)) {
+      // A texture is any material property that owns a GPU resource with dispose().
+      if (
+        value &&
+        typeof value === "object" &&
+        (value as { isTexture?: boolean }).isTexture === true
+      ) {
+        (value as { dispose?: () => void }).dispose?.();
+      }
+    }
+    mat.dispose?.();
+  }
+
   function disposeRoot() {
     if (!root) return;
     scene.remove(root);
     root.traverse((child) => {
       const mesh = child as import("three").Mesh;
       mesh.geometry?.dispose?.();
-      const material = mesh.material as { dispose?: () => void } | undefined;
-      material?.dispose?.();
+      // Dispose the ORIGINAL material we recorded on load, not whatever is currently
+      // assigned — a selected mesh has been swapped to the shared highlight material, and
+      // disposing that here would break every future selection.
+      const original = originalMaterials.get(mesh.uuid) ?? mesh.material;
+      if (Array.isArray(original)) {
+        for (const entry of original) disposeMaterial(entry);
+      } else {
+        disposeMaterial(original);
+      }
     });
     root = null;
     originalMaterials.clear();
@@ -398,6 +430,10 @@ async function createScene(
       controls.dispose();
       highlight.dispose();
       renderer.dispose();
+      // dispose() frees GPU objects but leaves the WebGL context itself alive; browsers
+      // cap the number of live contexts (~16) and silently drop the oldest. Forcing the
+      // loss here releases it immediately so repeated mounts can't exhaust the cap.
+      renderer.forceContextLoss?.();
       renderer.domElement.remove();
     },
   };

@@ -95,14 +95,25 @@ function stubs(
 }
 
 describe("the workspace", () => {
+  let cleanupDom: () => void;
+
   before(() => {
-    globalJsdom(undefined, { pretendToBeVisual: true, url: "http://localhost:3000" });
+    cleanupDom = globalJsdom(undefined, { pretendToBeVisual: true, url: "http://localhost:3000" });
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
   after(async () => {
     const { cleanup } = await import("@testing-library/react");
     cleanup();
+    // Unmounting queues work on React's scheduler, which runs on a setImmediate. Let it
+    // drain BEFORE the window goes away: react-dom dereferences `window` when that work
+    // runs, so tearing jsdom down first surfaces an uncaught "window is not defined"
+    // blamed on whichever test happened to be active.
+    await new Promise((resolve) => setImmediate(resolve));
+    // Tear down the jsdom window/document installed on the global. Without this
+    // the whole environment leaks for the life of the process, which is what
+    // let a full test run accumulate enough heap to be OOM-killed.
+    cleanupDom?.();
   });
 
   beforeEach(async () => {
@@ -185,7 +196,7 @@ describe("the workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Chat" }));
 
     assert.equal(screen.getByRole("button", { name: "Chat" }).getAttribute("aria-pressed"), "false");
-    assert.equal(screen.queryByLabelText("Message Astra"), null);
+    assert.ok(screen.queryByLabelText("Message Astra") === null);
     assert.ok(screen.getByRole("heading", { name: "Inspector" }));
   });
 
@@ -326,7 +337,7 @@ describe("the workspace", () => {
 
     // The property that matters is that there is nowhere to TYPE a secret. The panel
     // does mention passwords and API keys, to say it never uses them.
-    assert.equal(document.querySelector('input[type="password"]'), null);
+    assert.ok(document.querySelector('input[type="password"]') === null);
     const secretish = Array.from(document.querySelectorAll("input")).filter((input) => {
       const descriptor = `${input.getAttribute("name") ?? ""} ${input.getAttribute("id") ?? ""} ${
         input.getAttribute("placeholder") ?? ""
@@ -385,7 +396,7 @@ describe("the workspace", () => {
   it("hides the connect panel once Astra is connected", async () => {
     const { screen, waitFor } = await renderShell(stubs());
     await waitFor(() => screen.getByText("Astra via Codex"));
-    assert.equal(screen.queryByRole("heading", { name: "Connect Astra" }), null);
+    assert.ok(screen.queryByRole("heading", { name: "Connect Astra" }) === null);
   });
 
   it("never renders a job id, path, or capability name", async () => {

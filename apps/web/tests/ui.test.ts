@@ -31,10 +31,14 @@ before(() => {
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
-after(() => {
+after(async () => {
   // The final render is never reached by beforeEach, and its health-poll timer
   // would keep the event loop alive and hang the run.
   cleanup();
+  // Unmounting queues work on React's scheduler, which runs on a setImmediate. Let it
+  // drain BEFORE the window goes away: react-dom dereferences `window` when that work
+  // runs, so tearing jsdom down first surfaces an uncaught "window is not defined".
+  await new Promise((resolve) => setImmediate(resolve));
   cleanupDom?.();
 });
 

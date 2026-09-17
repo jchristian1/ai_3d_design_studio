@@ -116,6 +116,58 @@ def blender_status(request: Request) -> dict[str, Any]:
     }
 
 
+@router.get("/gpu")
+def gpu_status(request: Request) -> dict[str, Any]:
+    """Report whether the connected design machine has a usable GPU.
+
+    Like the Blender status, this is derived from the worker link rather than probed from
+    the control plane, which cannot see the workstation. The worker advertises
+    ``gpu_available``/``gpu_name`` at registration (from ``STUDIO_WORKER_GPU_NAME`` or an
+    ``nvidia-smi`` probe), so this is both accurate and free.
+    """
+    dependencies = get_dependencies(request)
+    snapshots = dependencies.gateway.worker_snapshots()
+
+    connected = [s for s in snapshots if s.get("connected")]
+    with_gpu = [
+        s for s in connected if (s.get("capabilities") or {}).get("gpu_available")
+    ]
+    capable = with_gpu[0] if with_gpu else None
+
+    if capable is not None:
+        gpu_name = (capable.get("capabilities") or {}).get("gpu_name") or "GPU"
+        return {
+            "state": "connected",
+            "label": "GPU",
+            "message": gpu_name,
+            "connected": True,
+            "gpu_name": gpu_name,
+            "worker_count": len(with_gpu),
+        }
+
+    if connected:
+        return {
+            "state": "no_gpu",
+            "label": "GPU",
+            "message": (
+                "A design machine is connected but no GPU was detected on it. "
+                "Rendering will fall back to the CPU."
+            ),
+            "connected": False,
+            "gpu_name": None,
+            "worker_count": 0,
+        }
+
+    return {
+        "state": "disconnected",
+        "label": "GPU",
+        "message": "The design machine is not connected. Start the worker to use the GPU.",
+        "connected": False,
+        "gpu_name": None,
+        "worker_count": 0,
+    }
+
+
 
 # --- signing in to ChatGPT -------------------------------------------------
 #

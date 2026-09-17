@@ -18,6 +18,32 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 
+# --- node / codex on PATH -------------------------------------------------
+#
+# `codex`, `node` and `npm` are commonly installed via nvm, whose bin directory is only
+# on PATH in shells that have sourced nvm. When the studio is launched outside such a
+# shell (the desktop icon, a fresh terminal, a service manager) that directory is absent,
+# so `shutil.which("codex")` in the control plane fails and the workspace reports
+# "Codex is not installed" even though it is. Sourcing nvm here makes the launch method
+# irrelevant. This is a no-op when nvm is not installed or codex is already found.
+if ! command -v codex >/dev/null 2>&1; then
+  NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+    # shellcheck disable=SC1091
+    \. "$NVM_DIR/nvm.sh" >/dev/null 2>&1 || true
+    # The default node version may not be the one that carries codex, so if codex is
+    # still not visible, walk installed versions and put the first one that has it on PATH.
+    if ! command -v codex >/dev/null 2>&1; then
+      for candidate in "$NVM_DIR"/versions/node/*/bin; do
+        if [[ -x "$candidate/codex" ]]; then
+          PATH="$candidate:$PATH"
+          break
+        fi
+      done
+    fi
+  fi
+fi
+
 # --- preconditions --------------------------------------------------------
 
 if [[ ! -x .venv/bin/python ]]; then
@@ -38,6 +64,12 @@ export STUDIO_WORKER_TOKEN="${STUDIO_WORKER_TOKEN:-$("$PYTHON" -c 'import secret
 export STUDIO_WORKER_ID="${STUDIO_WORKER_ID:-worker_local_1}"
 export STUDIO_CONTROL_PLANE_URL="${STUDIO_CONTROL_PLANE_URL:-ws://127.0.0.1:8000/ws/workers}"
 export STUDIO_API_PROJECT_IDS="${STUDIO_API_PROJECT_IDS:-proj_seed}"
+
+# How long one Astra turn may take. An ambitious scene ("furnish this room realistically")
+# asks the model to author a large program and can legitimately run for many minutes, so
+# the ceiling is generous. The browser turn poll (`TURN_TIMEOUT_MS`) is kept >= this so a
+# real answer is never thrown away. Override by exporting STUDIO_CODEX_TIMEOUT_SECONDS.
+export STUDIO_CODEX_TIMEOUT_SECONDS="${STUDIO_CODEX_TIMEOUT_SECONDS:-1500}"
 
 # The official Blender MCP is the Blender backend. Install it once; this only checks.
 if ! "$PYTHON" scripts/setup_official_blender_mcp.py --check >/dev/null 2>&1; then

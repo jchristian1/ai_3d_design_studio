@@ -164,6 +164,37 @@ class ReferenceFileStore:
     def exists(self, project_id: str, stored_name: str) -> bool:
         return self.path_for(project_id, stored_name) is not None
 
+    def delete_project(self, project_id: str) -> int:
+        """Remove every stored file for a project, and the directory itself.
+
+        Returns how many files were removed. Written with pathlib rather than a recursive
+        tree delete: this walks ONE directory it derived itself, one level of derived-copy
+        subdirectory, and nothing else — a project's uploads cannot be a route to sweeping
+        anything wider.
+        """
+        directory = self.project_directory(project_id)
+        if not directory.exists():
+            return 0
+
+        removed = 0
+        for child in sorted(directory.iterdir()):
+            if child.is_dir():
+                # Derived copies (downscaled images for the model) live one level down.
+                for grandchild in sorted(child.iterdir()):
+                    if grandchild.is_file():
+                        grandchild.unlink()
+                        removed += 1
+                if not any(child.iterdir()):
+                    child.rmdir()
+                continue
+            if child.is_file():
+                child.unlink()
+                removed += 1
+
+        if not any(directory.iterdir()):
+            directory.rmdir()
+        return removed
+
     def delete(self, project_id: str, stored_name: str) -> bool:
         try:
             target = self._resolved_path(project_id, stored_name)

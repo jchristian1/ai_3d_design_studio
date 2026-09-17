@@ -67,6 +67,117 @@ def approval_token_for(code: str) -> str:
     return f"{APPROVAL_PREFIX}{digest}"
 
 
+#: Wraps model-authored Python so its changes actually persist, and a single failing
+#: line does not discard the whole scene.
+#:
+#: Two problems this solves:
+#:
+#: 1. The official ``execute_blender_code_for_cli`` runs the code in a FRESH headless
+#:    ``blender --background`` process and captures a ``result`` dict, but it never saves
+#:    the .blend — the process just exits. Every built-in platform script calls
+#:    ``bpy.ops.wm.save_mainfile()`` for exactly this reason; model-authored code had no
+#:    such guarantee, so anything it created was silently discarded.
+#:
+#: 2. The whole model block runs in one ``exec``. If any line raises (for example the
+#:    model using a Blender API that changed between versions), execution aborts and
+#:    EVERYTHING built before that line is lost — a botched final atmospheric touch used
+#:    to wipe out an entire manor and forest.
+#:
+#: So the model's code is run inside a ``try`` whose ``finally`` ALWAYS reaches the
+#: platform-owned tail: it tags untagged objects with a stable ``studio_object_id`` (so
+#: they are selectable in the browser), saves the file, and reports a truthful status.
+#: Whatever geometry existed at the moment of failure is kept, and the error text is
+#: surfaced so the model can correct itself on the next turn. The head and tail are fixed
+#: text the model cannot influence; only ``bpy`` scene/file operations are used.
+_PERSIST_HEAD: Final = '''\
+import bpy as _studio_bpy
+import traceback as _studio_traceback
+
+result = {}
+_studio_model_error = None
+try:
+'''
+
+_PERSIST_TAIL: Final = '''
+except Exception as _studio_exc:
+    _studio_model_error = "".join(
+        _studio_traceback.format_exception_only(type(_studio_exc), _studio_exc)
+    ).strip()
+
+# --- platform-owned persistence (always runs, success or failure) ---
+try:
+    result  # noqa: F821 - may have been set by the authored code above
+except NameError:
+    result = {}
+_studio_model_result = result if isinstance(result, dict) else {"value": repr(result)}
+
+# Tag any object lacking a stable studio_object_id so the browser can select it.
+try:
+    _studio_seen = {}
+    for _studio_obj in _studio_bpy.data.objects:
+        if _studio_obj.get("studio_object_id"):
+            continue
+        _studio_base = "".join(
+            _studio_ch if (_studio_ch.isalnum() or _studio_ch == "_") else "_"
+            for _studio_ch in _studio_obj.name.lower()
+        ).strip("_") or "object"
+        _studio_n = _studio_seen.get(_studio_base, 0)
+        _studio_seen[_studio_base] = _studio_n + 1
+        _studio_suffix = "" if _studio_n == 0 else "_%d" % _studio_n
+        _studio_obj["studio_object_id"] = "obj_%s%s" % (_studio_base, _studio_suffix)
+except Exception:  # pragma: no cover - tagging is best effort, never fatal
+    pass
+
+try:
+    _studio_bpy.ops.wm.save_mainfile()
+    _studio_objects = [o.name for o in _studio_bpy.data.objects]
+    if _studio_model_error is not None:
+        # The model's code raised, but whatever it built before that is now saved.
+        result = {
+            "studio_status": "partial",
+            "studio_saved": True,
+            "studio_object_count": len(_studio_objects),
+            "studio_object_names": _studio_objects[:200],
+            "studio_detail": _studio_model_error,
+            "model_result": _studio_model_result,
+        }
+    else:
+        result = {
+            "studio_status": "ok",
+            "studio_saved": True,
+            "studio_object_count": len(_studio_objects),
+            "studio_object_names": _studio_objects[:200],
+            "model_result": _studio_model_result,
+        }
+except Exception as _studio_save_error:  # pragma: no cover - exercised in real Blender
+    result = {
+        "studio_status": "error",
+        "studio_detail": "".join(
+            _studio_traceback.format_exception_only(
+                type(_studio_save_error), _studio_save_error
+            )
+        ).strip(),
+        "model_result": _studio_model_result,
+    }
+'''
+
+
+def _persisted(code: str) -> str:
+    """Model code, run inside a try, then a fixed tail that always saves and reports.
+
+    The model's code is indented into the ``try`` body of :data:`_PERSIST_HEAD`; a blank
+    body (whitespace-only code) is guarded with ``pass`` so the block always parses.
+    """
+    import textwrap
+
+    body = textwrap.indent(code, "    ")
+    if not body.strip():
+        body = "    pass\n"
+    if not body.endswith("\n"):
+        body += "\n"
+    return _PERSIST_HEAD + body + _PERSIST_TAIL
+
+
 class OfficialBlenderLabBackend:
     """Serve platform capabilities through the pinned official Blender MCP."""
 
@@ -401,7 +512,25 @@ class OfficialBlenderLabBackend:
                     assessment=assessment,
                 )
 
-        payload = self._run_code(request, code)
+        payload = self._run_code(request, _persisted(code))
+        if isinstance(payload, Mapping):
+            status = payload.get("studio_status")
+            detail = str(
+                payload.get("studio_detail") or "The authored code raised an error."
+            )
+            object_count = payload.get("studio_object_count") or 0
+            # A hard save/tail failure is always a failure.
+            if status == "error":
+                return CapabilityResult.failure(
+                    request.capability, MUTATION_FAILED, detail
+                )
+            # The model's code raised. If nothing was built, surface it as a failure so
+            # the model retries; if geometry landed before the error, keep it (partial
+            # success) rather than discarding the whole scene over one bad line.
+            if status == "partial" and object_count == 0:
+                return CapabilityResult.failure(
+                    request.capability, MUTATION_FAILED, detail
+                )
         result = CapabilityResult.success(request.capability, payload)
         return result
 

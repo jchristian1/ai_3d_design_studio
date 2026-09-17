@@ -184,3 +184,181 @@ def test_a_created_project_is_immediately_usable_by_the_workspace_routes(client:
 def test_project_scoped_routes_still_refuse_an_unknown_project(client: Any):
     response = client.get("/api/projects/proj_nope/workspace")
     assert response.status_code == 404, response.text
+
+
+
+# ---------------------------------------------------------------------------
+# Deleting a project
+# ---------------------------------------------------------------------------
+#
+# Irreversible, so the gate is the user typing the project's name. The check lives on the
+# SERVER as well as in the browser: a guarantee that depends on the interface asking nicely
+# is not a guarantee.
+
+
+def _fill(client: Any, project_id: str) -> dict[str, Any]:
+    """Give a project something to lose: an upload, a message and a fact."""
+    from studio_fixtures.sample_files import png_bytes
+
+    upload = client.post(
+        f"/api/projects/{project_id}/references",
+        files={"file": ("plan.png", png_bytes(width=1200, height=900), "image/png")},
+    )
+    assert upload.status_code == 201, upload.text
+    fact = client.put(
+        f"/api/projects/{project_id}/facts",
+        json={"key": "ceiling_height_m", "value": "2.7"},
+    )
+    assert fact.status_code == 200, fact.text
+    return upload.json()
+
+
+def test_deleting_a_project_removes_it_and_everything_it_owned(client: Any, tmp_path):
+    project = _create(client, "Loft Conversion")
+    project_id = project["project_id"]
+    reference = _fill(client, project_id)
+
+    response = client.post(
+        f"/api/projects/{project_id}/delete",
+        json={"confirm_display_name": "Loft Conversion"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["deleted"] is True
+    assert body["display_name"] == "Loft Conversion"
+    assert body["references"] >= 1
+    assert body["facts"] == 1
+
+    # Gone from the list, and gone from every project-scoped route.
+    listed = client.get("/api/projects").json()
+    assert project_id not in [entry["project_id"] for entry in listed["projects"]]
+    assert client.get(f"/api/projects/{project_id}/workspace").status_code == 404
+    assert client.get(f"/api/projects/{project_id}/references").status_code == 404
+
+    # And the uploaded bytes are gone from disk, not merely unlinked from the database.
+    references_root = tmp_path / "references" / project_id
+    assert not references_root.exists(), sorted(references_root.rglob("*"))
+    assert reference["reference_id"]
+
+
+def test_a_name_that_does_not_match_deletes_nothing(client: Any):
+    project = _create(client, "Beach House Kitchen")
+    project_id = project["project_id"]
+    _fill(client, project_id)
+
+    for wrong in ["beach house kitchen ", "Beach House", "", "   ", "something else"]:
+        response = client.post(
+            f"/api/projects/{project_id}/delete", json={"confirm_display_name": wrong}
+        )
+        assert response.status_code in (422, 400), f"{wrong!r} -> {response.status_code}"
+
+    # Everything still there.
+    assert client.get(f"/api/projects/{project_id}/workspace").status_code == 200
+    assert len(client.get(f"/api/projects/{project_id}/references").json()["references"]) == 1
+    assert project_id in [
+        entry["project_id"] for entry in client.get("/api/projects").json()["projects"]
+    ]
+
+
+def test_the_name_is_matched_forgivingly_on_whitespace_only(client: Any):
+    """Trailing spaces from a copy-paste are not a reason to refuse; a wrong name is."""
+    project = _create(client, "Studio Flat")
+    response = client.post(
+        f"/api/projects/{project['project_id']}/delete",
+        json={"confirm_display_name": "  Studio   Flat  "},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_the_confirmation_cannot_be_omitted(client: Any):
+    project = _create(client, "Loft")
+    project_id = project["project_id"]
+
+    assert client.post(f"/api/projects/{project_id}/delete", json={}).status_code == 422
+    # And a stray extra field is refused rather than ignored.
+    assert (
+        client.post(
+            f"/api/projects/{project_id}/delete",
+            json={"confirm_display_name": "Loft", "force": True},
+        ).status_code
+        == 422
+    )
+    assert client.get(f"/api/projects/{project_id}/workspace").status_code == 200
+
+
+def test_deleting_one_project_leaves_the_others_untouched(client: Any):
+    keep = _create(client, "Keep This")
+    _fill(client, keep["project_id"])
+    doomed = _create(client, "Delete This")
+    _fill(client, doomed["project_id"])
+
+    response = client.post(
+        f"/api/projects/{doomed['project_id']}/delete",
+        json={"confirm_display_name": "Delete This"},
+    )
+    assert response.status_code == 200, response.text
+
+    workspace = client.get(f"/api/projects/{keep['project_id']}/workspace")
+    assert workspace.status_code == 200
+    assert len(workspace.json()["references"]) == 1
+    assert workspace.json()["facts"][0]["key"] == "ceiling_height_m"
+
+
+def test_deleting_an_unknown_project_is_refused(client: Any):
+    response = client.post(
+        "/api/projects/proj_nope/delete", json={"confirm_display_name": "Anything"}
+    )
+    assert response.status_code == 404, response.text
+
+
+def test_deleting_twice_is_refused_the_second_time(client: Any):
+    project = _create(client, "Twice")
+    first = client.post(
+        f"/api/projects/{project['project_id']}/delete",
+        json={"confirm_display_name": "Twice"},
+    )
+    assert first.status_code == 200, first.text
+    second = client.post(
+        f"/api/projects/{project['project_id']}/delete",
+        json={"confirm_display_name": "Twice"},
+    )
+    assert second.status_code == 404, second.text
+
+
+def test_a_deleted_project_is_not_the_one_that_reopens(client: Any):
+    keep = _create(client, "Keep")
+    doomed = _create(client, "Doomed")  # created last, so it is the one that would reopen
+    assert client.get("/api/projects").json()["last_opened_project_id"] == doomed[
+        "project_id"
+    ]
+
+    client.post(
+        f"/api/projects/{doomed['project_id']}/delete",
+        json={"confirm_display_name": "Doomed"},
+    )
+
+    listed = client.get("/api/projects").json()
+    assert listed["last_opened_project_id"] != doomed["project_id"]
+    assert keep["project_id"] in [entry["project_id"] for entry in listed["projects"]]
+
+
+def test_the_seed_project_can_be_deleted_and_stays_deleted(client: Any):
+    """A configured project is adopted into the database, so it deletes like any other.
+
+    It reappears in the list only if it is used again, which is the same rule as before it
+    was ever opened. What must NOT happen is a delete that silently does nothing.
+    """
+    client.post(f"/api/projects/{SEED}/open")
+    seed = [
+        entry
+        for entry in client.get("/api/projects").json()["projects"]
+        if entry["project_id"] == SEED
+    ][0]
+
+    response = client.post(
+        f"/api/projects/{SEED}/delete",
+        json={"confirm_display_name": seed["display_name"]},
+    )
+    assert response.status_code == 200, response.text
+    assert client.get("/api/projects").json()["last_opened_project_id"] is None

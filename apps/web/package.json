@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import tsx --import ./tests/register-hooks.mjs --test tests/*.test.ts"
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=2048 tsc --noEmit",
+    "test": "node tests/run-tests.mjs"
   },
   "dependencies": {
     "@studio/spatial": "*",

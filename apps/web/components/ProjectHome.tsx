@@ -20,6 +20,7 @@ export interface ProjectHomeProps {
   error: string | null;
   onOpen(projectId: string): void;
   onCreate(displayName: string): void;
+  onDelete(project: ProjectSummaryView): void;
   astraLabel?: string;
   astraConnected?: boolean;
   blenderConnected?: boolean;
@@ -31,6 +32,7 @@ export function ProjectHome({
   error,
   onOpen,
   onCreate,
+  onDelete,
   astraLabel = "Astra",
   astraConnected = false,
   blenderConnected = false,
@@ -106,10 +108,14 @@ export function ProjectHome({
           ) : (
             <ul className={styles.projectList}>
               {projects.map((project) => (
-                <li key={project.project_id}>
+                <li key={project.project_id} className={styles.projectRow}>
                   <button
                     type="button"
                     className={styles.projectCard}
+                    // Named explicitly: the card's visible text is a name plus counts plus a
+                    // date, and "Delete X" sits right next to it. "Open X" is what the
+                    // control does, and it cannot be confused for its neighbour.
+                    aria-label={`Open ${project.display_name}`}
                     onClick={() => onOpen(project.project_id)}
                   >
                     <span className={styles.projectName}>{project.display_name}</span>
@@ -119,6 +125,15 @@ export function ProjectHome({
                         ? `Opened ${relativeTime(project.last_opened_at)}`
                         : `Created ${relativeTime(project.created_at)}`}
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.deleteButton}
+                    onClick={() => onDelete(project)}
+                    aria-label={`Delete ${project.display_name}`}
+                    title="Delete this project"
+                  >
+                    Delete
                   </button>
                 </li>
               ))}

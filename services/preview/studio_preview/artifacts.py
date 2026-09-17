@@ -201,6 +201,8 @@ class ArtifactStore(Protocol):
 
     def list_for_project(self, project_id: str) -> tuple[PreviewArtifact, ...]: ...
 
+    def delete(self, project_id: str, artifact_id: str) -> bool: ...
+
 
 class LocalArtifactStore:
     """Local filesystem artifact store for the Spec 001 vertical slice.
@@ -378,6 +380,30 @@ class LocalArtifactStore:
             if artifact is not None:
                 found.append(artifact)
         return tuple(sorted(found, key=lambda a: (a.created_at, a.artifact_id)))
+
+    def delete(self, project_id: str, artifact_id: str) -> bool:
+        """Remove one artifact's bytes and its sidecar.
+
+        Used when a project is deleted: a render of a project that no longer exists is dead
+        weight nobody can reach. Returns whether anything was there — deleting what is
+        already gone is a success, not an error.
+        """
+        artifact = self.get(project_id, artifact_id)
+        removed = False
+        if artifact is not None:
+            data = self._assert_contained(
+                project_id, self._data_path(project_id, artifact_id, artifact.media_type)
+            )
+            if data.exists():
+                data.unlink()
+                removed = True
+        metadata = self._assert_contained(
+            project_id, self._metadata_path(project_id, artifact_id)
+        )
+        if metadata.exists():
+            metadata.unlink()
+            removed = True
+        return removed
 
 
 # ---------------------------------------------------------------------------

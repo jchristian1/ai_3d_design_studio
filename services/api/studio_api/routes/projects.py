@@ -12,6 +12,8 @@ surface.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -21,6 +23,8 @@ from .. import errors
 from ..identity import TrustedIdentity
 from ..projects import clean_display_name
 from .support import ControlPlaneHTTPError, get_dependencies, get_identity
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -44,6 +48,20 @@ def _unknown_project() -> ControlPlaneHTTPError:
         errors.UNKNOWN_PROJECT, "VALIDATION_ERROR", "That project does not exist."
     )
     return ControlPlaneHTTPError(failure.http_status, failure.body())
+
+
+class DeleteProjectBody(BaseModel):
+    """Deleting a project is irreversible, so the user types its name to confirm.
+
+    A typed name is the right gate here: it cannot be produced by a stray click, a double
+    submit, or a script that guessed a project id, and it forces the person to look at WHICH
+    project they are about to lose. The server checks it too — a browser that forgot to ask
+    must not be able to delete anything.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    confirm_display_name: NonBlank
 
 
 def _view(dependencies: Any, record: Any) -> dict[str, Any]:
@@ -150,3 +168,73 @@ def rename_project(
     if record is None:  # pragma: no cover - ensured above
         raise _unknown_project()
     return {"project": _view(dependencies, record)}
+
+
+
+@router.post("/{project_id}/delete")
+def delete_project(
+    project_id: str,
+    body: DeleteProjectBody,
+    request: Request,
+    identity: TrustedIdentity = Depends(get_identity),
+) -> dict[str, Any]:
+    """Delete a project, its uploads, its conversation and its artifacts.
+
+    Irreversible, and gated on the user typing the project's name. The check happens HERE
+    rather than only in the browser, so the guarantee does not depend on the interface.
+
+    ``POST /delete`` rather than ``DELETE /{project_id}``: a body is required (the typed
+    name), and a bare ``/{project_id}`` route is deliberately absent from this namespace —
+    it gives path traversal a URL to collapse onto, which turns a clean 404 for a hostile
+    artifact id into a 405.
+
+    One thing this does NOT remove: the ``.blend`` file on the design machine. The control
+    plane does not know worker paths — that is the boundary that keeps a job from carrying a
+    filesystem path — so the file is left behind. It is inert: project ids are generated, so
+    nothing will ever resolve to it again. Reclaiming it is a worker-side task.
+    """
+    dependencies = get_dependencies(request)
+    project = dependencies.projects.get(project_id)
+    if project is None:
+        raise _unknown_project()
+
+    typed = " ".join(body.confirm_display_name.split())
+    expected = " ".join(project.display_name.split())
+    if typed != expected:
+        failure = errors.failure(
+            errors.INVALID_REQUEST,
+            "VALIDATION_ERROR",
+            "That name does not match this project, so nothing was deleted.",
+        )
+        raise ControlPlaneHTTPError(failure.http_status, failure.body())
+
+    repositories = dependencies.repositories
+    artifacts = repositories.artifacts.list_for_project(project_id)
+
+    deletion = repositories.delete_project(project_id)
+    if deletion is None:  # pragma: no cover - checked above
+        raise _unknown_project()
+
+    # Bytes last, and never in a way that can fail the request: the database no longer
+    # references any of this, so a file that resists deletion is wasted disk rather than a
+    # project that half exists. Each store removes its own files — the control plane does no
+    # filesystem work of its own, which a layering test enforces.
+    try:
+        dependencies.reference_files.delete_project(project_id)
+    except Exception as error:  # pragma: no cover - defensive
+        _log.warning("could not delete the uploads for %s: %s", project_id, error)
+
+    for artifact in artifacts:
+        try:
+            dependencies.artifacts.delete(project_id, artifact["artifact_id"])
+        except Exception as error:  # pragma: no cover - defensive
+            _log.warning("could not delete an artifact for %s: %s", project_id, error)
+
+    _log.info(
+        "deleted project %s (%s references, %s messages, %s artifacts)",
+        project_id,
+        deletion.references,
+        deletion.messages,
+        deletion.artifacts,
+    )
+    return deletion.snapshot()

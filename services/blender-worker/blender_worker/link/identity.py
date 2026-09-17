@@ -20,6 +20,8 @@ codec redacts it and a schema conditional forbids it on any message except
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -115,7 +117,38 @@ def describe_capabilities(
         capabilities["blender_version"] = version
 
     gpu_name = identity.gpu_name if identity else None
+    if not gpu_name:
+        gpu_name = _detect_gpu_name()
     capabilities["gpu_available"] = bool(gpu_name)
     if gpu_name:
         capabilities["gpu_name"] = gpu_name
     return capabilities
+
+
+def _detect_gpu_name() -> Optional[str]:
+    """Best-effort NVIDIA GPU name via ``nvidia-smi``.
+
+    ``STUDIO_WORKER_GPU_NAME`` always takes precedence; this only fills the gap when the
+    operator did not set it, so the studio can show the real accelerator instead of
+    "no GPU" on a machine that clearly has one. Kept coarse (the model name only) to match
+    the non-revealing spirit of the capabilities object, and entirely best-effort: any
+    failure — no nvidia-smi, no driver, a timeout — simply yields ``None``.
+    """
+    executable = shutil.which("nvidia-smi")
+    if executable is None:
+        return None
+    try:
+        completed = subprocess.run(
+            [executable, "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    first = (completed.stdout or "").splitlines()
+    name = first[0].strip() if first else ""
+    return name or None

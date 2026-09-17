@@ -92,14 +92,25 @@ function stubs() {
 }
 
 describe("collecting an answer by polling", () => {
+  let cleanupDom: () => void;
+
   before(() => {
-    globalJsdom(undefined, { pretendToBeVisual: true, url: "http://localhost:3000" });
+    cleanupDom = globalJsdom(undefined, { pretendToBeVisual: true, url: "http://localhost:3000" });
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
   after(async () => {
     const { cleanup } = await import("@testing-library/react");
     cleanup();
+    // Unmounting queues work on React's scheduler, which runs on a setImmediate. Let it
+    // drain BEFORE the window goes away: react-dom dereferences `window` when that work
+    // runs, so tearing jsdom down first surfaces an uncaught "window is not defined"
+    // blamed on whichever test happened to be active.
+    await new Promise((resolve) => setImmediate(resolve));
+    // Tear down the jsdom window/document installed on the global. Without this
+    // the whole environment leaks for the life of the process, which is what
+    // let a full test run accumulate enough heap to be OOM-killed.
+    cleanupDom?.();
   });
 
   beforeEach(async () => {

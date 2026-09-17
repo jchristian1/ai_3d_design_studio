@@ -199,6 +199,17 @@ export interface ProjectSummaryView {
   has_model: boolean;
 }
 
+/** What a deletion removed, so the user can be told plainly. */
+export interface ProjectDeletionView {
+  project_id: string;
+  display_name: string;
+  deleted: boolean;
+  references: number;
+  messages: number;
+  facts: number;
+  artifacts: number;
+}
+
 export interface ProjectListView {
   projects: ProjectSummaryView[];
   /** Which project to reopen, or null on a fresh install. */
@@ -211,6 +222,8 @@ export interface WorkspaceClient {
   createProject(displayName: string): Promise<ProjectSummaryView>;
   openProject(projectId: string): Promise<ProjectSummaryView>;
   renameProject(projectId: string, displayName: string): Promise<ProjectSummaryView>;
+  /** Irreversible. `confirmDisplayName` must equal the project's name. */
+  deleteProject(projectId: string, confirmDisplayName: string): Promise<ProjectDeletionView>;
   getWorkspace(projectId: string): Promise<WorkspaceView>;
   listReferences(projectId: string): Promise<ReferenceView[]>;
   uploadReference(projectId: string, file: File): Promise<ReferenceView>;
@@ -232,6 +245,7 @@ export interface WorkspaceClient {
   getAstraLogin(): Promise<LoginSessionView>;
   cancelAstraLogin(): Promise<LoginSessionView>;
   getBlenderStatus(): Promise<ConnectionStatusView>;
+  getGpuStatus(): Promise<ConnectionStatusView>;
   setFact(projectId: string, key: string, value: string): Promise<FactView>;
   absoluteUrl(url: string): string;
 }
@@ -362,6 +376,13 @@ export function createWorkspaceClient(options: WorkspaceClientOptions = {}): Wor
       return body.project;
     },
 
+    deleteProject(projectId, confirmDisplayName) {
+      return send<ProjectDeletionView>(
+        `/api/projects/${projectId}/delete`,
+        json({ confirm_display_name: confirmDisplayName }),
+      );
+    },
+
     getWorkspace(projectId) {
       return send<WorkspaceView>(`/api/projects/${projectId}/workspace`);
     },
@@ -436,6 +457,10 @@ export function createWorkspaceClient(options: WorkspaceClientOptions = {}): Wor
 
     getBlenderStatus() {
       return send<ConnectionStatusView>("/api/status/blender");
+    },
+
+    getGpuStatus() {
+      return send<ConnectionStatusView>("/api/status/gpu");
     },
 
     beginAstraLogin(deviceAuth = false) {

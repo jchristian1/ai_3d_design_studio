@@ -128,13 +128,23 @@ SENSITIVE_ATTRIBUTES: Final = frozenset(
         "execv",
         "execve",
         "remove",
-        "unlink",
+        # ``unlink`` is intentionally NOT here: on a Blender collection
+        # (``collection.objects.unlink(obj)``) it is ordinary scene work, and static
+        # analysis cannot follow a local variable back to bpy to tell the two apart.
+        # The genuinely dangerous forms — ``os.unlink``, ``pathlib.Path.unlink`` — are
+        # already caught by the import gate, because os/shutil/pathlib are outside
+        # SCENE_MODULES. Flagging the bare method name only produced false positives on
+        # normal modelling code and drove needless approval prompts.
         "rmtree",
         "rmdir",
         "chmod",
         "chown",
         "rename",
-        "replace",
+        # ``replace`` is intentionally NOT here: ``str.replace`` is ubiquitous in scene
+        # code (building names, formatting) and Blender collections expose ``replace``
+        # too. The dangerous ``os.replace`` is already caught by the import gate. See the
+        # ``unlink`` note above — flagging the bare method name only produced false
+        # positives and needless approval prompts.
         "symlink",
         "urlopen",
         "urlretrieve",
@@ -214,21 +224,32 @@ def _root_module(name: str) -> str:
 SCENE_DATA_ROOTS: Final = frozenset({"bpy", "bpy_data", "context", "scene"})
 
 #: Names on a Blender collection that only ever touch the scene.
+#:
+#: ``remove`` / ``clear`` / ``rename`` / ``replace`` edit collection contents and share
+#: their names with ``os.remove`` / ``shutil.rmtree``. Rooted at ``bpy``/scene data they
+#: are ordinary scene work; ``os.remove`` still flags because it is rooted at ``os`` and
+#: the ``os`` import is flagged too. (``unlink``/``link`` are not sensitive attributes at
+#: all — see the note in SENSITIVE_ATTRIBUTES — so they need no entry here.)
 SCENE_DATA_METHODS: Final = frozenset({"remove", "clear", "rename", "replace"})
 
 
 def _is_scene_data_call(node: ast.Attribute) -> bool:
     """True for ``bpy.…remove`` shaped attributes: scene edits, not host access.
 
-    Rooted at a name in :data:`SCENE_DATA_ROOTS` and reached through an attribute chain,
-    so ``bpy.data.objects.remove`` and ``bpy.data.materials.remove`` qualify while
-    ``os.remove``, ``shutil.rmtree`` and ``Path(p).unlink`` do not. A chain that starts
-    from a call (``Path(p).unlink``) is deliberately not treated as scene work.
+    Rooted at a name in :data:`SCENE_DATA_ROOTS` and reached through an attribute or
+    subscript chain, so ``bpy.data.objects.remove`` and
+    ``bpy.data.collections['x'].objects.unlink`` qualify while ``os.remove``,
+    ``shutil.rmtree`` and ``Path(p).unlink`` do not. A chain that starts from a call
+    (``Path(p).unlink``) is deliberately not treated as scene work.
     """
     if node.attr not in SCENE_DATA_METHODS:
         return False
     current: ast.AST = node.value
-    while isinstance(current, ast.Attribute):
+    # Walk back through attribute and subscript access — ``bpy.data.collections['x']
+    # .objects`` mixes both — to find what the chain is ultimately rooted at. A chain
+    # rooted at a bare Name in SCENE_DATA_ROOTS is scene work; one rooted at a Call
+    # (``Path(p).unlink``) deliberately is not.
+    while isinstance(current, (ast.Attribute, ast.Subscript)):
         current = current.value
     if isinstance(current, ast.Name):
         return current.id in SCENE_DATA_ROOTS

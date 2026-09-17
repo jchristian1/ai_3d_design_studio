@@ -46,7 +46,29 @@ ASTRA_MODEL: Final = "gpt-6-astra"
 #: The first Codex CLI release verified on this machine to carry the Astra model slug.
 MIN_CODEX_VERSION: Final = (0, 154, 0)
 
-DEFAULT_TIMEOUT_SECONDS: Final = 300.0
+#: How long to wait for one model turn. A "move the cube" turn answers in seconds, but a
+#: "furnish this room realistically" turn asks the model to AUTHOR a large program and can
+#: legitimately take many minutes; the old 300 s ceiling cut those off mid-thought with a
+#: dead-end "did not respond" message. The default is generous and operator-tunable via
+#: ``STUDIO_CODEX_TIMEOUT_SECONDS`` so a slow, ambitious scene completes while a genuinely
+#: hung call is still bounded. Raised to 25 min so an ambitious scene has real room to
+#: think — the browser turn poll is aligned to match (`TURN_TIMEOUT_MS`).
+_DEFAULT_TIMEOUT_FALLBACK: Final = 1500.0
+
+
+def _env_timeout_seconds() -> float:
+    raw = os.environ.get("STUDIO_CODEX_TIMEOUT_SECONDS")
+    if raw:
+        try:
+            value = float(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            _log.warning("ignoring invalid STUDIO_CODEX_TIMEOUT_SECONDS=%r", raw)
+    return _DEFAULT_TIMEOUT_FALLBACK
+
+
+DEFAULT_TIMEOUT_SECONDS: Final = _env_timeout_seconds()
 DEFAULT_STATUS_TIMEOUT_SECONDS: Final = 20.0
 
 #: Reasoning effort for an ordinary turn. Reasoning tokens are invisible in the answer but

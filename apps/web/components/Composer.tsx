@@ -12,10 +12,13 @@
  * sending rather than somewhere off to the side.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ReferenceView } from "../lib/api/workspace.ts";
 import styles from "./workspace.module.css";
+
+/** How tall the textarea may grow before it starts scrolling internally (px). */
+const MAX_TEXTAREA_HEIGHT = 200;
 
 export interface ComposerProps {
   canSubmit(draft: string): boolean;
@@ -44,12 +47,30 @@ export function Composer({
 }: ComposerProps) {
   const [draft, setDraft] = useState("");
   const composingRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Grow the textarea to fit its content, the way ChatGPT does: measure the natural
+  // scroll height and adopt it, capped so a very long paste scrolls internally rather
+  // than swallowing the transcript. Runs on every draft change, including the reset to
+  // "" after a send, so the box snaps back to one line.
+  const resize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
+  }, []);
+
+  useEffect(() => {
+    resize();
+  }, [draft, resize]);
 
   const submit = useCallback(() => {
     if (!canSubmit(draft)) return;
     onSubmit(draft);
     setDraft("");
   }, [canSubmit, draft, onSubmit]);
+
+  const sendable = canSubmit(draft);
 
   return (
     <form
@@ -90,7 +111,7 @@ export function Composer({
         </div>
       ) : null}
 
-      <div className={styles.composerRow}>
+      <div className={styles.inputSurface}>
         <button
           type="button"
           className={styles.attachButton}
@@ -106,6 +127,7 @@ export function Composer({
         </label>
         <textarea
           id="composer-input"
+          ref={textareaRef}
           className={styles.input}
           value={draft}
           rows={1}
@@ -125,8 +147,32 @@ export function Composer({
           }}
         />
 
-        <button type="submit" className={styles.sendButton} disabled={!canSubmit(draft)}>
-          {busy ? "Working…" : "Send"}
+        <button
+          type="submit"
+          className={styles.sendButton}
+          disabled={!sendable}
+          aria-label={busy ? "Working" : "Send"}
+          title={busy ? "Working…" : "Send"}
+        >
+          {busy ? (
+            <span className={styles.sendSpinner} aria-hidden="true" />
+          ) : (
+            <svg
+              className={styles.sendIcon}
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M12 20V5M12 5l-6 6M12 5l6 6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
         </button>
       </div>
 

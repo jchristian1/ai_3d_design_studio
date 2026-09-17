@@ -124,11 +124,12 @@ export function useWorkspace(options: UseWorkspaceOptions = {}): WorkspaceSessio
 
   // --- connection status -------------------------------------------------
   const refreshStatus = useCallback(async () => {
-    const [astra, blender] = await Promise.all([
+    const [astra, blender, gpu] = await Promise.all([
       client.getAstraStatus().catch(() => undefined),
       client.getBlenderStatus().catch(() => undefined),
+      client.getGpuStatus().catch(() => undefined),
     ]);
-    if (astra || blender) dispatch({ type: "status_updated", astra, blender });
+    if (astra || blender || gpu) dispatch({ type: "status_updated", astra, blender, gpu });
   }, [client]);
 
   useEffect(() => {
