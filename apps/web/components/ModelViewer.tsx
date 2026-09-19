@@ -13,11 +13,14 @@
  *   glTF exporter carries through as custom properties, so "make this taller" resolves
  *   to the thing you clicked rather than to a guess.
  *
- * A fourth promise, added with the material library: **this view and the still preview
- * agree.** Both use the Khronos PBR Neutral transform, the same exposure, and a key and
- * fill light from the same elevation and azimuth, with a sky backdrop but neutral
- * lighting. Two views of one design that are graded differently make the user doubt what
- * they are looking at — they cannot tell a changed material from a changed renderer.
+ * A fourth promise, added with the material library: **a material looks the same here as
+ * in the still preview.** Both use the Khronos PBR Neutral transform, the same exposure,
+ * and a key and fill light from the same elevation and azimuth. Two views of one design
+ * that are graded differently make the user doubt what they are looking at — they cannot
+ * tell a changed material from a changed renderer.
+ *
+ * The backdrop is deliberately NOT matched: the preview shows a sky, this shows a neutral
+ * studio dark, because what is behind the model should not compete with it.
  *
  * Three.js is imported dynamically. It is a large dependency that needs a real WebGL
  * context, so loading it lazily keeps it out of the first paint and lets this component
@@ -293,23 +296,39 @@ function lightDirection(
 }
 
 /**
- * A vertical sky gradient, built as a tiny data texture.
+ * A neutral dark backdrop with a subtle vertical gradient.
  *
- * Deliberately generated rather than loaded: an HDR environment file would be a
- * megabyte-scale download on first paint and an asset to licence, for something the
- * user only ever sees behind the model. Two pixels wide is enough — it is stretched
- * across the whole sphere, and the gradient only varies vertically.
+ * This was briefly a blue sky gradient, to match the sky in the server preview. That
+ * was the wrong call and it is worth recording why, because the reasoning looks
+ * convincing right up until you see it: a pale sky behind a grey-and-white building
+ * destroys the contrast you need to read the model, and it makes the reference grid
+ * far louder than it was designed to be.
+ *
+ * The thing that genuinely has to match the preview is TONE MAPPING and light
+ * direction, because those decide whether a material looks the same in both views.
+ * The backdrop decides nothing — it is behind the model. So the viewer gets a studio
+ * backdrop, and the preview keeps its sky.
+ *
+ * Nearly black, very slightly cool, lighter towards the bottom so the model sits in a
+ * space rather than floating in a void. It only ever reaches `scene.background`;
+ * lighting comes from a separate neutral environment, so these numbers cannot tint a
+ * single surface.
+ *
+ * Deliberately generated rather than loaded: an image would be a download and an asset
+ * to licence, for something the user only sees behind the model. Two pixels wide is
+ * enough — it is stretched across the whole sphere and only varies vertically.
  */
-function skyGradientTexture(
+function backdropTexture(
   THREE: typeof import("three"),
 ): import("three").DataTexture {
   const height = 64;
   const width = 2;
   const data = new Uint8Array(width * height * 4);
 
-  // Top of the image is the top of the sky, so the ramp runs from zenith to horizon.
-  const zenith = { r: 0x1b, g: 0x35, b: 0x5e };
-  const horizon = { r: 0x6f, g: 0x8a, b: 0xa8 };
+  // Close to the flat `0x14161a` this replaced, so the panel looks familiar; the
+  // gradient is the only addition.
+  const zenith = { r: 0x0e, g: 0x10, b: 0x13 };
+  const horizon = { r: 0x20, g: 0x23, b: 0x28 };
 
   for (let row = 0; row < height; row += 1) {
     const t = row / (height - 1);
@@ -401,11 +420,11 @@ async function createScene(
 
   const scene = new THREE.Scene();
 
-  // Background and lighting come from DIFFERENT sources, mirroring the preview's
-  // world split: a sky gradient is what an exterior should look like, but lighting
-  // with it tints every surface blue. So the sky is shown and a neutral
-  // environment does the lighting.
-  const backgroundTexture = skyGradientTexture(THREE);
+  // Background and lighting come from DIFFERENT sources, the same separation the
+  // preview makes with its world split. Here the backdrop is a neutral studio dark
+  // and the lighting is a neutral environment, so nothing behind the model can tint
+  // what is in front of it.
+  const backgroundTexture = backdropTexture(THREE);
   scene.background = backgroundTexture;
 
   const environment = neutralEnvironment(THREE, renderer);
