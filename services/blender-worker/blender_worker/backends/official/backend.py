@@ -89,10 +89,12 @@ def approval_token_for(code: str) -> str:
 #: Whatever geometry existed at the moment of failure is kept, and the error text is
 #: surfaced so the model can correct itself on the next turn. The head and tail are fixed
 #: text the model cannot influence; only ``bpy`` scene/file operations are used.
-_PERSIST_HEAD: Final = '''\
+_PERSIST_IMPORTS: Final = '''\
 import bpy as _studio_bpy
 import traceback as _studio_traceback
+'''
 
+_PERSIST_HEAD: Final = '''
 result = {}
 _studio_model_error = None
 try:
@@ -162,11 +164,42 @@ except Exception as _studio_save_error:  # pragma: no cover - exercised in real 
 '''
 
 
+def _material_helpers() -> str:
+    """The studio material helpers, or nothing if the library is unavailable.
+
+    Degrading to an empty string is deliberate. Texturing is an enhancement; a
+    library that cannot be generated (a read-only filesystem, a missing Pillow)
+    must not stop the model from modelling. The authored code then fails only if
+    it actually calls the helper, and the error it gets names the helper.
+    """
+    try:
+        from studio_materials import library_index
+
+        from .materials import material_helper_source
+
+        return material_helper_source(library_index())
+    except Exception as error:  # pragma: no cover - environment-dependent
+        _log.warning("studio material library unavailable: %s", error)
+        return ""
+
+
 def _persisted(code: str) -> str:
     """Model code, run inside a try, then a fixed tail that always saves and reports.
 
-    The model's code is indented into the ``try`` body of :data:`_PERSIST_HEAD`; a blank
-    body (whitespace-only code) is guarded with ``pass`` so the block always parses.
+    Layout of the assembled program:
+
+        imports                 platform-owned
+        material helpers        platform-owned, carries the texture paths
+        try:                    platform-owned
+            <model code>        indented in
+        except/finally tail     platform-owned: tags, saves, reports
+
+    The helpers sit OUTSIDE the ``try`` so that a failure to build them is a hard
+    error rather than something silently swallowed into "partial success", and so
+    they are already defined when the model's first line runs.
+
+    A blank body (whitespace-only code) is guarded with ``pass`` so the block
+    always parses.
     """
     import textwrap
 
@@ -175,7 +208,13 @@ def _persisted(code: str) -> str:
         body = "    pass\n"
     if not body.endswith("\n"):
         body += "\n"
-    return _PERSIST_HEAD + body + _PERSIST_TAIL
+    return (
+        _PERSIST_IMPORTS
+        + _material_helpers()
+        + _PERSIST_HEAD
+        + body
+        + _PERSIST_TAIL
+    )
 
 
 class OfficialBlenderLabBackend:

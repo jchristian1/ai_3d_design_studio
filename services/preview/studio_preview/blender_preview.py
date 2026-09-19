@@ -67,15 +67,22 @@ STUDIO_PATHS = (
 
 #: A preview must be fast. This bound exists so a wedged Blender degrades the
 #: preview rather than stalling the job that already succeeded.
+#:
+#: EEVEE compiles shaders on its first render in a process (~10 s observed), and
+#: every render after that is a fraction of a second. The bound covers the cold
+#: case with room to spare rather than tracking the warm one.
 DEFAULT_TIMEOUT_SECONDS = 180
 
-ENGINE = "BLENDER_WORKBENCH"
+#: The engine the render script sets. On the pinned Blender 5.2 the identifier is
+#: ``BLENDER_EEVEE`` — the "Next" rewrite became the default EEVEE and the
+#: ``_NEXT`` suffix was dropped, so ``BLENDER_EEVEE_NEXT`` does not exist there.
+ENGINE = "BLENDER_EEVEE"
 
 
 class BlenderPreviewGenerator:
     """Renders a preview PNG in a fresh headless Blender process."""
 
-    name = "blender_workbench"
+    name = "blender_eevee"
 
     def __init__(self, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> None:
         self.timeout_seconds = timeout_seconds

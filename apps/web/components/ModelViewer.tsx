@@ -13,6 +13,12 @@
  *   glTF exporter carries through as custom properties, so "make this taller" resolves
  *   to the thing you clicked rather than to a guess.
  *
+ * A fourth promise, added with the material library: **this view and the still preview
+ * agree.** Both use the Khronos PBR Neutral transform, the same exposure, and a key and
+ * fill light from the same elevation and azimuth, with a sky backdrop but neutral
+ * lighting. Two views of one design that are graded differently make the user doubt what
+ * they are looking at — they cannot tell a changed material from a changed renderer.
+ *
  * Three.js is imported dynamically. It is a large dependency that needs a real WebGL
  * context, so loading it lazily keeps it out of the first paint and lets this component
  * degrade to an honest message where WebGL is unavailable (including under jsdom, which
@@ -20,6 +26,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import { degreesToRadians } from "@studio/spatial";
 
 import styles from "./ModelViewer.module.css";
 
@@ -222,6 +230,136 @@ function measure(mount: HTMLElement): { width: number; height: number } {
 }
 
 /**
+ * Lighting and grading constants, kept numerically in step with the server preview
+ * (`services/preview/studio_preview/blender_scripts/render_preview.py`).
+ *
+ * These are not independently chosen values. They were calibrated on the server by
+ * rendering known textures and comparing against their real albedo, and the whole
+ * point of repeating them here is that the browser and the still image agree. If the
+ * preview's lighting is retuned, these move with it.
+ */
+const SUN_ELEVATION_DEGREES = 38;
+const SUN_AZIMUTH_DEGREES = -125;
+const FILL_ELEVATION_DEGREES = 20;
+
+/** Blender sun strength is irradiance; three's is unitless, so these are matched by eye
+ *  to the same key/fill RATIO (3.0 : 1.0) rather than copied as numbers. */
+const SUN_INTENSITY = 2.4;
+const FILL_INTENSITY = 0.8;
+
+/** The preview's -0.5 stops of exposure, as a linear multiplier: 2 ** -0.5. */
+const EXPOSURE_MULTIPLIER = 0.7071;
+
+/** Neutral grey used for image-based lighting, matching the preview's ambient. */
+const AMBIENT_GREY = 0x808080;
+
+/**
+ * Degrees to radians through the shared converter.
+ *
+ * These are compile-time constants describing a light rig, so an invalid one would be
+ * a programming error rather than bad input; falling back to 0 keeps the viewer
+ * rendering instead of throwing inside scene construction.
+ */
+function radiansOf(degrees: number): number {
+  const result = degreesToRadians(degrees);
+  return result.ok ? result.radians : 0;
+}
+
+/**
+ * A unit vector pointing at a light placed at the given elevation and azimuth.
+ *
+ * Converts from the server's Z-up convention to the viewer's Y-up one, so a single
+ * pair of angles describes the same sun in both. Getting this wrong is subtle and
+ * ugly: the model is lit correctly but from the wrong side, and the preview and the
+ * 3D view disagree about where the shadows fall.
+ */
+function lightDirection(
+  THREE: typeof import("three"),
+  elevationDegrees: number,
+  azimuthDegrees: number,
+): import("three").Vector3 {
+  // Converted through the shared implementation, never with a local `* Math.PI / 180`.
+  // One conversion site keeps the browser bit-identical to the backend, and a guard
+  // test enforces it — see packages/spatial/src/conversion-site-guard.test.ts.
+  const elevation = radiansOf(elevationDegrees);
+  const azimuth = radiansOf(azimuthDegrees);
+  // Blender: x = cos(e)cos(a), y = cos(e)sin(a), z = sin(e), Z up.
+  // Three:   x = same,         y = up = Blender z, z = -Blender y.
+  return new THREE.Vector3(
+    Math.cos(elevation) * Math.cos(azimuth),
+    Math.sin(elevation),
+    -Math.cos(elevation) * Math.sin(azimuth),
+  ).multiplyScalar(60);
+}
+
+/**
+ * A vertical sky gradient, built as a tiny data texture.
+ *
+ * Deliberately generated rather than loaded: an HDR environment file would be a
+ * megabyte-scale download on first paint and an asset to licence, for something the
+ * user only ever sees behind the model. Two pixels wide is enough — it is stretched
+ * across the whole sphere, and the gradient only varies vertically.
+ */
+function skyGradientTexture(
+  THREE: typeof import("three"),
+): import("three").DataTexture {
+  const height = 64;
+  const width = 2;
+  const data = new Uint8Array(width * height * 4);
+
+  // Top of the image is the top of the sky, so the ramp runs from zenith to horizon.
+  const zenith = { r: 0x1b, g: 0x35, b: 0x5e };
+  const horizon = { r: 0x6f, g: 0x8a, b: 0xa8 };
+
+  for (let row = 0; row < height; row += 1) {
+    const t = row / (height - 1);
+    const r = Math.round(zenith.r + (horizon.r - zenith.r) * t);
+    const g = Math.round(zenith.g + (horizon.g - zenith.g) * t);
+    const b = Math.round(zenith.b + (horizon.b - zenith.b) * t);
+    for (let column = 0; column < width; column += 1) {
+      const index = (row * width + column) * 4;
+      data[index] = r;
+      data[index + 1] = g;
+      data[index + 2] = b;
+      data[index + 3] = 255;
+    }
+  }
+
+  const texture = new THREE.DataTexture(data, width, height);
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/**
+ * A neutral environment map for image-based lighting.
+ *
+ * Built by prefiltering a scene whose background is flat grey, which gives materials
+ * something to reflect and softens shading everywhere — without it, metal and
+ * polished surfaces reflect nothing and read as flat paint. Neutral rather than sky
+ * blue for the same reason the server's lighting is neutral: a white wall lit by a
+ * blue sky renders blue, and the user cannot judge the material they chose.
+ */
+function neutralEnvironment(
+  THREE: typeof import("three"),
+  renderer: import("three").WebGLRenderer,
+): { texture: import("three").Texture; dispose: () => void } {
+  const generator = new THREE.PMREMGenerator(renderer);
+  const source = new THREE.Scene();
+  source.background = new THREE.Color(AMBIENT_GREY);
+  const target = generator.fromScene(source);
+  // The generator holds its own GPU resources and is not needed once the map exists.
+  generator.dispose();
+  return {
+    texture: target.texture,
+    dispose: () => target.dispose(),
+  };
+}
+
+/**
  * Create the WebGL scene. Throws when Three.js or WebGL is unavailable, which is what
  * drives the honest fallback above.
  */
@@ -242,10 +380,36 @@ async function createScene(
   const initial = measure(mount);
   renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio ?? 1, 2));
   renderer.setSize(initial.width, initial.height);
+
+  // Tone mapping, matched DELIBERATELY to the server preview.
+  //
+  // The still preview renders through Blender's "Khronos PBR Neutral" transform;
+  // three's NeutralToneMapping is that same Khronos transform. Using it here means
+  // the PNG the user sees and the model they orbit are graded identically — without
+  // this, one design looks like two, and the user cannot tell whether a material
+  // changed or only the view did. The exposure is the preview's -0.5 stops
+  // expressed as a linear multiplier.
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = EXPOSURE_MULTIPLIER;
+
+  // Soft shadows. A model with no contact shadows reads as floating cardboard, and
+  // shadows are most of what makes geometry look like it has mass.
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
   mount.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x14161a);
+
+  // Background and lighting come from DIFFERENT sources, mirroring the preview's
+  // world split: a sky gradient is what an exterior should look like, but lighting
+  // with it tints every surface blue. So the sky is shown and a neutral
+  // environment does the lighting.
+  const backgroundTexture = skyGradientTexture(THREE);
+  scene.background = backgroundTexture;
+
+  const environment = neutralEnvironment(THREE, renderer);
+  scene.environment = environment.texture;
 
   const camera = new THREE.PerspectiveCamera(
     50,
@@ -262,10 +426,26 @@ async function createScene(
   controls.dampingFactor = 0.08;
   controls.target.set(0, 1, 0);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x333844, 2.0));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-  sun.position.set(5, 10, 7);
+  // Key light and fill, placed from the SAME elevation and azimuth the server
+  // preview uses, so the light falls across the model from the same side in both
+  // views. Y is up here and Z is up in Blender, hence the axis swap.
+  const sun = new THREE.DirectionalLight(0xffffff, SUN_INTENSITY);
+  sun.position.copy(lightDirection(THREE, SUN_ELEVATION_DEGREES, SUN_AZIMUTH_DEGREES));
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  // Shadow acne on large flat surfaces (every floor) comes from depth precision;
+  // a small normal bias is the cheap, artefact-free fix.
+  sun.shadow.normalBias = 0.02;
   scene.add(sun);
+  scene.add(sun.target);
+
+  // Shadowless fill from the opposite side: the bounce card. Without it, faces
+  // turned away from the sun go to flat silhouette.
+  const fill = new THREE.DirectionalLight(0xffffff, FILL_INTENSITY);
+  fill.position.copy(
+    lightDirection(THREE, FILL_ELEVATION_DEGREES, SUN_AZIMUTH_DEGREES + 180),
+  );
+  scene.add(fill);
 
   const grid = new THREE.GridHelper(40, 40, 0x2a2f36, 0x1e2227);
   scene.add(grid);
@@ -382,15 +562,73 @@ async function createScene(
       root = gltf.scene;
       scene.add(root);
 
+      const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+
       root.traverse((child) => {
         const mesh = child as import("three").Mesh;
-        if (mesh.isMesh) originalMaterials.set(mesh.uuid, mesh.material);
+        if (!mesh.isMesh) return;
+        originalMaterials.set(mesh.uuid, mesh.material);
+
+        // Every surface both casts and receives: a wall shades the floor, and the
+        // floor takes the shadow. Marking only one would lose half the effect.
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        // Anisotropic filtering. A tiled floor is viewed at a grazing angle almost
+        // by definition, and that is exactly where isotropic mipmaps smear the
+        // texture into grey mush — the planks simply vanish into the distance.
+        for (const material of Array.isArray(mesh.material)
+          ? mesh.material
+          : [mesh.material]) {
+          const record = material as unknown as Record<string, unknown>;
+          for (const value of Object.values(record)) {
+            const texture = value as { isTexture?: boolean; anisotropy?: number } | null;
+            if (texture && texture.isTexture === true) {
+              texture.anisotropy = maxAnisotropy;
+            }
+          }
+        }
       });
+
+      const box = new THREE.Box3().setFromObject(root);
+
+      // Fit the shadow camera to the model. A directional light's shadow is rendered
+      // through an orthographic frustum, and the default one is a few units across:
+      // anything larger than a small object falls outside it and simply has no
+      // shadow, which looks like the feature is broken rather than mis-sized.
+      if (!box.isEmpty()) {
+        const size = box.getSize(new THREE.Vector3());
+        const centre = box.getCenter(new THREE.Vector3());
+        const radius = Math.max(size.x, size.y, size.z) * 0.75 || 1;
+
+        sun.target.position.copy(centre);
+        sun.position
+          .copy(lightDirection(THREE, SUN_ELEVATION_DEGREES, SUN_AZIMUTH_DEGREES))
+          .normalize()
+          .multiplyScalar(radius * 4)
+          .add(centre);
+
+        const shadowCamera = sun.shadow.camera;
+        shadowCamera.left = -radius * 1.6;
+        shadowCamera.right = radius * 1.6;
+        shadowCamera.top = radius * 1.6;
+        shadowCamera.bottom = -radius * 1.6;
+        shadowCamera.near = 0.05;
+        shadowCamera.far = radius * 10;
+        shadowCamera.updateProjectionMatrix();
+
+        fill.position
+          .copy(
+            lightDirection(THREE, FILL_ELEVATION_DEGREES, SUN_AZIMUTH_DEGREES + 180),
+          )
+          .normalize()
+          .multiplyScalar(radius * 4)
+          .add(centre);
+      }
 
       // Frame the model on FIRST load only, so a later refresh keeps the camera the
       // user had positioned.
       if (!hasFramed) {
-        const box = new THREE.Box3().setFromObject(root);
         if (!box.isEmpty()) {
           const size = box.getSize(new THREE.Vector3());
           const centre = box.getCenter(new THREE.Vector3());
@@ -429,6 +667,12 @@ async function createScene(
       disposeRoot();
       controls.dispose();
       highlight.dispose();
+      // The environment render target and the background texture are GPU resources
+      // the scene owns rather than the model, so disposeRoot() never touches them.
+      scene.environment = null;
+      scene.background = null;
+      environment.dispose();
+      backgroundTexture.dispose();
       renderer.dispose();
       // dispose() frees GPU objects but leaves the WebGL context itself alive; browsers
       // cap the number of live contexts (~16) and silently drop the oldest. Forcing the

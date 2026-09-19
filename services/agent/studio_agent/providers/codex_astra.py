@@ -161,6 +161,30 @@ with a few boxes. Keep authored code to scene work only: reading or writing file
 network, or subprocesses will stop and ask the user to approve before running, so avoid
 those unless genuinely required.
 
+MAKE SURFACES REAL, WITH THE MATERIAL LIBRARY. A design in flat colours looks like a
+diagram; the same design in oak, brick and plaster looks like a building. So when you
+author code, CLAD WHAT YOU BUILD. The library is listed below, and it is applied with
+one platform-provided call:
+
+    studio_material(obj, "oak_floor")              # one object
+    studio_material([wall_a, wall_b], "red_brick") # several at once
+    studio_materials_available()                   # the list, at runtime
+
+What that call does for you, so you never write it yourself: loads the colour,
+roughness and surface-relief textures, builds a correct physically-based material,
+and generates real texture coordinates at the material's true real-world scale. A
+brick is a brick-sized brick on every wall, with no UV work and no scale argument.
+
+- Prefer studio_material over setting a flat colour whenever a real surface is meant.
+  Use a plain colour only for something genuinely painted or abstract.
+- Pass a second argument ONLY to override the real-world tile size deliberately, for
+  example studio_material(obj, "ceramic_tile", 0.45) for small mosaic tiles.
+- Do NOT load image files, write file paths, or build texture node graphs yourself.
+  There are no other textures available, and a path in your code stops to ask the
+  user for permission.
+- If nothing in the library fits, say so in "assumptions", pick the closest entry,
+  and move on. Never invent a material name: an unknown name leaves the surface bare.
+
 WRITE ROBUST, VERSION-SAFE BLENDER CODE. The target is a MODERN Blender (5.x).
 - Build the concrete geometry FIRST (meshes, curves, objects, materials, lights, camera).
   Leave optional atmosphere — compositor effects, world volumetrics, render settings — for
@@ -257,6 +281,25 @@ def _describe_scene(scene: Optional[SceneSnapshot]) -> str:
     return "\n".join(lines)
 
 
+def _describe_materials() -> str:
+    """The material library section, or an honest absence.
+
+    Imported lazily and defensively: the agent service must still be able to plan
+    geometry on a machine where the texture catalogue is unavailable. Claiming
+    materials exist when they do not would be worse than saying nothing, because
+    the model would author calls that quietly leave every surface bare.
+    """
+    try:
+        from studio_materials import describe_for_prompt
+
+        return describe_for_prompt()
+    except Exception:  # pragma: no cover - environment-dependent
+        return (
+            "MATERIAL LIBRARY: unavailable in this deployment. Do not call "
+            "studio_material; give objects plain colours instead."
+        )
+
+
 def build_prompt(agent_input: AgentInput) -> str:
     """Assemble the full turn. Contains no filesystem path and no credential."""
     sections: list[str] = [SYSTEM_RULES]
@@ -270,6 +313,12 @@ def build_prompt(agent_input: AgentInput) -> str:
         "and shapes literally; anything else is rejected and nothing happens:\n"
         + describe_capabilities(PROPOSABLE_CAPABILITIES)
     )
+
+    # Generated from the catalogue the loader itself reads, so the model is never
+    # told about a material that does not exist. An invented name is not an error
+    # the user sees — it is a surface that silently stays bare — so the list being
+    # exactly right matters more than it looks.
+    sections.append(_describe_materials())
 
     if agent_input.project_facts:
         facts = "\n".join(

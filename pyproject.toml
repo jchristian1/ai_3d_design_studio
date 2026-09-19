@@ -66,6 +66,7 @@ packages = [
     "studio_contracts",
     "studio_validation",
     "studio_spatial",
+    "studio_materials",
     "studio_agent",
     "studio_agent.providers",
     "studio_api",
@@ -89,6 +90,7 @@ studio_types = "packages/types/python/studio_types"
 studio_contracts = "packages/contracts/python/studio_contracts"
 studio_validation = "packages/validation/python/studio_validation"
 studio_spatial = "packages/spatial/python/studio_spatial"
+studio_materials = "packages/materials/python/studio_materials"
 studio_agent = "services/agent/studio_agent"
 "studio_agent.providers" = "services/agent/studio_agent/providers"
 studio_preview = "services/preview/studio_preview"

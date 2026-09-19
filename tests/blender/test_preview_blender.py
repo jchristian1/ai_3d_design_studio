@@ -18,6 +18,11 @@ Blender versions, GPU drivers, and colour-management defaults all shift individu
 pixel values, so a golden-image comparison would fail for reasons that have nothing
 to do with this code. What matters is that the render happened, is a valid image of
 the requested size, and CHANGES when the design changes.
+
+Stability is asserted on DECODED PIXELS, not on file checksums. The renderer is
+EEVEE, which samples; its pixels are reproducible (reprojection off, samples
+pinned) but its PNG bytes are not guaranteed to be, so comparing files would ask
+the wrong question. See ``test_the_same_scene_renders_to_the_same_pixels``.
 """
 
 from __future__ import annotations
@@ -91,6 +96,46 @@ def sha256_of(data: bytes) -> str:
 
 def file_sha256(path: Path) -> str:
     return sha256_of(path.read_bytes())
+
+
+def decoded_pixels(data: bytes) -> tuple[tuple[int, int], bytes]:
+    """The PNG's size and its RGB bytes.
+
+    Decoding is what lets stability be asserted on the IMAGE rather than on the
+    file: two encodings of identical pixels are not required to be identical
+    files.
+    """
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(data)) as image:
+        rgb = image.convert("RGB")
+        return rgb.size, rgb.tobytes()
+
+
+def mean_abs_pixel_difference(first: bytes, second: bytes) -> float:
+    """Mean absolute per-channel difference, normalised to 0.0–1.0.
+
+    0.0 means pixel-identical. A visible change in a small preview moves this by
+    more than a percent, so the tolerance and the change threshold below sit
+    orders of magnitude apart.
+    """
+    (size_a, pixels_a) = decoded_pixels(first)
+    (size_b, pixels_b) = decoded_pixels(second)
+    assert size_a == size_b, "cannot compare renders of different sizes"
+
+    total = sum(abs(a - b) for a, b in zip(pixels_a, pixels_b))
+    return total / (len(pixels_a) * 255.0)
+
+
+#: Allowed drift between two renders of one unchanged scene. Measured at exactly
+#: 0.0 on the pinned Blender; the headroom is for driver-level rounding, not for
+#: sampling noise, which is configured out.
+PIXEL_NOISE_TOLERANCE = 0.002
+
+#: A real design change must exceed this. A 0.50 m cube move measures ~0.03.
+PIXEL_CHANGE_THRESHOLD = 0.005
 
 
 @pytest.fixture
@@ -253,22 +298,48 @@ def test_rendering_adds_no_camera_to_the_saved_project(generator, project):
     assert names == ["Cube"], f"the saved project gained objects: {names}"
 
 
-def test_the_same_scene_renders_deterministically(generator, project):
-    """Workbench has no sampling, so two renders of one scene must agree exactly.
+def test_the_same_scene_renders_to_the_same_pixels(generator, project):
+    """An unchanged scene must produce the same IMAGE twice.
 
-    This is why the engine choice matters: with a path tracer this assertion would
-    be flaky, and a checksum could not be used to detect a real visual change.
+    Asserted on pixels rather than on a file checksum, and that distinction is the
+    point. EEVEE samples, so the old byte-equality assertion would be the wrong
+    question to ask of it — and measurement shows the bytes genuinely do differ
+    between two runs while the decoded pixels are identical, because PNG
+    compression is not required to be bit-stable.
 
-    Byte-level equality is only achievable because render stamping is disabled.
-    Blender otherwise embeds ``Date`` and ``RenderTime`` tEXt chunks, which vary
-    per run — see ``test_rendered_previews_embed_no_metadata`` for the security
-    reason those are stripped.
+    What actually has to hold is that the renderer is not noisy: nothing
+    stochastic may leak into a still preview, or "the picture changed" would stop
+    meaning "the design changed". ``use_taa_reprojection`` is disabled and the
+    sample count is pinned to make that true, and this test fails if either is
+    reverted.
     """
     first = render(generator, project, "job_det_1")
     second = render(generator, project, "job_det_2")
 
-    assert sha256_of(first.image_bytes) == sha256_of(second.image_bytes), (
-        "the preview renderer is not deterministic for an unchanged scene"
+    difference = mean_abs_pixel_difference(first.image_bytes, second.image_bytes)
+    assert difference <= PIXEL_NOISE_TOLERANCE, (
+        f"the preview renderer is not stable for an unchanged scene "
+        f"(mean absolute difference {difference:.6f})"
+    )
+
+
+def test_a_changed_scene_renders_to_visibly_different_pixels(generator, project):
+    """The other half of stability: it must still RESPOND to a real change.
+
+    A renderer could pass the stability test by emitting a constant image, so
+    stability is only meaningful alongside sensitivity. Moving the cube half a
+    metre has to move pixels by far more than the noise tolerance.
+    """
+    before = render(generator, project, "job_change_before")
+
+    move_cube(project, 0.5)
+
+    after = render(generator, project, "job_change_after")
+
+    difference = mean_abs_pixel_difference(before.image_bytes, after.image_bytes)
+    assert difference > PIXEL_CHANGE_THRESHOLD, (
+        f"moving the cube 0.50 m barely changed the render "
+        f"(mean absolute difference {difference:.6f})"
     )
 
 
@@ -346,18 +417,21 @@ def test_the_hostname_and_camera_name_are_not_embedded(generator, project):
 def test_the_render_reports_the_engine_and_requested_size(generator, project):
     rendered = render(generator, project, "job_meta")
 
-    assert rendered.engine == "BLENDER_WORKBENCH"
+    assert rendered.engine == "BLENDER_EEVEE"
     assert rendered.width == PREVIEW_WIDTH
     assert rendered.height == PREVIEW_HEIGHT
     assert rendered.media_type == "image/png"
     assert png_dimensions(rendered.image_bytes) == (PREVIEW_WIDTH, PREVIEW_HEIGHT)
 
 
-def test_a_preview_does_not_require_a_gpu(generator, project):
+def test_a_preview_does_not_require_a_dedicated_gpu(generator, project):
     """CI correctness must not depend on RTX.
 
-    Workbench rasterises on the CPU. The render is simply performed with no GPU
-    device configured, and it must still succeed.
+    EEVEE needs more GL capability than the Workbench renderer it replaced, which
+    is the one real cost of rendering materials instead of flat shading. It is
+    verified here with no GPU device configured, and it must still succeed — if
+    this ever fails on a target machine, the answer is that a preview failure is
+    already a value that cannot fail a mutation, not that the design is lost.
     """
     rendered = render(generator, project, "job_no_gpu")
     assert looks_like_png(rendered.image_bytes)

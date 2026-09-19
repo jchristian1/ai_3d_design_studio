@@ -77,37 +77,95 @@ project still contains only `Cube`.
 
 That is what makes "add a camera" safe. Permanently adding one so previews have
 something to render through would mean every preview silently edits the design, and
-the user would find objects they never asked for.
+the user would find objects they never asked for. The same applies to the temporary
+sun and sky world described under *Lighting*.
 
-Framing, computed rather than hand-tuned:
+### Framing is computed from the scene, and quantised
+
+The camera used to sit at a fixed `(7, -7, 5)` looking at the origin. That framed the
+seed fixture and nothing else: a house, or anything not built on the origin, fell
+outside the frame.
+
+It is now derived from the scene's renderable bounding box — but **not** from the
+exact box, and that distinction is load-bearing:
+
+| | behaviour | consequence |
+|---|---|---|
+| fixed viewpoint | camera never moves | a real building is out of frame |
+| exact bounding box | camera follows the geometry | moving the *only* object produces an **identical** picture, so the preview reports "nothing changed" about the one thing that did |
+| **quantised box** | camera moves in coarse steps | both properties hold |
+
+So the radius is snapped up onto a ~25% ladder, and the centre is snapped to a grid
+of half that radius. A small move leaves the framing bit-identical and therefore
+shows up as movement inside a stable frame; a design that genuinely outgrows the
+frame crosses a boundary and is re-framed. The camera behaves like a tripod that is
+only occasionally repositioned.
+
+Snapping lets the subject sit off-centre, so the margin has to absorb it. The bound
+is exact rather than hopeful:
 
 ```
-position (7, -7, 5) m, looking at the world origin, 50 mm lens
+grid            g = 0.5 R
+max axis error  g / 2             = 0.25 R
+max 3D drift    sqrt(3) · 0.25 R  ≈ 0.433 R
+max extent      r + drift        <= 1.433 R     (r <= R by construction)
 ```
 
-The look-at rotation is derived from the direction vector, so there are no magic
-Euler angles. The view is deliberately off-axis on X, so movement along world +X
-appears as a clear horizontal displacement — the entire point of the Spec 001
-preview.
+which is why `CAMERA_MARGIN` is 1.5. The framed radius is deliberately *not* grown by
+the measured drift: that would make zoom a function of position, reintroducing the
+wobble the quantisation removes.
 
-This is **not** automatic architectural camera composition. It frames a small scene
-near the origin and nothing more; framing a real room needs a bounding-box or
-scene-aware strategy, which is future work.
+The look-at rotation is still derived from the direction vector, so there are no magic
+Euler angles, and the view is still off-axis on X so movement along world +X appears
+as a clear horizontal displacement — the original point of the Spec 001 preview,
+verified by `test_preview_before_and_after_the_move_differ_visibly`.
 
 ## Render settings
 
-Workbench, fixed small resolution (default 640×360; tests use 320×180), fixed flat
-background `(0.05, 0.05, 0.07)`, `render_aa = 8`.
+EEVEE, fixed small resolution (default 640×360; tests use 320×180), sky-based
+environment lighting, AgX filmic colour management.
 
 | Choice | Reason |
 |---|---|
-| `BLENDER_WORKBENCH` | Solid-shading rasteriser: no light sampling, so no noise, no seed dependence, no denoiser version differences. Two renders of one scene are byte-identical. |
-| Workbench studio lighting | Independent of scene lights, so a preview works in a scene with no lights — which the seed fixture is. |
-| No GPU | Workbench rasterises on the CPU. A preview must never be why CI or a headless machine cannot verify the slice. Cycles and RTX belong to the final-render path. |
-| Fixed AA, fixed resolution | Nothing adaptive, so output cannot vary per run. |
+| `BLENDER_EEVEE` | Renders real materials, textures, shadows and raytraced reflections. Workbench is a solid-shading rasteriser that ignores materials by design, so it could never answer "does this look real?". On Blender 5.2 the identifier is `BLENDER_EEVEE` — the "Next" rewrite became the default and the `_NEXT` suffix was dropped. |
+| Raytracing enabled | Without it EEVEE has no reflections and only a crude ambient term, so glass, polished floors and interior corners all look wrong. |
+| Sky Texture world | Real image-based lighting — soft directional light plus sky-coloured bounce — with no HDRI asset to ship. |
+| Sun matched to the sky | Elevation and azimuth are shared, so shadows fall away from the bright part of the sky instead of contradicting it. A ~1.5° sun disc gives shadows a soft edge, which is most of what stops a render looking synthetic. |
+| AgX view transform, set explicitly | Rolls highlights off like film instead of clipping to flat white. Pinned rather than inherited so one design does not look different on two machines. |
+| `use_taa_reprojection = False`, pinned samples | Reusing samples across frames would make a still render depend on history. Disabling it makes the **pixels** reproducible. |
+| No motion blur | A still preview has no time dimension, and it is a source of per-run variation. |
 
-Determinism matters beyond tidiness: it is what makes the checksum a usable signal
-for "did the visible scene change?".
+### Determinism is asserted on pixels, not on bytes
+
+Workbench was byte-reproducible; EEVEE is not, and the tests were changed to ask the
+right question rather than to look the other way.
+
+Measured on the pinned Blender: two renders of one unchanged scene are **identical to
+0.0 mean absolute pixel difference**, while their PNG *files* differ — PNG compression
+is not required to be bit-stable. So stability is asserted on decoded pixels
+(`test_the_same_scene_renders_to_the_same_pixels`), paired with a sensitivity test
+(`test_a_changed_scene_renders_to_visibly_different_pixels`) because a renderer could
+otherwise pass a stability check by emitting a constant image.
+
+Cost: the first render in a process pays shader compilation (~10 s observed); later
+renders take a fraction of a second. EEVEE also needs more GL capability than
+Workbench — verified working headless with no GPU configured, and a preview failure is
+already a value that can never fail a mutation, so the worst case is "no picture".
+
+## Lighting
+
+Lighting is **supplemented, never overridden**. Astra can author its own lights and
+world, and a preview that replaced them would hide the very thing the user asked for.
+
+| Condition | Action |
+|---|---|
+| scene has no light objects | add a temporary sun |
+| scene has no world, or a world that emits nothing | add a temporary Sky Texture world |
+
+The "emits nothing" test matters: a world that exists but is black lights nothing, and
+treating its presence as the user's choice is how a scene renders pitch dark. Both
+additions are in-memory only and are reported in the `scene` phase payload
+(`lighting.added_sun`, `lighting.added_sky_world`).
 
 ### Embedded metadata is stripped — a security fix
 
@@ -259,9 +317,9 @@ pixels, so a reference-image test would fail for reasons unrelated to this code.
 | Now | Later |
 |---|---|
 | `LocalArtifactStore` on a shared local directory | S3 / object storage implementing `ArtifactStore`; the worker uploads, the API issues signed URLs or proxies |
-| `BLENDER_WORKBENCH` still image | quick Eevee preview, then final Cycles render with RTX — each a new `PreviewGenerator` |
+| EEVEE still image | final Cycles render with RTX — a new `PreviewGenerator` |
 | PNG only | `glb_scene` artifact type for interactive Three.js preview (Task 11+) |
-| Fixed camera at the origin | scene-aware framing from a bounding box; multiple cameras |
+| One quantised three-quarter camera | multiple cameras; interior views; composition that understands rooms rather than bounding boxes |
 | Preview per job | preview per project *version*, once version history exists |
 | One artifact type | `render_image`, `glb_scene`, `viewport_stream` — each needs its own media-type handling and its own decision about who may request it |
 | Control plane and worker share a filesystem | separate machines; the shared directory disappears with object storage |
