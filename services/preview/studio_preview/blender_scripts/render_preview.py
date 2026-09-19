@@ -133,10 +133,13 @@ CAMERA_LENS_MM = 50.0
 #: movement along world +X reads as a horizontal displacement.
 CAMERA_DIRECTION = (1.0, -1.0, 0.62)
 
-#: How much larger than the framed radius the camera's view is. Has to absorb the
-#: worst-case off-centre error introduced by snapping (see ``framed_bounds``), so
-#: it is not simply cosmetic padding.
-CAMERA_MARGIN = 1.5
+#: Breathing room around the fitted framing.
+#:
+#: Now genuinely cosmetic. It used to carry real weight, absorbing the worst-case
+#: off-centre error from centre snapping when the camera fit a bounding SPHERE.
+#: ``fit_distance`` projects the measured corners about the snapped centre, so that
+#: drift is accounted for exactly and this is only padding.
+CAMERA_MARGIN = 1.08
 
 #: Mantissas for the radius ladder, in roughly 25% steps.
 #:
@@ -281,6 +284,48 @@ def _renderable_objects(scene):
     return renderable
 
 
+def scene_corners(scene):
+    """World-space corners of the renderable scene's bounding box, or ``[]``.
+
+    The eight corners rather than a radius, because the camera fit projects them
+    individually — an elongated building cannot be framed well from a single
+    scalar.
+    """
+    import mathutils
+
+    points = []
+    for obj in _renderable_objects(scene):
+        matrix = obj.matrix_world
+        # bound_box is in LOCAL space; transforming all eight corners is what makes
+        # the result correct for a rotated or scaled object.
+        for corner in obj.bound_box:
+            points.append(matrix @ mathutils.Vector(corner))
+
+    if not points:
+        return []
+
+    minimum = mathutils.Vector(
+        (
+            min(p.x for p in points),
+            min(p.y for p in points),
+            min(p.z for p in points),
+        )
+    )
+    maximum = mathutils.Vector(
+        (
+            max(p.x for p in points),
+            max(p.y for p in points),
+            max(p.z for p in points),
+        )
+    )
+    return [
+        mathutils.Vector((x, y, z))
+        for x in (minimum.x, maximum.x)
+        for y in (minimum.y, maximum.y)
+        for z in (minimum.z, maximum.z)
+    ]
+
+
 def scene_bounds(scene):
     """World-space ``(centre, radius)`` of everything renderable.
 
@@ -411,6 +456,64 @@ def framed_bounds(scene):
     return snapped, framed_radius
 
 
+def horizontal_fov(camera_data, width: int, height: int) -> float:
+    """The camera's horizontal field of view in radians."""
+    sensor_width = getattr(camera_data, "sensor_width", 36.0) or 36.0
+    lens = camera_data.lens or CAMERA_LENS_MM
+    aspect = (width / height) if height else 1.0
+    if aspect < 1.0:
+        # A portrait frame fits to height, so the horizontal sensor shrinks.
+        sensor_width = sensor_width * aspect
+    return 2.0 * math.atan((sensor_width * 0.5) / lens)
+
+
+def fit_distance(corners, centre, direction, tan_h: float, tan_v: float) -> float:
+    """Distance along ``direction`` that just contains every corner in frame.
+
+    WHY A BOX AND NOT A SPHERE
+
+    Fitting the bounding SPHERE is the obvious approach and it is badly wrong for
+    architecture. A real clinic measured 81 x 21 x 4.3 m: long, wide and flat. Its
+    bounding sphere is 84 m across, nearly all of it empty air above and below the
+    building, so a camera that fits the sphere vertically renders the building as a
+    speck across the middle of the frame. The user could not see their own design.
+
+    So each of the eight box corners is projected into the camera's own basis and
+    the distance is solved so that all of them fall inside both the horizontal and
+    the vertical field of view:
+
+        a point at offset v from the centre sits at depth  D - v·direction
+        and must satisfy  |v·right| <= depth · tan(h/2)
+                          |v·up|    <= depth · tan(v/2)
+
+    Taking the maximum over the corners gives the exact distance. An elongated
+    scene is then framed along its length, which is what a person would do.
+
+    Because the corners are MEASURED but the centre is QUANTISED, the snapping
+    drift is inside this calculation rather than absorbed by a safety margin —
+    nothing can be cropped by it.
+    """
+    import mathutils
+
+    forward = -mathutils.Vector(direction)
+    # Any two vectors perpendicular to forward will do; world up is the natural
+    # reference, and the fallback covers a camera looking straight down.
+    world_up = mathutils.Vector((0.0, 0.0, 1.0))
+    if abs(forward.dot(world_up)) > 0.999:
+        world_up = mathutils.Vector((0.0, 1.0, 0.0))
+    right = forward.cross(world_up).normalized()
+    up = right.cross(forward).normalized()
+
+    required = MIN_CAMERA_DISTANCE_METERS
+    for corner in corners:
+        offset = corner - centre
+        along = offset.dot(mathutils.Vector(direction))
+        horizontal = abs(offset.dot(right)) / max(tan_h, 1e-6)
+        vertical = abs(offset.dot(up)) / max(tan_v, 1e-6)
+        required = max(required, max(horizontal, vertical) + along)
+    return required
+
+
 def place_camera(scene, camera, width: int, height: int) -> dict:
     """Point the camera at the scene and back off far enough to contain it."""
     import mathutils
@@ -419,10 +522,25 @@ def place_camera(scene, camera, width: int, height: int) -> dict:
     centre, radius = framed_bounds(scene)
 
     fov = vertical_fov(camera.data, width, height)
-    half = max(fov * 0.5, 1e-4)
-    distance = max((radius * CAMERA_MARGIN) / math.tan(half), MIN_CAMERA_DISTANCE_METERS)
+    fov_h = horizontal_fov(camera.data, width, height)
+    tan_v = math.tan(max(fov * 0.5, 1e-4))
+    tan_h = math.tan(max(fov_h * 0.5, 1e-4))
 
     direction = mathutils.Vector(CAMERA_DIRECTION).normalized()
+
+    corners = scene_corners(scene)
+    if corners:
+        distance = fit_distance(corners, centre, direction, tan_h, tan_v)
+        # Pad, then snap the distance onto the same coarse ladder the radius uses.
+        # Quantising here is what keeps the camera still between turns: without it
+        # the zoom would drift by a fraction of a percent every time a wall moved.
+        distance = snap_radius_up(distance * CAMERA_MARGIN)
+    else:
+        distance = max(
+            (radius * CAMERA_MARGIN) / tan_v, MIN_CAMERA_DISTANCE_METERS
+        )
+    distance = max(distance, MIN_CAMERA_DISTANCE_METERS)
+
     camera.location = centre + direction * distance
 
     # Derive the look-at rotation from the geometry rather than hard-coding Euler
@@ -441,6 +559,7 @@ def place_camera(scene, camera, width: int, height: int) -> dict:
         "measured_centre_meters": [round(v, 6) for v in measured_centre],
         "measured_radius_meters": round(measured_radius, 6),
         "distance_meters": round(distance, 6),
+        "horizontal_fov_degrees": round(radians_to_degrees(fov_h) or 0.0, 4),
         # Diagnostic only. The shared converter returns None for a non-finite input,
         # which cannot happen for a computed field of view, but a reported number must
         # not be the thing that breaks a render.
