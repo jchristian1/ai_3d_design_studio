@@ -178,6 +178,9 @@
   min-width: 0;
   min-height: 0;
   display: flex;
+  /* Belt and braces with the preview panel's own clip: a grid row does not clip its
+     child, so an over-large render would otherwise draw over the model above it. */
+  overflow: hidden;
 }
 
 .inspectorSlot {

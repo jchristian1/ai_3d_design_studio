@@ -95,6 +95,22 @@ describe("the layout cannot collapse the 3D view", () => {
 
 
 
+describe("the preview cannot cover the 3D view", () => {
+  it("the figure states a height, so the image's max-height resolves", () => {
+    // A percentage max-height against an `auto` height is treated as `none`. With the
+    // figure auto-sized, a 1280x720 render laid out at intrinsic size and, being
+    // centred, spilled over the model panel in the row above.
+    const figure = rule(stylesheet("PreviewPanel.module.css"), ".figure");
+    assert.match(figure, /height:\s*100%/);
+  });
+
+  it("both the slot and the panel clip their contents", () => {
+    // Two rows of one grid. A grid row does not clip, so the clip must be stated.
+    assert.match(rule(stylesheet("workspace.module.css"), ".renderSlot"), /overflow:\s*hidden/);
+    assert.match(rule(stylesheet("PreviewPanel.module.css"), ".panel"), /overflow:\s*hidden/);
+  });
+});
+
 describe("the viewer sizes itself even if the CSS lets it down", () => {
   it("takes its size from an ancestor when its own box is empty", async () => {
     // The safeguard that makes a blank canvas impossible from CSS alone. jsdom reports 0

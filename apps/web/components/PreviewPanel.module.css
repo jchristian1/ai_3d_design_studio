@@ -2,7 +2,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   flex: 1;
+  /* The panel shares a stage with the 3D view. Nothing inside it may reach the
+     neighbouring row, whatever size the render happens to be. */
+  overflow: hidden;
 }
 
 .header {
@@ -38,11 +42,22 @@
   padding: 0 20px 20px;
 }
 
+/*
+ * Stated in both axes, deliberately.
+ *
+ * The image's `max-height: 100%` is measured against THIS element. When the height here
+ * was `auto` the percentage resolved against an indefinite height, which CSS treats as
+ * `none` — so a 1280x720 render laid out at full intrinsic size and, being centred,
+ * spilled out of the stage in both directions and covered the 3D view above it. Giving
+ * the figure the stage's height makes the cap on the image mean something.
+ */
 .figure {
   position: relative;
   margin: 0;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
