@@ -406,3 +406,42 @@ def test_a_glb_export_writes_to_the_platform_chosen_path(backend, tmp_path: Path
 def test_a_glb_export_without_a_destination_is_refused(backend) -> None:
     result = backend.invoke(request(names.EXPORT_GLB))
     assert result.error_code == "VALIDATION_ERROR"
+
+
+# ---------------------------------------------------------------------------
+#
+# From a real turn: "create this whole scene as similar as possible" produced one
+# enormous authored program, Blender was killed at the upstream limit, and the user was
+# shown `Error executing tool execute_blender_code_for_cli: Blender CLI timed out after
+# 120s` — reported as BLENDER_UNAVAILABLE, which sent everyone looking for a broken
+# Blender. Blender was fine. The step was too big.
+#
+# The limit is a hard-coded constant in the pinned upstream MCP and this project does not
+# fork it, so the ceiling is designed around rather than raised. What matters is that the
+# failure says something true and actionable, because the model reads it too and its next
+# attempt depends on it.
+
+
+def test_a_run_that_exceeded_the_limit_is_not_reported_as_a_broken_blender() -> None:
+    from blender_worker.backends.official.backend import (
+        STEP_TOO_LARGE_MESSAGE,
+        _looks_like_cli_timeout,
+    )
+
+    assert _looks_like_cli_timeout(
+        "Error executing tool execute_blender_code_for_cli: "
+        "Blender CLI timed out after 120s"
+    )
+    # The advice has to be in the message, because the message is the only channel
+    # reaching the next attempt.
+    assert "smaller steps" in STEP_TOO_LARGE_MESSAGE
+    assert "nothing from it was saved" in STEP_TOO_LARGE_MESSAGE
+
+
+def test_a_genuinely_unavailable_blender_is_still_reported_as_such() -> None:
+    """Narrowing the timeout case must not swallow the real availability failure."""
+    from blender_worker.backends.official.backend import _looks_like_cli_timeout
+
+    assert not _looks_like_cli_timeout("Blender executable not found")
+    assert not _looks_like_cli_timeout("connection refused")
+    assert not _looks_like_cli_timeout("the MCP session is not initialised")

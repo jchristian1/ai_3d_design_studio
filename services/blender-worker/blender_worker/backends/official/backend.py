@@ -55,6 +55,36 @@ REQUIRED_TOOLS = (CLI_EXECUTE_TOOL,)
 
 APPROVAL_PREFIX = "approved:"
 
+#: How the pinned official MCP reports that it killed a Blender run.
+#:
+#: Its limit is a hard-coded constant in upstream (``_CLI_TIMEOUT = 120.0``), not an
+#: option, and this project integrates that server without vendoring or forking it. So
+#: the ceiling is a fact to design around rather than a setting to change.
+_CLI_TIMEOUT_MARKERS: Final = ("timed out after", "timeout")
+
+#: What a timed-out step reports instead of the upstream string.
+#:
+#: Written to be useful to BOTH readers, because both see it. The designer learns their
+#: request was too big for one go and nothing was half-applied; the model learns the
+#: specific corrective action, which is the only way the next attempt is better.
+#:
+#: The "nothing was saved" part is not reassurance, it is the important fact. Authored
+#: code is wrapped so that a Python error still saves whatever was built, but a killed
+#: PROCESS never reaches that save — so a timeout loses the whole step, and a step that
+#: tries to do everything loses everything.
+STEP_TOO_LARGE_MESSAGE: Final = (
+    "That step asked Blender for more work than one operation is allowed to take, so it "
+    "was stopped and nothing from it was saved. Split the work into several smaller "
+    "steps in the same plan — each step is saved on its own and can be retried without "
+    "repeating the ones before it."
+)
+
+
+def _looks_like_cli_timeout(message: str) -> bool:
+    """True when an MCP error is upstream's run-too-long, not a broken Blender."""
+    lowered = message.lower()
+    return any(marker in lowered for marker in _CLI_TIMEOUT_MARKERS)
+
 
 def approval_token_for(code: str) -> str:
     """The token the control plane issues once a user approves this exact code.
@@ -304,6 +334,14 @@ class OfficialBlenderLabBackend:
                 request.capability, VALIDATION_ERROR, str(error)
             )
         except McpSessionError as error:
+            if _looks_like_cli_timeout(str(error)):
+                # NOT "Blender unavailable": Blender is perfectly fine, the step asked
+                # it to do more than one call is allowed to take. Reporting it as an
+                # availability problem sent everyone looking in the wrong place, and it
+                # surfaced the upstream string verbatim, which tells a designer nothing.
+                return CapabilityResult.failure(
+                    request.capability, MUTATION_FAILED, STEP_TOO_LARGE_MESSAGE
+                )
             return CapabilityResult.failure(
                 request.capability, BLENDER_UNAVAILABLE, str(error)
             )
