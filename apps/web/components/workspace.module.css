@@ -1076,3 +1076,30 @@
 .menuItemDanger:hover {
   background: var(--danger-fill);
 }
+
+/* The reload action inside a status pill.
+ *
+ * Quiet by default: the design machine reloads itself when the studio's code changes,
+ * so this is an override that should be reachable without competing with the project
+ * name or the model status beside it. */
+.statusButton {
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  font: inherit;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.statusButton:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.statusButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

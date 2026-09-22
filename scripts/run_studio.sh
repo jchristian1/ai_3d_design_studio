@@ -101,8 +101,24 @@ trap cleanup INT TERM EXIT
 prefix() { sed -u "s/^/[$1] /"; }
 
 echo "control plane -> http://127.0.0.1:8000    (docs at /docs)"
+# --reload so an edit to the control plane takes effect without anyone restarting this
+# script. All three processes now pick up their own changes: the web app through Next's
+# fast refresh, the worker by re-executing itself when its source changes, and the API
+# here. A long-running process quietly serving replaced code was costing far more
+# confusion than it was worth -- every symptom looked like a product bug.
+#
+# Scoped to the directories the API actually imports, because reloading on every write
+# anywhere in the repository (including runtime/ artifacts the API itself produces) would
+# restart it constantly.
 "$PYTHON" -m uvicorn studio_api.app:create_app --factory \
-  --host 127.0.0.1 --port 8000 2>&1 | prefix api &
+  --host 127.0.0.1 --port 8000 \
+  --reload \
+  --reload-dir services/api \
+  --reload-dir services/agent \
+  --reload-dir packages/contracts/python \
+  --reload-dir packages/types/python \
+  --reload-dir packages/validation/python \
+  --reload-dir packages/spatial/python 2>&1 | prefix api &
 pids+=($!)
 
 # Give the control plane a moment to bind before the worker dials out. The worker

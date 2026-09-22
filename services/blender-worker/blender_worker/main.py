@@ -68,6 +68,7 @@ from .link.identity import WorkerIdentityError, load_worker_identity
 from .link.websocket_transport import WebSocketWorkerTransport
 from .locks import FileLockProvider
 from .registry import MappingProjectRegistry
+from .reload import ReloadWatcher, short_fingerprint
 from .runtime import DEFAULT_RUNTIME_ROOT
 
 logger = logging.getLogger("blender_worker")
@@ -250,7 +251,11 @@ def register_with_retry(client: WorkerLinkClient, stopping: _Stopping) -> bool:
     return False
 
 
-def run_worker_loop(client: WorkerLinkClient, stopping: _Stopping) -> int:
+def run_worker_loop(
+    client: WorkerLinkClient,
+    stopping: _Stopping,
+    reloader: Optional[Any] = None,
+) -> int:
     """Run the worker's inbound loop until shutdown is requested.
 
     Named a LOOP, not a server: this process only ever reads from a connection it
@@ -288,6 +293,16 @@ def run_worker_loop(client: WorkerLinkClient, stopping: _Stopping) -> int:
         if kind is None:
             # Nothing arrived within the timeout: report liveness and keep waiting.
             client.send_heartbeat()
+
+            # The one safe moment to replace this process. Reaching here means the
+            # last receive timed out with the link healthy, so no job is in flight and
+            # no project lock is held — a restart cannot abandon a half-saved
+            # mutation. Checked only here for exactly that reason.
+            if reloader is not None:
+                reason = reloader.should_restart()
+                if reason:
+                    client.disconnect()
+                    reloader.restart(reason)
 
     logger.info("shutting down")
     client.disconnect()
@@ -329,8 +344,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     signal.signal(signal.SIGINT, stopping.request)
     signal.signal(signal.SIGTERM, stopping.request)
 
+    reloader = ReloadWatcher(runtime_root)
+    logger.info(
+        "running code %s; auto-reload %s",
+        short_fingerprint(reloader.loaded_fingerprint),
+        "on" if reloader.auto_reload else "off",
+    )
+    # A request left over from a previous process would restart this brand-new one
+    # immediately, so it is cleared before the loop rather than acted on.
+    reloader.take_request()
+
     try:
-        return run_worker_loop(client, stopping)
+        return run_worker_loop(client, stopping, reloader)
     except KeyboardInterrupt:  # pragma: no cover - signal handler normally wins
         client.disconnect()
         return 0

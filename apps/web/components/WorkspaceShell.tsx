@@ -46,6 +46,31 @@ export function WorkspaceShell({
 
   const [chatOpen, setChatOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [reloading, setReloading] = useState(false);
+
+  /**
+   * Reload the design machine's code.
+   *
+   * Stays busy for a few seconds rather than clearing immediately: the machine restarts
+   * at its next idle moment, so refreshing the status straight away would still read
+   * "connected" and the button would look as though it had done nothing. The wait is
+   * about reporting honestly, not about the request taking time.
+   */
+  const reloadMachine = useCallback(async () => {
+    if (reloading) return;
+    setReloading(true);
+    try {
+      await session.client.reloadWorker();
+    } catch {
+      // Not worth interrupting the user over: the machine is still connected and still
+      // working, just on its previous code.
+    } finally {
+      window.setTimeout(() => {
+        setReloading(false);
+        void session.refreshStatus();
+      }, 4000);
+    }
+  }, [reloading, session]);
 
   const selected = selectedObject(state);
   const approval = pendingApproval(state);
@@ -87,6 +112,14 @@ export function WorkspaceShell({
             message={state.blender?.message ?? "Checking…"}
             connected={state.blender?.connected ?? false}
             action={null}
+            // The design machine reloads itself when the studio's code changes, so this
+            // is the override: press it when it has been busy, or when you want to be
+            // certain rather than to wait.
+            button={
+              state.blender?.can_reload
+                ? { label: reloading ? "Reloading…" : "Reload", onPress: reloadMachine, busy: reloading }
+                : null
+            }
           />
           <StatusPill
             label={state.gpu?.label ?? "GPU"}
@@ -189,11 +222,15 @@ function StatusPill({
   message,
   connected,
   action,
+  button = null,
 }: {
   label: string;
   message: string;
   connected: boolean;
+  /** A command the user runs themselves, shown as text. */
   action: string | null;
+  /** Something the studio can do on their behalf, shown as a button. */
+  button?: { label: string; onPress: () => void; busy?: boolean } | null;
 }) {
   return (
     <span className={styles.statusPill} title={action ? `${message} (${action})` : message}>
@@ -207,6 +244,19 @@ function StatusPill({
         {action ? ` Run: ${action}` : ""}
       </span>
       {!connected && action ? <code className={styles.statusAction}>{action}</code> : null}
+      {button ? (
+        <button
+          type="button"
+          className={styles.statusButton}
+          onClick={button.onPress}
+          disabled={button.busy}
+          // The label alone ("Reload") does not say what is reloaded, which matters
+          // most to someone reaching it by screen reader.
+          aria-label={`Reload ${label}`}
+        >
+          {button.label}
+        </button>
+      ) : null}
     </span>
   );
 }

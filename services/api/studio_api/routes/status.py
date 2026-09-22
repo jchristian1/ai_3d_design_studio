@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from studio_agent import codex
 from studio_agent.codex import CodexError
 
-from .. import errors
+from .. import errors, worker_reload
 from .support import ControlPlaneHTTPError, get_dependencies
 
 _log = logging.getLogger(__name__)
@@ -92,6 +92,12 @@ def blender_status(request: Request) -> dict[str, Any]:
             "blender_version": (capable.get("capabilities") or {}).get("blender_version"),
             "supports_modelling": "apply_capabilities" in supported,
             "worker_count": len(ready),
+            # The worker reloads itself when its code changes, so there is no staleness
+            # for the control plane to detect — and it could not detect it anyway
+            # without reading the worker's filesystem, which it must not do. What is
+            # offered instead is the manual override, available whenever a worker is
+            # connected.
+            "can_reload": True,
         }
 
     if snapshots:
@@ -245,3 +251,43 @@ def cancel_astra_login(request: Request) -> dict[str, Any]:
 
     provider.cancel_login()
     return {"supported": True, **provider.login_session().snapshot()}
+
+
+# A comment, not a docstring: this is served to the browser in /openapi.json, and how the
+# request reaches the worker is an implementation detail (see worker_reload).
+#
+# Under /api/status because that is where the staleness is reported and where the browser
+# is already looking; the action belongs next to the condition it resolves.
+@router.post("/worker/reload")
+def reload_worker(request: Request) -> dict[str, Any]:
+    """Ask the design machine to reload the studio's current code.
+
+    Safe to call at any time. The machine finishes whatever it is doing first.
+    """
+    dependencies = get_dependencies(request)
+    snapshots = dependencies.gateway.worker_snapshots()
+    connected = [snapshot for snapshot in snapshots if snapshot.get("connected")]
+
+    if not connected:
+        failure = errors.failure(
+            errors.INVALID_REQUEST,
+            "VALIDATION_ERROR",
+            "The design machine is not connected, so there is nothing to reload.",
+        )
+        raise ControlPlaneHTTPError(failure.http_status, failure.body())
+
+    if not worker_reload.request_reload():
+        failure = errors.failure(
+            errors.INTERNAL,
+            "INTERNAL_ERROR",
+            "The reload could not be requested on this machine.",
+        )
+        raise ControlPlaneHTTPError(failure.http_status, failure.body())
+
+    return {
+        "requested": True,
+        # The worker reloads at its next idle moment, which is within a couple of
+        # seconds unless it is mid-job. Saying so sets the right expectation instead of
+        # implying the reload has already happened.
+        "message": "Reloading the design machine. This takes a few seconds.",
+    }

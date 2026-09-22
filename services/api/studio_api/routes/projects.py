@@ -142,6 +142,14 @@ def open_project(
     return {"project": _view(dependencies, record)}
 
 
+# A comment rather than a docstring, for the reason given above ``delete_project``: this
+# describes a defence, and the docstring is served to the browser in ``/openapi.json``.
+#
+# Deliberately ``/{project_id}/rename`` rather than ``PUT /{project_id}``: a bare
+# ``/{project_id}`` route would give a URL that path traversal collapses onto
+# (``/api/projects/p/artifacts/..``), turning a clean 404 for a hostile identifier into a
+# 405. Nothing would leak either way, but the guarantee is easier to keep when the
+# namespace has no bare segment route at all.
 @router.post("/{project_id}/rename")
 def rename_project(
     project_id: str,
@@ -149,14 +157,7 @@ def rename_project(
     request: Request,
     identity: TrustedIdentity = Depends(get_identity),
 ) -> dict[str, Any]:
-    """Rename a project.
-
-    Deliberately ``/{project_id}/rename`` rather than ``PUT /{project_id}``: a bare
-    ``/{project_id}`` route would give a URL that path traversal collapses onto
-    (``/api/projects/p/artifacts/..``), turning a clean 404 for a hostile identifier into
-    a 405. Nothing would leak either way, but the guarantee is easier to keep when the
-    namespace has no bare segment route at all.
-    """
+    """Rename a project."""
     dependencies = get_dependencies(request)
     project = dependencies.projects.get(project_id)
     if project is None:
@@ -171,6 +172,28 @@ def rename_project(
 
 
 
+# Notes on this endpoint are COMMENTS, not a docstring, and that is deliberate.
+#
+# FastAPI publishes a route's docstring as its description in ``/openapi.json``, which is
+# served to the browser. Anything written there is a public API document, so design notes
+# about worker filesystems and about how path traversal is handled do not belong in one:
+# the first discloses internals the control plane works hard not to carry, and the second
+# hands an attacker a description of the defence. A test asserts the served schema contains
+# no filesystem detail, and it was this docstring that failed it.
+#
+# Why ``POST /delete`` rather than ``DELETE /{project_id}``: a body is required (the typed
+# name), and a bare ``/{project_id}`` route is deliberately absent from this namespace —
+# it gives path traversal a URL to collapse onto, which turns a clean 404 for a hostile
+# artifact id into a 405.
+#
+# Deletion is gated on the user typing the project's name, and the check happens HERE
+# rather than only in the browser, so the guarantee does not depend on the interface.
+#
+# One thing this does NOT remove: the project's design file on the machine that does the
+# modelling. The control plane does not know worker paths — that is the boundary keeping a
+# job from carrying a filesystem path — so the file is left behind. It is inert: project
+# ids are generated, so nothing will ever resolve to it again. Reclaiming it is a
+# worker-side task.
 @router.post("/{project_id}/delete")
 def delete_project(
     project_id: str,
@@ -178,20 +201,9 @@ def delete_project(
     request: Request,
     identity: TrustedIdentity = Depends(get_identity),
 ) -> dict[str, Any]:
-    """Delete a project, its uploads, its conversation and its artifacts.
+    """Delete a project, its uploads, its conversation and its previews.
 
-    Irreversible, and gated on the user typing the project's name. The check happens HERE
-    rather than only in the browser, so the guarantee does not depend on the interface.
-
-    ``POST /delete`` rather than ``DELETE /{project_id}``: a body is required (the typed
-    name), and a bare ``/{project_id}`` route is deliberately absent from this namespace —
-    it gives path traversal a URL to collapse onto, which turns a clean 404 for a hostile
-    artifact id into a 405.
-
-    One thing this does NOT remove: the ``.blend`` file on the design machine. The control
-    plane does not know worker paths — that is the boundary that keeps a job from carrying a
-    filesystem path — so the file is left behind. It is inert: project ids are generated, so
-    nothing will ever resolve to it again. Reclaiming it is a worker-side task.
+    Irreversible. Requires the project's name to be typed to confirm.
     """
     dependencies = get_dependencies(request)
     project = dependencies.projects.get(project_id)

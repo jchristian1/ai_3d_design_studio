@@ -147,6 +147,12 @@ export interface WorkspaceView {
   preview: ArtifactRefView | null;
 }
 
+/** POST /api/status/worker/reload response. */
+export interface WorkerReloadView {
+  requested: boolean;
+  message?: string;
+}
+
 export interface ConnectionStatusView {
   state: string;
   label: string;
@@ -159,6 +165,14 @@ export interface ConnectionStatusView {
   provider?: string | null;
   blender_version?: string | null;
   supports_modelling?: boolean;
+  /**
+   * True when this machine's code can be reloaded from here.
+   *
+   * The design machine reloads itself when its code changes, so this is the manual
+   * override rather than the normal path — useful when it has been busy, or was
+   * started with auto-reload off.
+   */
+  can_reload?: boolean;
   worker_count?: number;
 }
 
@@ -246,6 +260,7 @@ export interface WorkspaceClient {
   cancelAstraLogin(): Promise<LoginSessionView>;
   getBlenderStatus(): Promise<ConnectionStatusView>;
   getGpuStatus(): Promise<ConnectionStatusView>;
+  reloadWorker(): Promise<WorkerReloadView>;
   setFact(projectId: string, key: string, value: string): Promise<FactView>;
   absoluteUrl(url: string): string;
 }
@@ -461,6 +476,10 @@ export function createWorkspaceClient(options: WorkspaceClientOptions = {}): Wor
 
     getGpuStatus() {
       return send<ConnectionStatusView>("/api/status/gpu");
+    },
+
+    reloadWorker() {
+      return send<WorkerReloadView>("/api/status/worker/reload", { method: "POST" });
     },
 
     beginAstraLogin(deviceAuth = false) {

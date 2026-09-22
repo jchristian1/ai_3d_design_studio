@@ -100,6 +100,20 @@ def describe_capabilities(
     canonical ``worker-capabilities.schema.json`` closes the object, so adding a
     revealing field would fail validation.
     """
+    def _code_fingerprint() -> str:
+        """Short digest of the worker's own source, or ``unknown``.
+
+        Imported lazily and guarded: a worker must still be able to register when the
+        source tree cannot be scanned, because failing to connect over a diagnostic is
+        far worse than not having the diagnostic.
+        """
+        try:
+            from ..reload import short_fingerprint
+
+            return short_fingerprint()
+        except Exception:  # pragma: no cover - diagnostics must never block registration
+            return "unknown"
+
     available = False
     version: Optional[str] = None
     if probe_blender:
@@ -108,7 +122,14 @@ def describe_capabilities(
             version = blender_version()
 
     capabilities: dict[str, object] = {
-        "worker_version": WORKER_SOFTWARE_VERSION,
+        # The version carries the identity of the CODE this process actually imported,
+        # not just the release number. That is what lets the control plane notice a
+        # worker running yesterday's build and offer to reload it, and it fits in the
+        # existing field rather than requiring a new one — the capabilities schema is
+        # deliberately closed, and a wire-vocabulary change for developer tooling would
+        # be a poor trade. The digest is derived from source mtimes and sizes, so it
+        # reveals nothing about the filesystem.
+        "worker_version": f"{WORKER_SOFTWARE_VERSION}+code.{_code_fingerprint()}",
         "blender_available": available,
         "supported_job_types": list(supported_job_types),
         "max_concurrent_jobs": max_concurrent_jobs,
