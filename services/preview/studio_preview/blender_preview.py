@@ -174,6 +174,10 @@ class BlenderPreviewGenerator:
             "PREVIEW_OUTPUT": str(output_path),
             "PREVIEW_WIDTH": str(int(request.width)),
             "PREVIEW_HEIGHT": str(int(request.height)),
+            # JSON rather than a delimited list: an object id is platform-generated
+            # and safe, but encoding a collection by hand is how a stray separator
+            # silently becomes two ids.
+            "PREVIEW_FOCUS": json.dumps(list(request.focus_object_ids)),
         }
 
     @staticmethod

@@ -155,7 +155,12 @@ def generator() -> BlenderPreviewGenerator:
     return BlenderPreviewGenerator()
 
 
-def render(generator: BlenderPreviewGenerator, project: Path, job_id: str):
+def render(
+    generator: BlenderPreviewGenerator,
+    project: Path,
+    job_id: str,
+    focus_object_ids: tuple[str, ...] = (),
+):
     outcome = generator.generate(
         PreviewRequest(
             project_id=PROJECT_ID,
@@ -163,6 +168,7 @@ def render(generator: BlenderPreviewGenerator, project: Path, job_id: str):
             width=PREVIEW_WIDTH,
             height=PREVIEW_HEIGHT,
             job_id=job_id,
+            focus_object_ids=focus_object_ids,
         )
     )
     assert outcome.ok, outcome.error
@@ -272,6 +278,84 @@ def test_preview_before_and_after_the_move_differ_visibly(
     # ---- the earlier preview was not overwritten --------------------
     assert before.artifact_id != after.artifact_id
     assert len(store.list_for_project(PROJECT_ID)) == 2
+
+
+def tag_object(project: Path, name: str, object_id: str) -> None:
+    """Give an object a stable studio id, the way the platform does.
+
+    The seed fixture deliberately has none — it predates stable ids — so a test about
+    focusing by id has to supply one rather than assume it.
+    """
+    import tempfile
+
+    from blender_mcp.blender_runtime import run_blender_script
+
+    script = Path(tempfile.mkdtemp()) / "tag.py"
+    script.write_text(
+        "import bpy, os\n"
+        "bpy.ops.wm.open_mainfile(filepath=os.environ['TAG_BLEND'])\n"
+        "bpy.data.objects[os.environ['TAG_NAME']]"
+        "[os.environ['TAG_ID_KEY']] = os.environ['TAG_ID']\n"
+        "bpy.ops.wm.save_mainfile()\n",
+        "utf-8",
+    )
+    proc = run_blender_script(
+        str(script),
+        env={
+            "TAG_BLEND": str(project),
+            "TAG_NAME": name,
+            "TAG_ID_KEY": "studio_object_id",
+            "TAG_ID": object_id,
+        },
+        timeout=300,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+
+
+def test_focusing_on_an_object_frames_it_closer(generator, project):
+    """A focused preview is a different picture, not the same one relabelled.
+
+    This is what turns "here is the site" into "here is what changed". With one object
+    the SUBJECT cannot change, but the viewpoint does: a focused view uses a steeper
+    angle, to see over the walls of a room, and a tighter margin. Asserting the pixels
+    differ is the honest check that the focus reached Blender and was acted on.
+    """
+    tag_object(project, "Cube", "obj_cube")
+
+    wide = render(generator, project, "job_focus_wide")
+    close = render(
+        generator,
+        project,
+        "job_focus_close",
+        focus_object_ids=("obj_cube",),
+    )
+
+    difference = mean_abs_pixel_difference(wide.image_bytes, close.image_bytes)
+    assert difference > PIXEL_CHANGE_THRESHOLD, (
+        "focusing on an object should visibly change the framing "
+        f"(mean absolute difference {difference:.6f})"
+    )
+
+
+def test_an_unknown_focus_id_falls_back_to_the_whole_scene(generator, project):
+    """A stale id must never cost the user a picture.
+
+    Object ids travel from a previous turn's scene read, so one can refer to something
+    that has since been deleted. The framing widens; nothing fails.
+    """
+    wide = render(generator, project, "job_focus_none")
+    stale = render(
+        generator,
+        project,
+        "job_focus_stale",
+        focus_object_ids=("obj_does_not_exist",),
+    )
+
+    difference = mean_abs_pixel_difference(wide.image_bytes, stale.image_bytes)
+    assert difference <= PIXEL_NOISE_TOLERANCE, (
+        "an unmatched focus id should render exactly the unfocused view "
+        f"(mean absolute difference {difference:.6f})"
+    )
 
 
 def test_rendering_a_preview_never_modifies_the_project(generator, project):

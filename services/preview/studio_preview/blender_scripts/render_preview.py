@@ -133,6 +133,34 @@ CAMERA_LENS_MM = 50.0
 #: movement along world +X reads as a horizontal displacement.
 CAMERA_DIRECTION = (1.0, -1.0, 0.62)
 
+#: Viewing direction when the preview is FOCUSED on particular objects.
+#:
+#: STEEPER than the site view, which is the opposite of the obvious choice and was
+#: arrived at by getting it wrong first. Dropping the camera towards eye level does make
+#: a render look more photographic — and it puts the room's own outer wall directly
+#: between the camera and the room. A shallow angle was measured at about 14 degrees
+#: above horizontal, and the reception came back half hidden behind a 2.7 m wall and a
+#: street tree.
+#:
+#: Seeing into a room from OUTSIDE it means clearing the wall tops. To look 4 m past a
+#: 2.7 m wall needs roughly 34 degrees, so this sits a little above that:
+#:
+#:     elevation = atan(z / sqrt(2))   ->   atan(1.0 / 1.414) ~ 35 degrees
+#:
+#: A doll's-house view down into an open-topped room is the angle that can always see in.
+#: Genuinely photographic interiors need the camera INSIDE the room, which is a different
+#: feature — it needs to know where the room's air is, not just where its objects are.
+FOCUS_CAMERA_DIRECTION = (1.0, -1.0, 1.0)
+
+#: Padding around a focused subject, as a multiple of the fitted distance. Slightly more
+#: generous than the site view's, so the thing that changed is not cropped tight to the
+#: frame edge and keeps some of its surroundings for context.
+FOCUS_CAMERA_MARGIN = 1.22
+
+#: Smallest radius a focused view will frame. Without this, focusing on a single door
+#: handle would put the camera centimetres away and show an abstract blur.
+MIN_FOCUS_RADIUS_METERS = 1.6
+
 #: Breathing room around the fitted framing.
 #:
 #: Now genuinely cosmetic. It used to carry real weight, absorbing the worst-case
@@ -321,22 +349,54 @@ def _renderable_objects(scene):
     return renderable
 
 
-def scene_corners(scene):
-    """World-space corners of the renderable scene's bounding box, or ``[]``.
+def focus_objects(scene, object_ids):
+    """Objects carrying one of ``object_ids``, by stable studio id.
+
+    Matching on ``studio_object_id`` rather than on name: a name is a display label a
+    user can change, the id is what the rest of the platform refers to an object by.
+
+    Lights are INCLUDED, unlike everywhere else in this script, and that is the point.
+    A turn that only adjusts lighting changes no geometry at all, so restricting this to
+    renderable objects made exactly the turn most in need of a close look — "light the
+    reception properly" — fall back to the whole-site view. What the focus describes is
+    the AREA that changed, and a lamp marks that area as well as a wall does.
+    """
+    wanted = {str(value) for value in (object_ids or ()) if value}
+    if not wanted:
+        return []
+    return [
+        obj
+        for obj in scene.objects
+        if obj.name not in PREVIEW_OBJECT_NAMES
+        and str(obj.get("studio_object_id") or "") in wanted
+    ]
+
+
+def scene_corners(scene, objects=None):
+    """World-space corners of the bounding box, or ``[]``.
 
     The eight corners rather than a radius, because the camera fit projects them
     individually — an elongated building cannot be framed well from a single
     scalar.
+
+    ``objects`` narrows it to a subset, which is how a focused preview frames the
+    thing that changed instead of the whole site.
     """
     import mathutils
 
     points = []
-    for obj in _renderable_objects(scene):
+    for obj in _renderable_objects(scene) if objects is None else objects:
         matrix = obj.matrix_world
-        # bound_box is in LOCAL space; transforming all eight corners is what makes
-        # the result correct for a rotated or scaled object.
-        for corner in obj.bound_box:
-            points.append(matrix @ mathutils.Vector(corner))
+        bound = getattr(obj, "bound_box", None)
+        if bound and obj.type != "LIGHT":
+            # bound_box is in LOCAL space; transforming all eight corners is what
+            # makes the result correct for a rotated or scaled object.
+            for corner in bound:
+                points.append(matrix @ mathutils.Vector(corner))
+        else:
+            # A light has no meaningful bounding box. Its position still says WHERE
+            # the change was, which is all a focused framing needs from it.
+            points.append(matrix.translation.copy())
 
     if not points:
         return []
@@ -363,16 +423,17 @@ def scene_corners(scene):
     ]
 
 
-def scene_bounds(scene):
+def scene_bounds(scene, objects=None):
     """World-space ``(centre, radius)`` of everything renderable.
 
-    Returns the empty-scene fallback when there is no geometry, so the caller
-    never has to special-case an empty project.
+    ``objects`` narrows it to a subset, for a focused preview. Returns the empty-scene
+    fallback when there is no geometry, so the caller never has to special-case an
+    empty project.
     """
     import mathutils
 
     corners = []
-    for obj in _renderable_objects(scene):
+    for obj in _renderable_objects(scene) if objects is None else objects:
         matrix = obj.matrix_world
         # bound_box is in LOCAL space; transforming all eight corners is what makes
         # the result correct for a rotated or scaled object.
@@ -425,7 +486,7 @@ def snap_radius_up(radius: float) -> float:
     camera still between turns: a wall growing by five centimetres must not
     silently rescale the whole picture.
     """
-    radius = max(radius, MIN_FRAMED_RADIUS_METERS)
+    radius = max(radius, 0.01)
     decade = 10.0 ** math.floor(math.log10(radius))
     for mantissa in RADIUS_LADDER:
         candidate = mantissa * decade
@@ -434,7 +495,7 @@ def snap_radius_up(radius: float) -> float:
     return 10.0 * decade  # pragma: no cover - ladder ends at 10.0
 
 
-def framed_bounds(scene):
+def framed_bounds(scene, objects=None, min_radius: float = MIN_FRAMED_RADIUS_METERS):
     """The centre and radius the camera should actually frame.
 
     THIS IS THE SUBTLE PART, and it is worth being explicit about why it is not
@@ -478,9 +539,9 @@ def framed_bounds(scene):
     """
     import mathutils
 
-    centre, radius = scene_bounds(scene)
+    centre, radius = scene_bounds(scene, objects)
 
-    framed_radius = snap_radius_up(radius)
+    framed_radius = snap_radius_up(max(radius, min_radius))
     grid = framed_radius * CENTRE_GRID_FRACTION
 
     snapped = mathutils.Vector(
@@ -551,31 +612,50 @@ def fit_distance(corners, centre, direction, tan_h: float, tan_v: float) -> floa
     return required
 
 
-def place_camera(scene, camera, width: int, height: int) -> dict:
-    """Point the camera at the scene and back off far enough to contain it."""
+def place_camera(scene, camera, width: int, height: int, focus_ids=()) -> dict:
+    """Point the camera at the scene, or at the part of it that just changed.
+
+    A FOCUSED preview answers a different question from a site view. "Here is the
+    building" is honest and nearly useless for judging a room: warm downlights over a
+    reception desk, framed with eighty metres of clinic, are a bright postage stamp. So
+    when the caller knows which objects a change touched, the camera frames those and
+    drops to a lower angle.
+
+    Everything that makes the site view stable is kept — the same quantised centre, the
+    same ladder-snapped distance — so a focused view does not jitter between turns
+    either. Only what is being framed, and from how high, changes.
+    """
     import mathutils
 
-    measured_centre, measured_radius = scene_bounds(scene)
-    centre, radius = framed_bounds(scene)
+    subjects = focus_objects(scene, focus_ids)
+    focused = bool(subjects)
+
+    measured_centre, measured_radius = scene_bounds(scene, subjects or None)
+    centre, radius = framed_bounds(
+        scene,
+        objects=subjects or None,
+        min_radius=MIN_FOCUS_RADIUS_METERS if focused else MIN_FRAMED_RADIUS_METERS,
+    )
 
     fov = vertical_fov(camera.data, width, height)
     fov_h = horizontal_fov(camera.data, width, height)
     tan_v = math.tan(max(fov * 0.5, 1e-4))
     tan_h = math.tan(max(fov_h * 0.5, 1e-4))
 
-    direction = mathutils.Vector(CAMERA_DIRECTION).normalized()
+    direction = mathutils.Vector(
+        FOCUS_CAMERA_DIRECTION if focused else CAMERA_DIRECTION
+    ).normalized()
+    margin = FOCUS_CAMERA_MARGIN if focused else CAMERA_MARGIN
 
-    corners = scene_corners(scene)
+    corners = scene_corners(scene, subjects or None)
     if corners:
         distance = fit_distance(corners, centre, direction, tan_h, tan_v)
         # Pad, then snap the distance onto the same coarse ladder the radius uses.
         # Quantising here is what keeps the camera still between turns: without it
         # the zoom would drift by a fraction of a percent every time a wall moved.
-        distance = snap_radius_up(distance * CAMERA_MARGIN)
+        distance = snap_radius_up(distance * margin)
     else:
-        distance = max(
-            (radius * CAMERA_MARGIN) / tan_v, MIN_CAMERA_DISTANCE_METERS
-        )
+        distance = max((radius * margin) / tan_v, MIN_CAMERA_DISTANCE_METERS)
     distance = max(distance, MIN_CAMERA_DISTANCE_METERS)
 
     camera.location = centre + direction * distance
@@ -596,6 +676,8 @@ def place_camera(scene, camera, width: int, height: int) -> dict:
         "measured_centre_meters": [round(v, 6) for v in measured_centre],
         "measured_radius_meters": round(measured_radius, 6),
         "distance_meters": round(distance, 6),
+        "focused": focused,
+        "focus_object_count": len(subjects),
         "horizontal_fov_degrees": round(radians_to_degrees(fov_h) or 0.0, 4),
         # Diagnostic only. The shared converter returns None for a non-finite input,
         # which cannot happen for a computed field of view, but a reported number must
@@ -974,6 +1056,14 @@ def main() -> int:
     width = int(os.environ["PREVIEW_WIDTH"])
     height = int(os.environ["PREVIEW_HEIGHT"])
 
+    # Advisory. A malformed or absent value means "frame the whole scene", never an
+    # error: a preview that refused to render over a bad focus hint would be a worse
+    # outcome than one that is merely zoomed out.
+    try:
+        focus_ids = tuple(json.loads(os.environ.get("PREVIEW_FOCUS") or "[]"))
+    except ValueError:
+        focus_ids = ()
+
     if not os.path.exists(blend_path):
         raise RuntimeError("the project file to preview does not exist")
 
@@ -997,7 +1087,7 @@ def main() -> int:
     # The framing depends on object world matrices, so make sure they are current
     # before measuring the bounding box.
     bpy.context.view_layer.update()
-    framing = place_camera(scene, camera, width, height)
+    framing = place_camera(scene, camera, width, height, focus_ids=focus_ids)
     bpy.context.view_layer.update()
 
     visible = sorted(

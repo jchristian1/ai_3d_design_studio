@@ -86,6 +86,17 @@ class PreviewRequest:
     height: int = DEFAULT_PREVIEW_HEIGHT
     #: The job whose mutation is being depicted, when there is one.
     job_id: Optional[str] = None
+    #: Stable object ids the picture should be ABOUT, when the caller knows.
+    #:
+    #: Normally the objects a job just created or moved, which turns the preview from
+    #: "here is the site" into "here is what changed". A whole building framed from
+    #: above is honest and nearly useless for judging a room: warm downlights over a
+    #: reception desk came out as a bright postage stamp eighty metres away.
+    #:
+    #: Advisory, not a demand. Ids that are not in the scene are ignored and the
+    #: framing falls back to the whole scene, because a preview must never fail — or
+    #: render nothing — over a stale identifier.
+    focus_object_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

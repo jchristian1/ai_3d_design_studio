@@ -168,6 +168,17 @@ class ExecutionRecord:
     #: successful step, used to chain scene versions across steps and reported to
     #: the control plane so the agent can be grounded without a second read.
     scene: Optional[dict[str, Any]] = None
+    #: Stable ids of the objects this plan created, moved, resized or re-clad.
+    #:
+    #: Recorded so the preview can be framed on what changed, and so a REPLAY frames it
+    #: the same way. Artifacts may be re-produced for a completed job (they render from
+    #: the already-saved project, so they cannot alter the design), and without this the
+    #: replayed preview would silently fall back to a whole-site view.
+    #:
+    #: Additive and defaulted, so it needs no record version bump: ``from_wire`` filters
+    #: to known fields, which means an older record loads with this empty and an older
+    #: reader ignores it.
+    changed_object_ids: list[str] = field(default_factory=list)
     #: The model artifact (GLB) wire document, once one is durable. Separate from
     #: ``preview`` for the same reason ``preview`` is separate from ``result``.
     model: Optional[dict[str, Any]] = None

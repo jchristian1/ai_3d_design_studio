@@ -215,7 +215,14 @@ class CapabilityPlanExecutor:
         # A completed plan is never re-run. Artifacts may still be (re)produced: they
         # render from the already-saved project, so they cannot change the design.
         if record is not None and record.phase == phases.COMPLETED:
-            self._attach_artifacts(record, project_id, project_path)
+            # Reuse the recorded focus so a replayed preview frames what the original
+            # run changed, rather than quietly widening to the whole site.
+            self._attach_artifacts(
+                record,
+                project_id,
+                project_path,
+                tuple(record.changed_object_ids or ()),
+            )
             self.store.save(record)
             return PlanOutcome(
                 job_id=job_id,
@@ -265,6 +272,11 @@ class CapabilityPlanExecutor:
         readout = self._read_scene(project_id, project_path)
         if isinstance(readout, PlanOutcome):
             return self._fail_from(record, readout)
+
+        # Kept so the preview can be pointed at whatever this plan turns out to
+        # change. Captured here because this is the last moment the scene is
+        # certainly untouched.
+        scene_before = readout
 
         # ---- scene-version precondition, in-lock, before any mutation ---
         nothing_applied = not any(
@@ -392,7 +404,9 @@ class CapabilityPlanExecutor:
         self.store.save(record)
 
         # ---- artifacts --------------------------------------------------
-        self._attach_artifacts(record, project_id, project_path)
+        focus = changed_object_ids(scene_before, readout)
+        record.changed_object_ids = list(focus)
+        self._attach_artifacts(record, project_id, project_path, focus)
 
         record.result = {
             "applied": self._count(record, APPLIED),
@@ -559,14 +573,22 @@ class CapabilityPlanExecutor:
 
     # -- artifacts ---------------------------------------------------------
     def _attach_artifacts(
-        self, record: ExecutionRecord, project_id: str, project_path: Path
+        self,
+        record: ExecutionRecord,
+        project_id: str,
+        project_path: Path,
+        focus: tuple[str, ...] = (),
     ) -> None:
         """Produce the PNG preview and the GLB model. Never fails the mutation."""
-        self._attach_preview(record, project_id, project_path)
+        self._attach_preview(record, project_id, project_path, focus)
         self._attach_model(record, project_id, project_path)
 
     def _attach_preview(
-        self, record: ExecutionRecord, project_id: str, project_path: Path
+        self,
+        record: ExecutionRecord,
+        project_id: str,
+        project_path: Path,
+        focus: tuple[str, ...] = (),
     ) -> None:
         if record.preview is not None or self.previews is None or self.artifacts is None:
             return
@@ -588,6 +610,7 @@ class CapabilityPlanExecutor:
                     width=self.preview_width,
                     height=self.preview_height,
                     job_id=record.job_id,
+                    focus_object_ids=tuple(focus),
                 )
             )
             if not outcome.ok or outcome.render is None:
@@ -722,6 +745,58 @@ class CapabilityPlanExecutor:
     def _fail_from(self, record: ExecutionRecord, failure: PlanOutcome) -> PlanOutcome:
         error = failure.error or _error("INTERNAL_ERROR", "execution failed")
         return self._fail(record, error["code"], error["message"])
+
+
+def _by_object_id(scene: Optional[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+    objects = (scene or {}).get("objects") or ()
+    return {
+        str(entry.get("studio_object_id")): entry
+        for entry in objects
+        if entry.get("studio_object_id")
+    }
+
+
+def changed_object_ids(
+    before: Optional[Mapping[str, Any]], after: Optional[Mapping[str, Any]]
+) -> tuple[str, ...]:
+    """Objects that this plan created, moved, resized or re-clad.
+
+    Used to point the preview at what actually changed. A preview framed on the whole
+    site is honest and nearly useless for judging a change: warm downlights over a
+    reception desk, framed with eighty metres of clinic around them, are a bright
+    postage stamp — the user reported, reasonably, that they could not see any change.
+
+    Comparison is by stable id, over the two scene reads the executor already performs,
+    so this costs nothing extra. MATERIAL is included alongside geometry because
+    re-cladding a surface changes nothing about its position and is exactly the kind of
+    turn worth looking closely at.
+    """
+    old = _by_object_id(before)
+    new = _by_object_id(after)
+
+    changed: list[str] = []
+    for object_id, entry in new.items():
+        previous = old.get(object_id)
+        if previous is None:
+            changed.append(object_id)
+            continue
+        moved = not _vec_matches(
+            previous.get("world_position_meters"),
+            entry.get("world_position_meters"),
+            TOLERANCE_METERS,
+        )
+        resized = not _vec_matches(
+            previous.get("dimensions_meters"),
+            entry.get("dimensions_meters"),
+            TOLERANCE_METERS,
+        )
+        reclad = (previous.get("material") or {}).get("name") != (
+            entry.get("material") or {}
+        ).get("name")
+        if moved or resized or reclad:
+            changed.append(object_id)
+
+    return tuple(sorted(changed))
 
 
 def _vec_matches(

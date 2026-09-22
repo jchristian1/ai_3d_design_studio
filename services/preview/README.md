@@ -80,6 +80,38 @@ something to render through would mean every preview silently edits the design, 
 the user would find objects they never asked for. The same applies to the temporary
 sun and sky world described under *Lighting*.
 
+### A preview can be ABOUT something
+
+`PreviewRequest.focus_object_ids` names the objects the picture should be about —
+normally the ones a job just created, moved, resized or re-clad, which the worker works
+out by diffing the two scene reads it already performs (`changed_object_ids`).
+
+This exists because a site view answers the wrong question. Warm downlights added over a
+reception desk, framed with eighty metres of clinic around them, are a bright postage
+stamp; the picture is correct and the user cannot see the change in it.
+
+| | |
+|---|---|
+| angle | **steeper** than the site view, not shallower |
+| margin | slightly more generous, so the subject keeps some context |
+| minimum radius | 1.6 m, so focusing on a door handle does not put the camera inside it |
+| unknown ids | ignored — the framing falls back to the whole scene |
+
+The angle is the counter-intuitive part, and it was got wrong first. Dropping the camera
+towards eye level looks more photographic and puts the room's own outer wall between the
+camera and the room: at roughly 14° above horizontal the reception came back half hidden
+behind a 2.7 m wall and a street tree. Seeing into a room from outside means clearing the
+wall tops — about 34° to look 4 m past a 2.7 m wall — so a focused view sits a little
+above that, at 35°.
+
+Lights are matched too, unlike everywhere else in the script. A turn that only adjusts
+lighting changes no geometry, so restricting the focus to renderable objects made exactly
+the turn most in need of a close look fall back to the site view. A focus describes the
+*area* that changed, and a lamp marks that as well as a wall does.
+
+Deletion is deliberately not focusable: there is nothing to point a camera at where an
+object used to be, so a delete-only plan renders the site view.
+
 ### Framing is computed from the scene, and quantised
 
 The camera used to sit at a fixed `(7, -7, 5)` looking at the origin. That framed the
