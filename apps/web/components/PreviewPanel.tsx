@@ -2,13 +2,25 @@
 
 import { useEffect, useState } from "react";
 
-import type { PreviewView } from "../lib/api/index.ts";
 import styles from "./PreviewPanel.module.css";
+
+/**
+ * Just the parts of an artifact this panel needs.
+ *
+ * Widened from `PreviewView` so the workspace can pass its `ArtifactRefView`, which
+ * genuinely does not carry dimensions — the workspace endpoint never returned them. The
+ * panel therefore treats them as unknown rather than being handed a plausible guess: a
+ * missing size label is honest, a wrong one is not.
+ */
+export interface PreviewSize {
+  width?: number;
+  height?: number;
+}
 
 export interface PreviewPanelProps {
   /** Absolute image URL, already built from the configured API base. */
   src: string | null;
-  preview: PreviewView | null;
+  preview: PreviewSize | null;
   /** Showing the previous image while a new change is applied. */
   stale: boolean;
   /** A change succeeded but its preview is unavailable. */
@@ -62,7 +74,7 @@ export function PreviewPanel({
         <h2 id="preview-heading" className={styles.heading}>
           Preview
         </h2>
-        {preview ? (
+        {preview?.width && preview?.height ? (
           <p className={styles.meta}>
             {preview.width} &times; {preview.height}
           </p>
@@ -84,7 +96,7 @@ export function PreviewPanel({
               // Describes what the image SHOWS, not that it is an image. A change
               // in position is the meaningful content here.
               alt={
-                preview
+                preview?.width && preview?.height
                   ? `Current design preview, ${preview.width} by ${preview.height} pixels`
                   : "Current design preview"
               }

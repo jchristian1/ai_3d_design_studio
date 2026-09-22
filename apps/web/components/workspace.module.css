@@ -167,6 +167,18 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
+/* With the rendered still shown, the stage becomes two rows. The model keeps the larger
+   share because it is the thing you interact with; the render needs enough height to
+   actually judge lighting, which a thumbnail cannot do. */
+.stageWithRender {
+  grid-template-rows: minmax(0, 1.9fr) minmax(0, 1fr);
+  gap: 0.9rem;
+}
+.renderSlot {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
 
 .inspectorSlot {
   min-height: 0;

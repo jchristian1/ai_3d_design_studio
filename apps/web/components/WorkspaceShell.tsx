@@ -25,6 +25,7 @@ import { AstraConnect } from "./AstraConnect.tsx";
 import { ChatColumn } from "./ChatColumn.tsx";
 import { InspectorPanel, friendlyName } from "./InspectorPanel.tsx";
 import { ModelViewer } from "./ModelViewer.tsx";
+import { PreviewPanel } from "./PreviewPanel.tsx";
 import styles from "./workspace.module.css";
 
 export interface WorkspaceShellProps {
@@ -46,6 +47,9 @@ export function WorkspaceShell({
 
   const [chatOpen, setChatOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  //: The rendered still is on by default. It is the only view that shows lighting, and
+  //: defaulting it off is what made a working feature look broken.
+  const [renderOpen, setRenderOpen] = useState(true);
   const [reloading, setReloading] = useState(false);
 
   /**
@@ -75,6 +79,10 @@ export function WorkspaceShell({
   const selected = selectedObject(state);
   const approval = pendingApproval(state);
   const attached = useMemo(() => attachedReferences(state), [state]);
+
+  // Only give the render its row once there is something to put in it, so a project with
+  // no preview yet does not lose a third of the viewport to an empty panel.
+  const showRender = renderOpen && session.previewUrl !== null;
 
   const clearSelection = useCallback(() => session.selectObject(null), [session]);
 
@@ -130,6 +138,15 @@ export function WorkspaceShell({
           <span className={styles.modelStatus}>
             {describeModelStatus(state.phase, Boolean(state.model))}
           </span>
+          <button
+            type="button"
+            className={styles.toggle}
+            aria-pressed={renderOpen}
+            onClick={() => setRenderOpen((open) => !open)}
+            title="Show or hide the rendered still"
+          >
+            Render
+          </button>
           <button
             type="button"
             className={styles.toggle}
@@ -191,7 +208,7 @@ export function WorkspaceShell({
           </div>
         ) : null}
 
-        <main className={styles.stage}>
+        <main className={`${styles.stage} ${showRender ? styles.stageWithRender : ""}`}>
           <ModelViewer
             modelUrl={session.modelUrl}
             previewUrl={session.previewUrl}
@@ -199,6 +216,27 @@ export function WorkspaceShell({
             onSelect={session.selectObject}
             busy={session.busy}
           />
+          {/* The rendered still, beneath the interactive model.
+            *
+            * These are two different pictures of one design and both are worth having.
+            * The model is what you orbit and click; the render is what Blender actually
+            * produced, and it is the ONLY place lighting appears — a GLB carries no
+            * lights, so the interactive view cannot show them at all. Leaving this panel
+            * out is why several rounds of lighting work were invisible in the browser
+            * while being perfectly correct on disk. */}
+          {showRender ? (
+            <div className={styles.renderSlot}>
+              <PreviewPanel
+                src={session.previewUrl}
+                // The workspace's artifact record carries no dimensions, so none are
+                // claimed. The image still displays; only the size label is absent.
+                preview={null}
+                stale={session.busy}
+                warning={null}
+                busy={session.busy}
+              />
+            </div>
+          ) : null}
         </main>
 
         {inspectorOpen ? (

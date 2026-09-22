@@ -415,4 +415,59 @@ describe("the workspace", () => {
     assert.doesNotMatch(text, /apply_capabilities/);
     assert.doesNotMatch(text, /create_wall/);
   });
+
+  // ---------------------------------------------------------------------------
+  //
+  // The rendered still is the ONLY view that shows lighting: a GLB carries no lights, so
+  // the interactive model cannot show them at all. The panel existed, the API served the
+  // artifact, and the workspace fetched the state — but nothing rendered it, because the
+  // panel was left behind when the UI moved from the session shell to this one. Several
+  // rounds of lighting work were invisible in the browser while being correct on disk.
+  //
+  // These tests exist so it cannot quietly go missing again.
+
+  describe("the rendered still", () => {
+    const PREVIEW = {
+      artifact_id: "preview_abc123",
+      artifact_type: "preview_image",
+      media_type: "image/png",
+      created_at: "2026-01-01T00:00:00Z",
+      size_bytes: 20481,
+      scene_version: "sha256:abc",
+      url: `/api/projects/${PROJECT}/artifacts/preview_abc123`,
+    };
+
+    it("is shown when the project has one", async () => {
+      const { screen, waitFor } = await renderShell(stubs({ preview: PREVIEW }));
+
+      await waitFor(() => screen.getByRole("heading", { name: "Preview" }));
+      const image = screen.getByRole("img", { name: /design preview/i });
+      assert.match(image.getAttribute("src") ?? "", /preview_abc123/);
+    });
+
+    it("takes no space when there is nothing rendered yet", async () => {
+      // A project that has never been changed should not lose a third of the viewport to
+      // an empty panel.
+      const { screen, waitFor } = await renderShell(stubs({ preview: null }));
+
+      await waitFor(() => screen.getByRole("heading", { name: "3D model" }));
+      assert.equal(screen.queryByRole("heading", { name: "Preview" }), null);
+    });
+
+    it("can be hidden, so the model can have the whole stage", async () => {
+      const { screen, waitFor } = await renderShell(stubs({ preview: PREVIEW }));
+      const { fireEvent } = await import("@testing-library/react");
+
+      await waitFor(() => screen.getByRole("heading", { name: "Preview" }));
+      const toggle = screen.getByRole("button", { name: "Render" });
+      assert.equal(toggle.getAttribute("aria-pressed"), "true");
+
+      fireEvent.click(toggle);
+
+      await waitFor(() => {
+        assert.equal(screen.queryByRole("heading", { name: "Preview" }), null);
+      });
+      assert.equal(toggle.getAttribute("aria-pressed"), "false");
+    });
+  });
 });
