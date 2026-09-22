@@ -478,6 +478,100 @@ def _metal(spec: MaterialSpec, size: int, rng: random.Random):
     return value, value.filter(ImageFilter.GaussianBlur(1.4))
 
 
+def _veneer(spec: MaterialSpec, size: int, rng: random.Random):
+    """Fine continuous wood grain with NO plank joints.
+
+    This exists because the plank patterns could not express the thing people
+    actually mean by a timber reception desk: a single smooth veneered panel. Run
+    through ``_planks`` a desk came out with floorboard joints across it, and since
+    it also sat on an oak floor, the two read as one surface. A veneer has grain and
+    no joints at all, which is the whole distinction.
+    """
+    coarse = _make_seamless(_stretched_noise(size, 7, 30.0, rng.randrange(1 << 30), blur=1.2))
+    fine = _make_seamless(_stretched_noise(size, 140, 22.0, rng.randrange(1 << 30)))
+    figure = _make_seamless(_stretched_noise(size, 26, 26.0, rng.randrange(1 << 30), blur=0.4))
+
+    value = _blend(coarse, fine, 0.45)
+    value = _blend(value, figure, 0.3)
+    value = _autocontrast(value, cutoff=3.0)
+    # A narrow range: polished veneer is even, and wide tonal swings read as
+    # weathered planking.
+    value = _compress(value, 120, 235)
+    # Relief is almost nothing — grain is colour, not topography.
+    return value, value.filter(ImageFilter.GaussianBlur(1.6))
+
+
+def _stone_slab(spec: MaterialSpec, size: int, rng: random.Random):
+    """Large-format polished stone: soft clouding, faint veins, barely-there joints.
+
+    The joints are deliberately close in tone to the face. A large-format polished
+    floor is defined by how little it interrupts — draw the grout as strongly as a
+    ceramic tile and it stops looking like a hotel lobby and starts looking like a
+    bathroom.
+    """
+    rows = columns = 2
+
+    body = _make_seamless(_noise(size, size, 26.0, rng.randrange(1 << 30)))
+    body = body.filter(ImageFilter.GaussianBlur(7.0))
+    body = _autocontrast(body, cutoff=1.0)
+
+    veins = _make_seamless(_stretched_noise(size, 18, 34.0, rng.randrange(1 << 30)))
+    veins = veins.rotate(34.0, resample=Image.BICUBIC, expand=False)
+    veins = veins.filter(ImageFilter.GaussianBlur(2.2))
+    veins = ImageChops.difference(veins, Image.new("L", (size, size), 128))
+    veins = veins.point(lambda v: max(0, 235 - v * 16))
+
+    value = ImageChops.subtract(body, veins, scale=3.2, offset=26)
+    value = _compress(_autocontrast(value, cutoff=1.0), 186, 255)
+
+    height = Image.new("L", (size, size), 236)
+    _grid_lines(
+        size,
+        height,
+        value,
+        rows=rows,
+        columns=columns,
+        stagger=False,
+        joint_px=max(size // 340, 2),
+        joint_value=150,
+        joint_height=188,
+        rng=rng,
+    )
+    return value, height.filter(ImageFilter.GaussianBlur(0.6))
+
+
+def _panel(spec: MaterialSpec, size: int, rng: random.Random):
+    """A dark feature wall of vertical panels with recessed shadow gaps.
+
+    The vertical rhythm is the point: it is what makes a dark wall read as
+    deliberate cladding rather than as an unlit surface.
+    """
+    columns = 4
+
+    grain = _make_seamless(_stretched_noise(size, 110, 20.0, rng.randrange(1 << 30)))
+    grain = grain.transpose(Image.ROTATE_90)
+    mottle = _make_seamless(_noise(size, size, 24.0, rng.randrange(1 << 30)))
+    mottle = mottle.filter(ImageFilter.GaussianBlur(2.6))
+    value = _compress(_autocontrast(_blend(mottle, grain, 0.4), cutoff=2.0), 108, 226)
+
+    height = Image.new("L", (size, size), 214)
+    value_draw = ImageDraw.Draw(value)
+    height_draw = ImageDraw.Draw(height)
+
+    pitch = size / columns
+    gap = max(size // 190, 2)
+    for index in range(columns + 1):
+        x = index * pitch
+        for draw, tone in ((value_draw, 40), (height_draw, 52)):
+            draw.rectangle([x - gap / 2, 0, x + gap / 2, size], fill=tone)
+            # Wrap the seam so the left and right edges agree.
+            if index == 0:
+                draw.rectangle([size - gap / 2, 0, size + gap / 2, size], fill=tone)
+
+    _tint_cells(size, value, rows=1, columns=columns, stagger=False, spread=12, rng=rng)
+    return value, height.filter(ImageFilter.GaussianBlur(1.0))
+
+
 def _marble(spec: MaterialSpec, size: int, rng: random.Random):
     """Veins, approximated by thresholding heavily blurred directional noise."""
     body = _make_seamless(_noise(size, size, 30.0, rng.randrange(1 << 30)))
@@ -509,6 +603,9 @@ PATTERNS = {
     "fabric": _fabric,
     "metal": _metal,
     "marble": _marble,
+    "veneer": _veneer,
+    "stone_slab": _stone_slab,
+    "panel": _panel,
 }
 
 

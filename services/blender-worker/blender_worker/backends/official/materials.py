@@ -108,14 +108,61 @@ def _studio_load_image(path, non_colour):
     return image
 
 
-def studio_box_uv(obj, tile_meters=1.0):
+#: Largest dimension, in metres, that ``space="auto"`` treats as furniture.
+#:
+#: Chosen against a real project: its reception desk parts are 0.1-3.2 m, while its
+#: walls, floors and slabs are 7-47 m. Anything between is a judgement call, and
+#: Astra can always say which it wants.
+_STUDIO_FURNITURE_MAX_METERS = 4.0
+
+
+def _studio_world_bounds(objects):
+    """Combined world-space bounding-box centre of several objects, or None."""
+    import mathutils
+
+    lo = None
+    hi = None
+    for obj in objects:
+        matrix = getattr(obj, "matrix_world", None)
+        bound = getattr(obj, "bound_box", None)
+        if matrix is None or bound is None:
+            continue
+        for corner in bound:
+            point = matrix @ mathutils.Vector(corner)
+            if lo is None:
+                lo = point.copy()
+                hi = point.copy()
+                continue
+            for axis in range(3):
+                lo[axis] = min(lo[axis], point[axis])
+                hi[axis] = max(hi[axis], point[axis])
+    if lo is None:
+        return None, 0.0
+    centre = (lo + hi) * 0.5
+    extent = max((hi[axis] - lo[axis]) for axis in range(3))
+    return centre, extent
+
+
+def studio_box_uv(obj, tile_meters=1.0, anchor=None):
     """Give a mesh real-world-scaled UVs by box projection.
 
-    Each face is projected along whichever world axis it most faces, using WORLD
-    coordinates divided by the tile size. That produces brick that is the same
-    size on every wall regardless of how the wall was modelled, and — unlike a
-    Mapping node — it is genuine UV data, so it survives export to glTF and shows
-    up in the browser.
+    Each face is projected along whichever world axis it most faces, using world
+    coordinates divided by the tile size. That produces brick that is the same size
+    on every wall regardless of how the wall was modelled, and — unlike a Mapping
+    node — it is genuine UV data, so it survives export to glTF and shows up in the
+    browser.
+
+    ``anchor`` is what the pattern is measured FROM, and it decides something
+    visible. With no anchor the projection uses raw world coordinates, so a pattern
+    is continuous across separate objects: a floor built from three slabs looks like
+    one floor, which is right. But the same property put a reception desk's plank
+    joints on the very same world grid as the oak floor beneath it, perfectly
+    aligned, so the desk read as a raised piece of the floor rather than as a
+    separate object. Passing the object's own bounding-box centre as the anchor
+    gives the piece its own phase and breaks that false continuity.
+
+    Scale is unaffected either way — the anchor only shifts the pattern, so a
+    0.075 m brick stays 0.075 m.
 
     The projection is written into the mesh's ACTIVE UV layer, replacing whatever
     was there, and a layer is created only when the mesh has none. Adding a second
@@ -125,12 +172,16 @@ def studio_box_uv(obj, tile_meters=1.0):
     ``texCoord`` index. One UV set is smaller and has one fewer thing to go wrong.
     """
     import bmesh
+    import mathutils
 
     mesh = getattr(obj, "data", None)
     if mesh is None or not hasattr(mesh, "polygons"):
         return False
 
     tile = float(tile_meters) or 1.0
+    origin = mathutils.Vector(anchor) if anchor is not None else mathutils.Vector(
+        (0.0, 0.0, 0.0)
+    )
 
     bm = bmesh.new()
     try:
@@ -154,7 +205,7 @@ def studio_box_uv(obj, tile_meters=1.0):
                     best = magnitude
                     axis = candidate
             for loop in face.loops:
-                world = matrix @ loop.vert.co
+                world = (matrix @ loop.vert.co) - origin
                 if axis == 0:
                     u, v = world.y, world.z
                 elif axis == 1:
@@ -178,12 +229,30 @@ def studio_box_uv(obj, tile_meters=1.0):
     return True
 
 
-def studio_material(target, name, tile_meters=None, reuse=True):
+def studio_material(target, name, tile_meters=None, space="auto", reuse=True):
     """Clad an object (or objects) in a library material.
 
     ``target`` may be one object or any iterable of objects. Returns the Blender
     material, or ``None`` when the name is not in the library — never raises, so a
     wrong name costs one untextured surface rather than the whole scene.
+
+    ``space`` decides where the texture pattern is measured from:
+
+    ``"world"``
+        Continuous across objects. Correct for architecture — a floor made of
+        three slabs, or a wall run split into segments, should look like one
+        surface.
+    ``"object"``
+        Anchored to the piece's own bounding box. Correct for furniture and
+        joinery, which are separate objects sitting on the architecture and must
+        not inherit its grid.
+    ``"auto"`` (default)
+        World for anything larger than ``_STUDIO_FURNITURE_MAX_METERS``, object for
+        anything smaller.
+
+    Passing SEVERAL objects in one call makes them share one anchor, so a desk
+    supplied as ``[top, body, plinth]`` is patterned as one piece of furniture
+    rather than three. That is the reason to group a call rather than loop.
     """
     entry = _STUDIO_LIBRARY.get(name)
     if entry is None:
@@ -191,10 +260,17 @@ def studio_material(target, name, tile_meters=None, reuse=True):
         return None
 
     objects = [target] if hasattr(target, "data") else list(target or ())
+    objects = [o for o in objects if getattr(o, "data", None) is not None]
     if not objects:
         return None
 
     tile = float(tile_meters) if tile_meters else float(entry.get("tile_meters", 1.0))
+
+    centre, extent = _studio_world_bounds(objects)
+    mode = str(space or "auto").lower()
+    if mode == "auto":
+        mode = "object" if extent and extent <= _STUDIO_FURNITURE_MAX_METERS else "world"
+    anchor = centre if (mode == "object" and centre is not None) else None
 
     key = "StudioMat_%s_%g" % (name, tile)
     material = _studio_bpy.data.materials.get(key) if reuse else None
@@ -209,7 +285,7 @@ def studio_material(target, name, tile_meters=None, reuse=True):
         mesh = getattr(obj, "data", None)
         if mesh is None or not hasattr(mesh, "materials"):
             continue
-        studio_box_uv(obj, tile)
+        studio_box_uv(obj, tile, anchor=anchor)
         mesh.materials.clear()
         mesh.materials.append(material)
         obj[_STUDIO_MATERIAL_PROPERTY] = name

@@ -9,7 +9,7 @@ synthesize.py  HOW the maps are drawn, procedurally, with no shipped assets
 library.py     WHERE the PNGs are cached, and the paths Blender needs
 ```
 
-Seventeen materials, each with three maps (`base_color`, `roughness`, `normal`).
+Twenty materials, each with three maps (`base_color`, `roughness`, `normal`).
 
 ## Why a fixed catalogue when Astra writes its own code
 
@@ -36,7 +36,7 @@ correctly every time.
 
 Everything is drawn with Pillow's whole-image C operations — `effect_noise`,
 `offset`, `subtract`, `resize`, `point`, `composite`. There is not one per-pixel
-Python loop, which is why seventeen materials take about eight seconds rather than
+Python loop, which is why twenty materials take about ten seconds rather than
 minutes. The output is cached in `runtime/textures/` (gitignored), keyed by a
 fingerprint of the catalogue, so an unchanged catalogue is a directory listing and a
 changed one regenerates without anyone remembering to.
@@ -100,3 +100,44 @@ argument for rendering a contact sheet when you change this code.
    thread and then immediately its weft meant the higher index always won at
    crossings. Fixed by laying all warp, then all weft, then restoring warp on
    alternating crossings — which is what weaving actually is.
+
+## Where a pattern is measured from, and why it matters
+
+`studio_material` also decides the texture's ANCHOR, and it is not a detail. The
+first version projected raw world coordinates for everything, which is right for
+architecture: a floor laid as three slabs, or a wall run split into segments, should
+look like one continuous surface.
+
+It is wrong for furniture. A reception desk clad in timber ended up with its plank
+joints on the very same world grid as the oak floor beneath it, perfectly aligned, so
+the desk read as a raised piece of the floor rather than as a separate object.
+
+| `space` | anchor | for |
+|---|---|---|
+| `world` | world origin | floors, walls, ceilings, slabs |
+| `object` | the piece's own bounding-box centre | furniture, joinery, doors |
+| `auto` (default) | world above 4 m, object below | usually right |
+
+Scale is identical either way — the anchor only shifts the pattern, so a 0.075 m brick
+stays 0.075 m.
+
+Objects passed together in ONE call share a single anchor:
+
+```python
+studio_material([desk_top, desk_body, desk_plinth], "pale_veneer")
+```
+
+That patterns the desk as one piece of furniture rather than three, which is the
+reason to group a call instead of looping.
+
+## Material families, not just shades
+
+Three of the twenty entries exist because of a specific failure. Comparing a real
+reception render against the photograph it was meant to resemble, the library had no
+polished pale floor, no jointless timber and no dark cladding — so the nearest choices
+were a ceramic tile, an oak floorboard and a plaster, and a floorboard desk standing on
+a floorboard floor is what made the room look wrong.
+
+`polished_stone`, `pale_veneer` and `dark_panel` close that gap. The lesson is in the
+prompt too: contrast the material FAMILY between a surface and the thing standing on
+it, not merely the shade.

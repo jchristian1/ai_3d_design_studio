@@ -177,13 +177,34 @@ brick is a brick-sized brick on every wall, with no UV work and no scale argumen
 
 - Prefer studio_material over setting a flat colour whenever a real surface is meant.
   Use a plain colour only for something genuinely painted or abstract.
-- Pass a second argument ONLY to override the real-world tile size deliberately, for
-  example studio_material(obj, "ceramic_tile", 0.45) for small mosaic tiles.
+- Pass a tile size ONLY to override the real-world scale deliberately, for example
+  studio_material(obj, "ceramic_tile", 0.45) for small mosaic tiles.
 - Do NOT load image files, write file paths, or build texture node graphs yourself.
   There are no other textures available, and a path in your code stops to ask the
   user for permission.
 - If nothing in the library fits, say so in "assumptions", pick the closest entry,
   and move on. Never invent a material name: an unknown name leaves the surface bare.
+
+GROUP EACH PIECE OF FURNITURE INTO ONE CALL, and let the platform anchor it:
+
+    studio_material([desk_top, desk_body, desk_plinth], "pale_veneer")
+
+Objects passed together share one texture anchor, so they are patterned as ONE piece
+rather than three. Architecture is anchored to the world instead, so a floor built
+from several slabs still looks like one floor. The platform decides from size and is
+usually right; pass space="object" or space="world" when you want to be certain.
+
+DO NOT CLAD A SURFACE AND THE THING STANDING ON IT IN THE SAME FAMILY. An oak floor
+with an oak-boarded desk on top of it does not read as two objects — it reads as a
+lump of the floor, and it is the single most common way a room looks wrong. Contrast
+the material FAMILY, not just the shade: stone floor with timber joinery, timber floor
+with a stone or dark-panelled counter. Choosing "dark_wood" for a desk standing on
+"oak_floor" is exactly the mistake to avoid.
+
+CHECK WHAT IS ALREADY THERE FIRST. The scene listing below names the material on every
+object, so you can see what a surface is already clad in. Use it: re-cladding
+something that is already right wastes a turn, and it is how a deliberate scheme gets
+overwritten.
 
 WRITE ROBUST, VERSION-SAFE BLENDER CODE. The target is a MODERN Blender (5.x).
 - Build the concrete geometry FIRST (meshes, curves, objects, materials, lights, camera).
@@ -250,6 +271,52 @@ def _nothing_built(agent_input: AgentInput) -> bool:
     return agent_input.scene is None or not agent_input.scene.objects
 
 
+#: Prefix the worker gives materials it built from the studio library, as
+#: ``StudioMat_<library name>_<tile size>``.
+_LIBRARY_MATERIAL_PREFIX: Final = "StudioMat_"
+
+
+def _describe_material(material: Any) -> str:
+    """How an object's material should read to the model.
+
+    This exists because the obvious rendering of the data was actively misleading.
+    A ``MaterialSummary`` carries a name and a base colour, and the previous version
+    printed only the colour — but when a TEXTURE is connected, Blender leaves the
+    colour input at its default 0.8 grey. So every textured object in the scene
+    reported ``colour (0.800, 0.800, 0.800)``, and Astra was told, of a building
+    clad in oak and brick, that all of it was grey.
+
+    Worse than useless: it made Astra blind to its own work. It could not tell that
+    a desk and the floor under it were both wood, so it had no way to notice the
+    clash a person sees immediately.
+
+    The name is the part that carries meaning, so the name is what gets shown —
+    decoded back to the library material where there is one, and flagged as
+    self-authored where there is not, because a self-authored material is flat
+    colour by the time it reaches the browser.
+    """
+    if material is None:
+        return ""
+
+    name = getattr(material, "name", None) or ""
+    if name.startswith(_LIBRARY_MATERIAL_PREFIX):
+        stripped = name[len(_LIBRARY_MATERIAL_PREFIX) :]
+        # Trailing "_<tile>" is the real-world tile size the worker encoded; the
+        # library name itself contains underscores, so split from the right.
+        library_name = stripped.rsplit("_", 1)[0] if "_" in stripped else stripped
+        return f", material: {library_name} (studio library)"
+
+    colour = getattr(material, "base_color", None)
+    if name and colour is not None:
+        return (
+            f", material: {name!r} (your own, colour "
+            f"{colour.r:.2f}/{colour.g:.2f}/{colour.b:.2f})"
+        )
+    if name:
+        return f", material: {name!r} (your own)"
+    return ""
+
+
 def _describe_scene(scene: Optional[SceneSnapshot]) -> str:
     if scene is None:
         # Only happens when the design machine could not be read at all. Say what that
@@ -266,12 +333,7 @@ def _describe_scene(scene: Optional[SceneSnapshot]) -> str:
         position = obj.world_position_meters
         dimensions = obj.dimensions_meters
         identity = obj.studio_object_id or "(no stable id)"
-        material = ""
-        if obj.material is not None and obj.material.base_color is not None:
-            colour = obj.material.base_color
-            material = (
-                f", colour ({colour.r:.3f}, {colour.g:.3f}, {colour.b:.3f})"
-            )
+        material = _describe_material(obj.material)
         lines.append(
             f"- {obj.name} [{identity}] type={obj.object_type} "
             f"at ({position.x:.3f}, {position.y:.3f}, {position.z:.3f}) m, "

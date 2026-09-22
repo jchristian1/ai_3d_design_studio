@@ -251,6 +251,46 @@ MATERIALS: Final[tuple[MaterialSpec, ...]] = (
         bump=0.3,
         use_for="worktops, bathrooms, luxury floors",
     ),
+    # --- added for lobby and reception work -------------------------------
+    #
+    # These three came from comparing a real reception render against a
+    # photograph the user wanted it to look like. The gap was not lighting alone:
+    # the library simply had no polished pale floor, no jointless timber, and no
+    # dark cladding, so the closest available choices were a ceramic tile, an oak
+    # floorboard and a plaster — and a desk clad in floorboards next to a
+    # floorboard floor is what made the render look wrong.
+    MaterialSpec(
+        name="polished_stone",
+        label="Polished pale stone",
+        pattern="stone_slab",
+        palette=((216, 212, 205), (236, 233, 227), (194, 190, 183)),
+        roughness=0.08,
+        roughness_variation=0.05,
+        tile_meters=1.4,
+        bump=0.25,
+        use_for="lobby and reception floors — large-format, glossy, reflective",
+    ),
+    MaterialSpec(
+        name="pale_veneer",
+        label="Pale timber veneer",
+        pattern="veneer",
+        palette=((196, 162, 120), (218, 188, 150), (168, 136, 98)),
+        roughness=0.3,
+        roughness_variation=0.08,
+        tile_meters=1.6,
+        bump=0.25,
+        use_for="reception desks, joinery, wall panelling — smooth, no plank joints",
+    ),
+    MaterialSpec(
+        name="dark_panel",
+        label="Dark panelled cladding",
+        pattern="panel",
+        palette=((60, 58, 58), (82, 79, 78), (42, 40, 40)),
+        roughness=0.5,
+        tile_meters=1.2,
+        bump=0.9,
+        use_for="feature walls behind reception, dark accent cladding",
+    ),
 )
 
 
