@@ -89,6 +89,17 @@ SENSITIVE_BUILTINS: Final = frozenset(
     }
 )
 
+#: Builtins worth flagging even when only MENTIONED, because a bare reference can be
+#: stored and invoked later (``handler = eval``), so requiring a visible call would be
+#: trivially avoidable.
+#:
+#: ``input`` is deliberately absent. Writing shader code makes ``input`` an obvious
+#: variable name — ``for input in bsdf.inputs`` — and flagging the word cost a user
+#: approval prompt on a turn that never read from stdin. Calling ``input()`` is still
+#: flagged by :meth:`_Walker.visit_Call`, which is the form that could actually block a
+#: headless render waiting for a line that will never come.
+SENSITIVE_BUILTINS_BY_REFERENCE: Final = SENSITIVE_BUILTINS - frozenset({"input"})
+
 #: ``bpy.ops.wm.*`` operators that manage FILES and the application rather than the
 #: scene. The platform owns opening and saving the project, so model code touching
 #: these is always worth a look.
@@ -233,27 +244,104 @@ SCENE_DATA_ROOTS: Final = frozenset({"bpy", "bpy_data", "context", "scene"})
 SCENE_DATA_METHODS: Final = frozenset({"remove", "clear", "rename", "replace"})
 
 
-def _is_scene_data_call(node: ast.Attribute) -> bool:
+#: Builtins that merely WRAP a sequence, so the scene data inside still shows through.
+#: ``for o in list(bpy.data.objects)`` is the standard way to iterate a collection you
+#: are about to mutate, and it must not hide that ``o`` is scene data.
+_SEQUENCE_WRAPPERS: Final = frozenset(
+    {"list", "tuple", "set", "sorted", "reversed", "iter", "enumerate"}
+)
+
+
+def _chain_root(node: ast.AST) -> Optional[str]:
+    """The bare name an attribute/subscript chain is rooted at, if any.
+
+    Returns ``None`` when the chain starts from a call, which is what keeps
+    ``Path(p).unlink()`` out of the scene-work exemption.
+    """
+    current: ast.AST = node
+    while True:
+        if isinstance(current, (ast.Attribute, ast.Subscript)):
+            current = current.value
+            continue
+        if (
+            isinstance(current, ast.Call)
+            and isinstance(current.func, ast.Name)
+            and current.func.id in _SEQUENCE_WRAPPERS
+            and current.args
+        ):
+            current = current.args[0]
+            continue
+        break
+    return current.id if isinstance(current, ast.Name) else None
+
+
+def scene_data_names(tree: ast.AST) -> frozenset[str]:
+    """Local names that hold scene data, in addition to :data:`SCENE_DATA_ROOTS`.
+
+    WHY THIS EXISTS
+
+    ``remove`` is only exempt when the platform can see it is rooted at ``bpy``. That
+    covers ``bpy.data.objects.remove(obj)`` and stops ``os.remove``, which is the right
+    shape — but real authored code assigns first:
+
+        tree = material.node_tree
+        for node in list(tree.nodes):
+            tree.nodes.remove(node)          # rooted at `tree`, not at `bpy`
+
+    Rebuilding a material's node graph like that is the most ordinary thing in the
+    world, and it was stopping to ask the user for approval every time, on a re-clad
+    turn where the answer is always yes. A gate that fires on almost every rebuild
+    teaches people to approve without reading, which is the one thing it must not do.
+
+    So assignments are followed: a name bound from a scene-rooted expression is itself
+    scene data. Iterated to a fixed point, because chains are built up a step at a
+    time. Anything rooted at a CALL is still excluded, so a helper of unknown origin —
+    ``helper = get_helper(); helper.remove(path)`` — keeps asking, exactly as before.
+    """
+    names = set(SCENE_DATA_ROOTS)
+    # Chains in authored code are short; four passes is far more than enough and
+    # bounds the work on a hostile input.
+    for _ in range(4):
+        discovered = False
+        for node in ast.walk(tree):
+            targets: list[ast.AST] = []
+            source: Optional[ast.AST] = None
+            if isinstance(node, ast.Assign):
+                targets, source = list(node.targets), node.value
+            elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+                targets, source = [node.target], node.value
+            elif isinstance(node, (ast.For, ast.AsyncFor)):
+                targets, source = [node.target], node.iter
+            elif isinstance(node, ast.withitem):
+                targets, source = (
+                    [node.optional_vars] if node.optional_vars else []
+                ), node.context_expr
+            if source is None or _chain_root(source) not in names:
+                continue
+            for target in targets:
+                # A tuple target (``for a, b in …``) says nothing reliable about which
+                # element is scene data, so only plain names are followed.
+                if isinstance(target, ast.Name) and target.id not in names:
+                    names.add(target.id)
+                    discovered = True
+        if not discovered:
+            break
+    return frozenset(names)
+
+
+def _is_scene_data_call(node: ast.Attribute, scene_names: frozenset[str]) -> bool:
     """True for ``bpy.…remove`` shaped attributes: scene edits, not host access.
 
-    Rooted at a name in :data:`SCENE_DATA_ROOTS` and reached through an attribute or
-    subscript chain, so ``bpy.data.objects.remove`` and
+    Rooted at a name known to hold scene data — ``bpy`` and friends, plus any local
+    bound from them (see :func:`scene_data_names`) — and reached through an attribute
+    or subscript chain, so ``bpy.data.objects.remove`` and
     ``bpy.data.collections['x'].objects.unlink`` qualify while ``os.remove``,
     ``shutil.rmtree`` and ``Path(p).unlink`` do not. A chain that starts from a call
-    (``Path(p).unlink``) is deliberately not treated as scene work.
+    is deliberately not treated as scene work.
     """
     if node.attr not in SCENE_DATA_METHODS:
         return False
-    current: ast.AST = node.value
-    # Walk back through attribute and subscript access — ``bpy.data.collections['x']
-    # .objects`` mixes both — to find what the chain is ultimately rooted at. A chain
-    # rooted at a bare Name in SCENE_DATA_ROOTS is scene work; one rooted at a Call
-    # (``Path(p).unlink``) deliberately is not.
-    while isinstance(current, (ast.Attribute, ast.Subscript)):
-        current = current.value
-    if isinstance(current, ast.Name):
-        return current.id in SCENE_DATA_ROOTS
-    return False
+    return _chain_root(node.value) in scene_names
 
 
 def _looks_absolute(value: str) -> bool:
@@ -269,8 +357,11 @@ def _looks_absolute(value: str) -> bool:
 
 
 class _Walker(ast.NodeVisitor):
-    def __init__(self) -> None:
+    def __init__(self, scene_names: frozenset[str] = SCENE_DATA_ROOTS) -> None:
         self.findings: list[RiskFinding] = []
+        #: Names that hold scene data in THIS program, so a collection edit reached
+        #: through a local reads as scene work rather than as filesystem access.
+        self.scene_names = scene_names
 
     def _flag(self, reason: str, node: ast.AST) -> None:
         self.findings.append(RiskFinding(reason=reason, line=getattr(node, "lineno", 0)))
@@ -317,14 +408,16 @@ class _Walker(ast.NodeVisitor):
 
     # --- attributes and names --------------------------------------------
     def visit_Attribute(self, node: ast.Attribute) -> None:
-        if node.attr in SENSITIVE_ATTRIBUTES and not _is_scene_data_call(node):
+        if node.attr in SENSITIVE_ATTRIBUTES and not _is_scene_data_call(
+            node, self.scene_names
+        ):
             self._flag(REASON_ATTRIBUTE.format(name=node.attr), node)
         elif node.attr.startswith("__") and node.attr.endswith("__"):
             self._flag(REASON_DUNDER.format(name=node.attr), node)
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
-        if node.id in SENSITIVE_BUILTINS:
+        if node.id in SENSITIVE_BUILTINS_BY_REFERENCE:
             self._flag(REASON_BUILTIN.format(name=node.id), node)
         elif node.id.startswith("__") and node.id.endswith("__"):
             self._flag(REASON_DUNDER.format(name=node.id), node)
@@ -364,7 +457,10 @@ def classify_python(code: str) -> RiskAssessment:
         line = error.lineno or 0
         return RiskAssessment(decision=REFUSED, findings=(RiskFinding(REASON_SYNTAX, line),))
 
-    walker = _Walker()
+    # Which locals hold scene data has to be known BEFORE walking, because a
+    # collection edit can appear earlier in the file than nothing — the assignment
+    # that proves `tree` came from `bpy` may sit many lines above its use.
+    walker = _Walker(scene_data_names(tree))
     walker.visit(tree)
     findings = _deduplicate(walker.findings)
     decision = APPROVAL_REQUIRED if findings else AUTO

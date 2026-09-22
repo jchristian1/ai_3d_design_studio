@@ -11,7 +11,9 @@
  *   looking at the same wall from the same angle, not thrown back to a default view.
  * - **Clicking an object selects it** by the stable `studio_object_id` that Blender's
  *   glTF exporter carries through as custom properties, so "make this taller" resolves
- *   to the thing you clicked rather than to a guess.
+ *   to the thing you clicked rather than to a guess. Selection draws an OUTLINE and
+ *   never recolours the surface — you usually select something in order to discuss how
+ *   it looks.
  *
  * A fourth promise, added with the material library: **a material looks the same here as
  * in the still preview.** Both use the Khronos PBR Neutral transform, the same exposure,
@@ -471,14 +473,30 @@ async function createScene(
 
   let root: import("three").Object3D | null = null;
   let hasFramed = false;
-  const originalMaterials = new Map<string, unknown>();
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-  const highlight = new THREE.MeshStandardMaterial({
-    color: 0x4c9ffe,
-    emissive: 0x1b4f8a,
-    roughness: 0.4,
-  });
+
+  // Selection is an OUTLINE around the object, not a recolouring of it.
+  //
+  // It used to swap the mesh's material for a flat blue one. On a small object that
+  // reads as a highlight; on a 47 m floor slab it turns the whole floor bright blue and
+  // hides the material underneath. Since the point of selecting a surface is usually to
+  // talk about how it looks, a highlight that conceals the finish is the one thing it
+  // must not do — and it looked so much like a bug that it was reported as one.
+  //
+  // Swapping also could not stay correct. Library materials are SHARED between every
+  // object using them, so anything that tints "the selected material" tints every brick
+  // wall at once, and restoring the original depended on a per-mesh bookkeeping map that
+  // had to survive reloads and disposal.
+  const selectionBox = new THREE.Box3();
+  const selectionOutline = new THREE.Box3Helper(selectionBox, 0x4c9ffe);
+  selectionOutline.visible = false;
+  // Draw on top of the model rather than z-fighting with the surface it surrounds.
+  const outlineMaterial = selectionOutline.material as import("three").Material;
+  outlineMaterial.depthTest = false;
+  outlineMaterial.transparent = true;
+  selectionOutline.renderOrder = 999;
+  scene.add(selectionOutline);
 
   let running = true;
   function animate() {
@@ -536,9 +554,6 @@ async function createScene(
    */
   function disposeMaterial(material: unknown) {
     if (!material) return;
-    // Never dispose the shared highlight material here — it is reused across loads and is
-    // only released in the handle's dispose(). A selected mesh carries it as its material.
-    if (material === highlight) return;
     const mat = material as Record<string, unknown> & { dispose?: () => void };
     for (const value of Object.values(mat)) {
       // A texture is any material property that owns a GPU resource with dispose().
@@ -559,18 +574,17 @@ async function createScene(
     root.traverse((child) => {
       const mesh = child as import("three").Mesh;
       mesh.geometry?.dispose?.();
-      // Dispose the ORIGINAL material we recorded on load, not whatever is currently
-      // assigned — a selected mesh has been swapped to the shared highlight material, and
-      // disposing that here would break every future selection.
-      const original = originalMaterials.get(mesh.uuid) ?? mesh.material;
-      if (Array.isArray(original)) {
-        for (const entry of original) disposeMaterial(entry);
+      // Safe to dispose what is currently assigned now that selection never swaps a
+      // mesh's material: nothing is standing in for an original that must be kept.
+      const material = mesh.material;
+      if (Array.isArray(material)) {
+        for (const entry of material) disposeMaterial(entry);
       } else {
-        disposeMaterial(original);
+        disposeMaterial(material);
       }
     });
     root = null;
-    originalMaterials.clear();
+    selectionOutline.visible = false;
   }
 
   return {
@@ -586,7 +600,6 @@ async function createScene(
       root.traverse((child) => {
         const mesh = child as import("three").Mesh;
         if (!mesh.isMesh) return;
-        originalMaterials.set(mesh.uuid, mesh.material);
 
         // Every surface both casts and receives: a wall shades the floor, and the
         // floor takes the shadow. Marking only one would lose half the effect.
@@ -664,18 +677,34 @@ async function createScene(
     },
 
     setSelection(objectId: string | null) {
-      if (!root) return;
+      if (!root || objectId === null) {
+        selectionOutline.visible = false;
+        return;
+      }
+
+      // The union of every mesh carrying this id, so an object modelled as several
+      // meshes gets one outline around the whole thing rather than one box per piece.
+      selectionBox.makeEmpty();
       root.traverse((child) => {
         const mesh = child as import("three").Mesh;
-        if (!mesh.isMesh) return;
-        const original = originalMaterials.get(mesh.uuid);
-        const isSelected = objectId !== null && studioIdOf(mesh) === objectId;
-        if (isSelected) {
-          mesh.material = highlight;
-        } else if (original) {
-          mesh.material = original as import("three").Material;
-        }
+        if (!mesh.isMesh || studioIdOf(mesh) !== objectId) return;
+        selectionBox.expandByObject(mesh);
       });
+
+      if (selectionBox.isEmpty()) {
+        selectionOutline.visible = false;
+        return;
+      }
+
+      // A box exactly on the surface half-disappears into it, so stand it off by a
+      // little — scaled to the object, because a fixed margin is invisible on a
+      // building and enormous on a door handle.
+      const size = selectionBox.getSize(new THREE.Vector3());
+      const margin = Math.max(size.x, size.y, size.z) * 0.015;
+      selectionBox.expandByScalar(margin);
+
+      selectionOutline.visible = true;
+      selectionOutline.updateMatrixWorld(true);
     },
 
     dispose() {
@@ -685,7 +714,9 @@ async function createScene(
       globalThis.removeEventListener?.("resize", resize);
       disposeRoot();
       controls.dispose();
-      highlight.dispose();
+      scene.remove(selectionOutline);
+      selectionOutline.geometry?.dispose?.();
+      outlineMaterial.dispose();
       // The environment render target and the background texture are GPU resources
       // the scene owns rather than the model, so disposeRoot() never touches them.
       scene.environment = null;

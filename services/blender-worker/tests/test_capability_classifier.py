@@ -224,6 +224,98 @@ def test_removing_anything_else_still_needs_approval(code: str) -> None:
     assert assessment.requires_approval, assessment.reasons()
 
 
+# ---------------------------------------------------------------------------
+#
+# The same lesson, one step further along. Rooting the exemption at `bpy` fixed
+# `bpy.data.objects.remove(obj)`, but real authored code assigns first:
+#
+#     tree = material.node_tree
+#     for node in list(tree.nodes):
+#         tree.nodes.remove(node)
+#
+# That is rooted at `tree`, not at `bpy`, so re-cladding a surface — which rebuilds a
+# node graph, and therefore clears it first — asked for approval every single time.
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        # A node graph rebuilt through locals, which is how it is always written.
+        "import bpy\n"
+        "mat = bpy.data.materials['M']\n"
+        "tree = mat.node_tree\n"
+        "for n in list(tree.nodes):\n"
+        "    tree.nodes.remove(n)\n",
+        # The collection bound directly.
+        "import bpy\n"
+        "nodes = bpy.data.materials['M'].node_tree.nodes\n"
+        "nodes.remove(nodes['Principled BSDF'])\n",
+        # Reached through the object rather than through bpy.data.
+        "import bpy\nme = bpy.data.objects['Cube'].data\nme.materials.clear()\n",
+        # The loop variable of a scene collection is itself scene data.
+        "import bpy\n"
+        "for o in list(bpy.data.objects):\n"
+        "    o.users_collection[0].objects.unlink(o)\n",
+    ],
+)
+def test_editing_scene_collections_through_locals_runs_without_asking(code: str) -> None:
+    assessment = classifier.classify_python(code)
+    assert assessment.may_run_unattended, assessment.reasons()
+
+
+def test_a_local_of_unknown_origin_is_still_not_scene_work() -> None:
+    """Following assignments must not become "anything with a dot is fine".
+
+    The chain has to be traceable back to Blender. A value that came out of a call the
+    platform knows nothing about is exactly the case the gate exists for.
+    """
+    assessment = classifier.classify_python(
+        "import bpy\nhelper = get_helper()\nsink = helper.storage\nsink.remove('/tmp/x')\n"
+    )
+    assert assessment.requires_approval, assessment.reasons()
+
+
+# ---------------------------------------------------------------------------
+#
+# `input` was flagged on sight, including as a plain variable name. Shader code makes
+# that an obvious name to choose — `for input in bsdf.inputs` — so writing a material
+# cost an approval prompt on a turn that never read a byte from stdin.
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "import bpy\n"
+        "b = bpy.data.materials['M'].node_tree.nodes['P']\n"
+        "for input in b.inputs:\n"
+        "    print(input.name)\n",
+        "import bpy\n"
+        "b = bpy.data.materials['M'].node_tree.nodes['P']\n"
+        "input = b.inputs['Base Color']\n"
+        "input.default_value = (1, 0, 0, 1)\n",
+    ],
+)
+def test_input_as_a_variable_name_runs_without_asking(code: str) -> None:
+    assessment = classifier.classify_python(code)
+    assert assessment.may_run_unattended, assessment.reasons()
+
+
+def test_actually_calling_input_still_needs_approval() -> None:
+    """The dangerous form is the CALL: it can block a headless render forever."""
+    assessment = classifier.classify_python("import bpy\nname = input()\n")
+    assert assessment.requires_approval, assessment.reasons()
+
+
+def test_a_bare_reference_to_eval_still_needs_approval() -> None:
+    """Scoping `input` to calls must not weaken the builtins that matter.
+
+    A reference to `eval` can be stored and invoked later, so requiring a visible call
+    would be trivially avoidable.
+    """
+    assessment = classifier.classify_python("import bpy\nhandler = eval\n")
+    assert assessment.requires_approval, assessment.reasons()
+
+
 def test_the_real_plan_that_prompted_this_now_runs_unattended() -> None:
     """The shape Astra actually produced: clear by id, then rebuild."""
     code = (
