@@ -28,6 +28,8 @@ class FakeCli:
     login_code: int = 0
     exec_code: int = 0
     exec_stderr: str = ""
+    #: The `--json` event stream. This is where a real Codex failure explains itself.
+    exec_stdout: str = ""
     response: Optional[dict[str, Any]] = None
     calls: list[list[str]] = field(default_factory=list)
     stdins: list[Optional[str]] = field(default_factory=list)
@@ -57,7 +59,9 @@ class FakeCli:
         if self.response is not None and "--output-last-message" in command:
             target = Path(command[command.index("--output-last-message") + 1])
             target.write_text(json.dumps(self.response), encoding="utf-8")
-        return subprocess.CompletedProcess(command, self.exec_code, "", self.exec_stderr)
+        return subprocess.CompletedProcess(
+            command, self.exec_code, self.exec_stdout, self.exec_stderr
+        )
 
     def argument_after(self, flag: str) -> Optional[str]:
         for call in self.calls:
@@ -247,6 +251,98 @@ def test_stderr_is_never_treated_as_model_output() -> None:
     )
     result = client(cli).complete("hello", schema={"type": "object"})
     assert result["message"] == "the real answer"
+
+
+# --- where a Codex failure actually explains itself -----------------------
+#
+# `codex exec --json` writes progress chatter to stderr and its real errors to the event
+# stream on stdout. Verified against codex-cli 0.154.0: a run that succeeded and wrote a
+# valid response file still left exactly `Reading prompt from stdin...` on stderr. Reading
+# only stderr is therefore guaranteed to misreport, and it did — a turn failed in the
+# browser with "PROVIDER_UNAVAILABLE: Codex reported: Reading prompt from stdin...", which
+# says nothing about what went wrong.
+
+#: A failure exactly as codex-cli 0.154.0 emits it, nested JSON and all.
+BAD_MODEL_STREAM = "\n".join(
+    [
+        '{"type":"thread.started","thread_id":"01a0"}',
+        '{"type":"turn.started"}',
+        '{"type":"error","message":"{\\"status\\":400,\\"error\\":'
+        '{\\"message\\":\\"The \'gpt-6-nope\' model is not supported.\\"}}"}',
+        '{"type":"turn.failed","error":{"message":"{\\"status\\":400,\\"error\\":'
+        '{\\"message\\":\\"The \'gpt-6-nope\' model is not supported.\\"}}"}}',
+    ]
+)
+
+
+def test_the_stdin_progress_banner_is_never_reported_as_a_failure() -> None:
+    # The whole point: this line appears on successful runs too.
+    cli = FakeCli(exec_code=1, exec_stderr="Reading prompt from stdin...")
+    with pytest.raises(CodexError) as error:
+        client(cli).complete("hello", schema={"type": "object"})
+    assert "Reading prompt from stdin" not in str(error.value)
+    assert "status 1" in str(error.value)
+
+
+def test_a_failure_on_the_event_stream_is_reported() -> None:
+    cli = FakeCli(
+        exec_code=1,
+        exec_stderr="Reading prompt from stdin...",
+        exec_stdout='{"type":"turn.failed","error":{"message":"stream disconnected"}}',
+    )
+    with pytest.raises(CodexError) as error:
+        client(cli).complete("hello", schema={"type": "object"})
+    assert "stream disconnected" in str(error.value)
+
+
+def test_an_upstream_error_nested_inside_the_event_is_unwrapped() -> None:
+    cli = FakeCli(
+        exec_code=1, exec_stderr="Reading prompt from stdin...", exec_stdout=BAD_MODEL_STREAM
+    )
+    with pytest.raises(CodexError) as error:
+        client(cli).complete("hello", schema={"type": "object"})
+    # Classified, not quoted: "not supported" is the model being unavailable.
+    assert "Astra is not available" in str(error.value)
+
+
+def test_the_event_stream_is_classified_like_stderr_was() -> None:
+    cli = FakeCli(
+        exec_code=1,
+        exec_stdout='{"type":"error","message":"You have hit your usage limit."}',
+    )
+    with pytest.raises(CodexError) as error:
+        client(cli).complete("hello", schema={"type": "object"})
+    assert "usage" in str(error.value).lower()
+
+
+def test_a_survivable_item_error_does_not_become_the_failure_reason() -> None:
+    # Codex emits an error ITEM for things it recovers from. Treating this as fatal would
+    # have every failure blamed on the model being missing.
+    cli = FakeCli(
+        exec_code=1,
+        exec_stdout=(
+            '{"type":"item.completed","item":{"type":"error","message":'
+            '"Model metadata for `gpt-6-astra` not found. Defaulting to fallback."}}'
+        ),
+    )
+    with pytest.raises(CodexError) as error:
+        client(cli).complete("hello", schema={"type": "object"})
+    assert "Astra is not available" not in str(error.value)
+    assert "status 1" in str(error.value)
+
+
+def test_being_killed_reads_as_a_signal_not_an_exit_code() -> None:
+    cli = FakeCli(exec_code=-9, exec_stderr="Reading prompt from stdin...")
+    with pytest.raises(CodexError) as error:
+        client(cli).complete("hello", schema={"type": "object"})
+    assert "signal 9" in str(error.value)
+
+
+def test_event_stream_errors_reads_only_fatal_events() -> None:
+    assert codex.event_stream_errors(BAD_MODEL_STREAM) == [
+        "The 'gpt-6-nope' model is not supported."
+    ]
+    assert codex.event_stream_errors('{"type":"turn.completed","usage":{}}') == []
 
 
 def test_the_event_stream_parser_ignores_decorative_output() -> None:

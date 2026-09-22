@@ -549,6 +549,19 @@ class CodexClient:
                 raise CodexError(f"Could not run Codex: {error}") from error
 
             if completed.returncode != 0:
+                # The message below is deliberately short, for a person reading the
+                # browser. This line is for whoever has to diagnose the next failure that
+                # the event stream does not explain: without it the only evidence is an
+                # exit code, which is where the last investigation started.
+                _log.warning(
+                    "codex exec failed: status=%s stderr=%r events=%s",
+                    completed.returncode,
+                    (completed.stderr or "").strip()[:500],
+                    [
+                        event.get("type")
+                        for event in parse_event_stream(completed.stdout or "")
+                    ][-6:],
+                )
                 raise CodexError(_failure_detail(completed))
 
             if not output_path.exists():
@@ -581,19 +594,102 @@ def strict_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     return stripped
 
 
+#: Progress chatter `codex exec` writes to stderr on EVERY run, including successful ones.
+#:
+#: Measured, not guessed: a run that completed normally and wrote a valid response file
+#: still left exactly `Reading prompt from stdin...` on stderr and nothing else. Quoting a
+#: line like this as the reason a turn failed is worse than saying nothing, because it
+#: sends whoever reads it looking for a problem with the prompt.
+_STDERR_PROGRESS: Final = ("reading prompt from stdin",)
+
+
+def _is_progress(line: str) -> bool:
+    lowered = line.lower()
+    return any(marker in lowered for marker in _STDERR_PROGRESS)
+
+
+def _error_text(payload: Any) -> str:
+    """The human-readable text inside an error payload, unwrapping nested JSON.
+
+    Codex relays the upstream API error verbatim, as a JSON document inside a string
+    field, so the useful sentence sits two levels down:
+
+        {"message": "{\\"status\\":400,\\"error\\":{\\"message\\":\\"…\\"}}"}
+    """
+    if isinstance(payload, Mapping):
+        for key in ("message", "error"):
+            nested = payload.get(key)
+            if nested is not None:
+                text = _error_text(nested)
+                if text:
+                    return text
+        return ""
+    if not isinstance(payload, str):
+        return ""
+    text = payload.strip()
+    if text.startswith("{"):
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return text
+        if isinstance(parsed, Mapping):
+            return _error_text(parsed) or text
+    return text
+
+
+def event_stream_errors(stdout: str) -> list[str]:
+    """The FATAL errors Codex reported on its ``--json`` event stream, in order.
+
+    This is where a Codex failure actually explains itself. stderr carries only progress
+    chatter, so a diagnosis built from stderr alone is guaranteed to be useless — which is
+    how a turn came to fail with "Codex reported: Reading prompt from stdin...".
+
+    Non-fatal ``item`` errors are deliberately excluded. Codex emits an error item for
+    survivable things like unknown model metadata, and letting one of those reach the
+    classifier below would have it declare the model unavailable on every failure.
+    """
+    messages: list[str] = []
+    for event in parse_event_stream(stdout):
+        kind = event.get("type")
+        if kind == "turn.failed":
+            text = _error_text(event.get("error"))
+        elif kind == "error":
+            text = _error_text(event)
+        else:
+            continue
+        if text and text not in messages:
+            messages.append(text)
+    return messages
+
+
 def _failure_detail(completed: subprocess.CompletedProcess[str]) -> str:
     """Summarise a Codex failure without treating stderr as model output."""
-    stderr = (completed.stderr or "").strip()
-    lowered = stderr.lower()
+    stderr_lines = [
+        line.strip()
+        for line in (completed.stderr or "").splitlines()
+        if line.strip() and not _is_progress(line.strip())
+    ]
+    reported = event_stream_errors(completed.stdout or "")
+
+    lowered = " ".join([*reported, *stderr_lines]).lower()
     if "not logged in" in lowered or "unauthorized" in lowered or "401" in lowered:
         return STATE_MESSAGES[LOGIN_REQUIRED]
     if "usage" in lowered and "limit" in lowered:
         return STATE_MESSAGES[USAGE_UNAVAILABLE]
-    if "model" in lowered and ("not found" in lowered or "unavailable" in lowered):
+    if "model" in lowered and (
+        "not found" in lowered or "unavailable" in lowered or "not supported" in lowered
+    ):
         return STATE_MESSAGES[ASTRA_UNAVAILABLE]
-    for line in reversed(stderr.splitlines()):
-        if line.strip():
-            return f"Codex reported: {line.strip()[:300]}"
+
+    # The event stream first: it is the specific one. The last fatal event is the
+    # conclusion, earlier ones are usually the same failure seen from further out.
+    for text in (*reversed(reported), *reversed(stderr_lines)):
+        return f"Codex reported: {text[:300]}"
+
+    # Nothing said anything. A negative status is a signal, which reads as a nonsense
+    # exit code otherwise, and means something outside the studio stopped Codex.
+    if completed.returncode < 0:
+        return f"Codex was stopped by signal {-completed.returncode} before it answered."
     return f"Codex exited with status {completed.returncode}."
 
 
