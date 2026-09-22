@@ -151,8 +151,8 @@ class WorkerExecutor:
         lock_timeout: float = 0.0,
         previews: Optional[Any] = None,
         artifacts: Optional[Any] = None,
-        preview_width: int = 640,
-        preview_height: int = 360,
+        preview_width: int = 1280,
+        preview_height: int = 720,
     ) -> None:
         self.store = store
         self.locks = locks

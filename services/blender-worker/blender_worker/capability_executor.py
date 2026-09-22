@@ -123,8 +123,8 @@ class CapabilityPlanExecutor:
     #: Optional artifact production, injected so the executor stays testable offline.
     artifacts: Optional[Any] = None
     previews: Optional[Any] = None
-    preview_width: int = 640
-    preview_height: int = 360
+    preview_width: int = 1280
+    preview_height: int = 720
 
     # -- entry point -------------------------------------------------------
     def execute(self, job: Any) -> PlanOutcome:

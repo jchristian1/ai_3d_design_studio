@@ -220,8 +220,16 @@ SUN_ENERGY = 3.0
 SUN_ANGLE_DEGREES = 1.5
 SKY_SUN_INTENSITY = 0.0
 
-#: Visible sky brightness. Only the camera sees this (see :func:`install_sky_world`).
+#: Visible backdrop brightness. Only the camera sees this (see install_sky_world).
 SKY_BACKGROUND_STRENGTH = 1.0
+
+#: What the camera sees behind the model.
+#:
+#: A dark studio backdrop rather than the sky, and for the same reason the 3D viewer got
+#: one: a pale blue behind a grey-and-white building destroys the contrast you need to
+#: read it, and the building is the subject. The sky node is still built because it costs
+#: nothing and documents the alternative, but nothing is connected to the camera branch.
+BACKDROP_COLOUR = (0.055, 0.06, 0.07, 1.0)
 
 #: Neutral ambient used for LIGHTING, and the grey it is tinted.
 #:
@@ -769,8 +777,8 @@ def install_sky_world(scene, ambient_strength: float = AMBIENT_STRENGTH) -> None
     sky.sun_intensity = SKY_SUN_INTENSITY
 
     visible = tree.nodes.new("ShaderNodeBackground")
+    visible.inputs["Color"].default_value = BACKDROP_COLOUR
     visible.inputs["Strength"].default_value = SKY_BACKGROUND_STRENGTH
-    tree.links.new(sky.outputs[0], visible.inputs[0])
 
     ambient = tree.nodes.new("ShaderNodeBackground")
     ambient.inputs["Color"].default_value = AMBIENT_COLOUR
