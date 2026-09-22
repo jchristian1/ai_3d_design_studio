@@ -211,10 +211,47 @@ SKY_BACKGROUND_STRENGTH = 1.0
 AMBIENT_STRENGTH = 0.55
 AMBIENT_COLOUR = (0.5, 0.5, 0.5, 1.0)
 
+#: Sun, fill and ambient used when the scene brings its OWN lights.
+#:
+#: Ambient bright enough to make an unlit scene legible is also bright enough to erase
+#: real interior lighting: pools of light need somewhere darker to be brighter than, and
+#: warm fittings are diluted by white fill arriving from every direction. So when a
+#: scene lights itself, the platform steps back.
+#:
+#: HOW FAR BACK IS A COMPROMISE, AND IT WAS MEASURED ON REAL SCENES
+#:
+#: Two cases pull in opposite directions, and both are legitimate:
+#:
+#:     settings              a closed lobby          a part-lit clinic
+#:     0.8 sun / 0.15 amb    warm, dramatic, right   whole building nearly black
+#:     3.0 sun / 0.55 amb    flat, washed out        correct daylight
+#:     1.9 sun / 0.30 amb    warmth survives         readable, reception glows
+#:
+#: The first row is what "let the interior lighting win" looks like, and it is wrong for
+#: the common case: a real project is an interior AND an exterior at once, and the
+#: preview shows both in one frame because it looks down from outside. The second row is
+#: the old behaviour, which is what made interiors look like diagrams.
+#:
+#: Note what does NOT rescue this: a ceiling. It seems as though geometry should separate
+#: interior from exterior on its own, but a doll's-house view is open to the camera by
+#: definition, so daylight arrives through the opening regardless.
+#:
+#: The honest limit: a genuinely photographic interior needs a camera INSIDE the room,
+#: where daylight is not in frame at all. The preview has one fixed aerial viewpoint, so
+#: this is the best a single frame can do for both at once. An interior view is its own
+#: feature.
+AMBIENT_STRENGTH_SELF_LIT = 0.30
+SUN_ENERGY_SELF_LIT = 1.9
+
 #: A shadow-less wide light opposite the sun: the arch-viz bounce card. Without it
 #: shaded faces read as flat dark shapes, because a neutral ambient alone has no
 #: direction. It casts no shadows, so it cannot contradict the sun.
 FILL_ENERGY = 1.0
+
+#: Fill when the scene lights itself: reduced, not removed. Removing it entirely made
+#: every room WITHOUT a fitting of its own read as a black hole — and in a real building
+#: only some rooms get lit on any given turn.
+FILL_ENERGY_SELF_LIT = 0.40
 FILL_ELEVATION_DEGREES = 20.0
 FILL_ANGLE_DEGREES = 60.0
 
@@ -609,7 +646,7 @@ def scene_has_own_world_lighting(scene) -> bool:
     return False
 
 
-def install_sky_world(scene) -> None:
+def install_sky_world(scene, ambient_strength: float = AMBIENT_STRENGTH) -> None:
     """Sky for the camera, neutral grey for the lighting. In memory only.
 
     The world is split by ``Light Path > Is Camera Ray``, which EEVEE honours:
@@ -655,7 +692,7 @@ def install_sky_world(scene) -> None:
 
     ambient = tree.nodes.new("ShaderNodeBackground")
     ambient.inputs["Color"].default_value = AMBIENT_COLOUR
-    ambient.inputs["Strength"].default_value = AMBIENT_STRENGTH
+    ambient.inputs["Strength"].default_value = ambient_strength
 
     light_path = tree.nodes.new("ShaderNodeLightPath")
     mix = tree.nodes.new("ShaderNodeMixShader")
@@ -688,12 +725,21 @@ def _aim_along(elevation_degrees: float, azimuth_degrees: float):
     return (-towards_source).to_track_quat("-Z", "Y").to_euler()
 
 
-def install_sun(scene) -> None:
-    """Add the temporary key sun and its fill, matched to the sky's sun position."""
+def install_sun(
+    scene,
+    energy: float = SUN_ENERGY,
+    fill_energy: float = FILL_ENERGY,
+) -> None:
+    """Add the temporary key sun and its fill, matched to the sky's sun position.
+
+    A ``fill_energy`` of zero skips the fill entirely, which is what a self-lit scene
+    wants: the bounce card exists to rescue shapes that nothing else is lighting, and
+    inside a room that has its own fittings it only flattens them.
+    """
     import bpy
 
     data = bpy.data.lights.new(PREVIEW_SUN_NAME, type="SUN")
-    data.energy = SUN_ENERGY
+    data.energy = energy
     if hasattr(data, "angle"):
         data.angle = _radians(SUN_ANGLE_DEGREES)
 
@@ -701,8 +747,11 @@ def install_sun(scene) -> None:
     scene.collection.objects.link(sun)
     sun.rotation_euler = _aim_along(SUN_ELEVATION_DEGREES, SUN_AZIMUTH_DEGREES)
 
+    if fill_energy <= 0.0:
+        return
+
     fill_data = bpy.data.lights.new(PREVIEW_FILL_NAME, type="SUN")
-    fill_data.energy = FILL_ENERGY
+    fill_data.energy = fill_energy
     if hasattr(fill_data, "angle"):
         fill_data.angle = _radians(FILL_ANGLE_DEGREES)
     # No shadows: a fill that cast them would invent a second, contradictory sun.
@@ -718,19 +767,55 @@ def install_sun(scene) -> None:
 def configure_lighting(scene) -> dict:
     """Supplement the scene's lighting; never override what it already has.
 
-    Astra can author its own lights and world, and a preview that replaced them
-    would hide the very thing the user asked for. So each half is added ONLY when
-    the scene has nothing of its own, and what was added is reported.
+    Astra can author its own lights, and a preview that replaced them would hide the
+    very thing the user asked for. So a fitting is added ONLY when the scene has none,
+    and what was added is reported.
+
+    THE PART THAT IS NOT OBVIOUS: AMBIENT HAS TO GET OUT OF THE WAY
+
+    Not adding a sun is not enough. A neutral ambient bright enough to make an
+    unlit scene legible is also bright enough to erase the lighting an interior
+    actually has. A lobby with warm downlights and a glowing desk edge, rendered under
+    a broad 0.55 ambient, comes out flat and grey: the pools of light have nothing
+    darker to be brighter than, and the warmth is diluted by white fill from every
+    direction. It reads as a model of a room instead of a room.
+
+    So the platform's own lighting steps back when the scene lights itself — sun, fill
+    and ambient all reduce together, to the levels recorded on ``SUN_ENERGY_SELF_LIT``.
+    It steps back rather than getting out of the way entirely, because a real project is
+    an interior and an exterior at once and the preview shows both in one frame.
+
+    A sun is therefore ALWAYS added. Only its strength varies.
+
+    The visible sky is unaffected either way: the world splits camera rays from light
+    rays, so the backdrop stays bright while the lighting contribution changes.
     """
+    lights_itself = scene_has_own_lights(scene)
+
     added_world = not scene_has_own_world_lighting(scene)
     if added_world:
-        install_sky_world(scene)
+        install_sky_world(
+            scene,
+            ambient_strength=(
+                AMBIENT_STRENGTH_SELF_LIT if lights_itself else AMBIENT_STRENGTH
+            ),
+        )
 
-    added_sun = not scene_has_own_lights(scene)
-    if added_sun:
-        install_sun(scene)
+    # A sun is always added, but its strength depends on whether anything else is
+    # lighting the scene. Omitting it when the scene self-lights produced a lovely
+    # interior inside a building whose outside was nearly black, and a preview shows
+    # both at once — it looks in from above and outside.
+    install_sun(
+        scene,
+        energy=SUN_ENERGY_SELF_LIT if lights_itself else SUN_ENERGY,
+        fill_energy=FILL_ENERGY_SELF_LIT if lights_itself else FILL_ENERGY,
+    )
 
-    return {"added_sky_world": added_world, "added_sun": added_sun}
+    return {
+        "added_sky_world": added_world,
+        "added_sun": True,
+        "scene_lights_itself": lights_itself,
+    }
 
 
 # ---------------------------------------------------------------------------

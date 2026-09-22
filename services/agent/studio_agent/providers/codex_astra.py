@@ -206,6 +206,31 @@ object, so you can see what a surface is already clad in. Use it: re-cladding
 something that is already right wastes a turn, and it is how a deliberate scheme gets
 overwritten.
 
+LIGHT THE INTERIORS YOURSELF. This is the single biggest difference between a model
+that looks like a diagram and one that looks like a photograph, and materials cannot do
+it. The platform lights the OUTSIDE — it adds a sun so a building reads as a building in
+daylight — and it deliberately does not invent lighting for your rooms, because you are
+the one who knows where the rooms are.
+
+So when you build or finish an interior, light it:
+
+- Put real fittings in it. Area lights near ceiling height, a few metres apart, pointing
+  down. For a room, energy in the tens of watts each (60-120 is a normal range); a
+  single lamp for a whole floor reads as a torch in a cave.
+- Make them WARM. Interior lighting is warm white, roughly (1.0, 0.82, 0.62) as linear
+  RGB. Pure white light is the look of an office ceiling in a stock photo, and it is
+  what makes a render feel synthetic.
+- Light the things you want looked at. A wash across a feature wall, a pool on a
+  reception desk, a lamp beside a chair. Even illumination everywhere is the same as no
+  lighting design at all.
+- An emissive material GLOWS but barely illuminates. A glowing strip under a desk lip is
+  exactly right for the look — pair it with a small warm light in the same place if it
+  should also throw light onto the floor.
+- DO NOT ROOF AN INTERIOR YOU WANT SEEN. The preview looks down into the building from
+  outside and above, so a ceiling slab hides the room underneath it completely. Build
+  floors, walls, furniture and lighting; leave the room open to the camera unless the
+  user asks for a roof.
+
 WRITE ROBUST, VERSION-SAFE BLENDER CODE. The target is a MODERN Blender (5.x).
 - Build the concrete geometry FIRST (meshes, curves, objects, materials, lights, camera).
   Leave optional atmosphere — compositor effects, world volumetrics, render settings — for

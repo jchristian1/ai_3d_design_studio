@@ -154,18 +154,46 @@ already a value that can never fail a mutation, so the worst case is "no picture
 
 ## Lighting
 
-Lighting is **supplemented, never overridden**. Astra can author its own lights and
-world, and a preview that replaced them would hide the very thing the user asked for.
+Lighting is **supplemented, never overridden**. Astra can author its own lights, and a
+preview that replaced them would hide the very thing the user asked for.
 
 | Condition | Action |
 |---|---|
-| scene has no light objects | add a temporary sun |
 | scene has no world, or a world that emits nothing | add a temporary Sky Texture world |
+| scene has no lights of its own | full sun, fill and ambient — something has to make the geometry visible |
+| scene lights itself | the same rig at reduced strength, so the scene's own fittings lead |
 
 The "emits nothing" test matters: a world that exists but is black lights nothing, and
-treating its presence as the user's choice is how a scene renders pitch dark. Both
-additions are in-memory only and are reported in the `scene` phase payload
-(`lighting.added_sun`, `lighting.added_sky_world`).
+treating its presence as the user's choice is how a scene renders pitch dark. Every
+addition is in-memory only and is reported in the `scene` phase payload
+(`lighting.added_sun`, `lighting.added_sky_world`, `lighting.scene_lights_itself`).
+
+### Stepping back, not getting out of the way
+
+Ambient bright enough to make an unlit scene legible is also bright enough to erase real
+interior lighting: pools of light need somewhere darker to be brighter than, and warm
+fittings are diluted by white fill from every direction. That is why an interior used to
+read as a diagram no matter how good its materials were.
+
+How far to step back is a compromise, measured on two real scenes that pull in opposite
+directions:
+
+| sun / ambient | a closed lobby | a part-lit clinic |
+|---|---|---|
+| 0.8 / 0.15 | warm, dramatic, right | whole building nearly black |
+| 3.0 / 0.55 | flat, washed out | correct daylight |
+| **1.9 / 0.30** | warmth survives | readable, reception glows |
+
+A sun is therefore always added and only its strength varies. Worth knowing: a **ceiling
+does not rescue this**. It seems as though geometry should separate interior from
+exterior by itself, but a doll's-house view is open to the camera by definition, so
+daylight arrives through the opening regardless — which is also why Astra is told not to
+roof a room it wants seen.
+
+**The honest limit.** A genuinely photographic interior needs a camera *inside* the room,
+with no daylight in frame at all. The preview has one fixed aerial viewpoint, so the
+table above is the best a single frame can do for both at once. An interior view is its
+own feature, not a tuning problem.
 
 ### Embedded metadata is stripped — a security fix
 
